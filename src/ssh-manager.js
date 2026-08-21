@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import { isHostKnown, addHostKey } from './ssh-key-manager.js';
 import { logger } from './logger.js';
+import { buildCdPrefix } from './shell-quote.js';
 
 // Validate liveness-probe output across shells (bash, cmd.exe, PowerShell).
 // Normalize CRLF, stray quotes/backslashes and case before matching so quoted
@@ -189,7 +190,7 @@ class SSHManager {
     }
 
     const { timeout = 30000, cwd, rawCommand = false } = options;
-    const fullCommand = (cwd && !rawCommand) ? `cd ${cwd} && ${command}` : command;
+    const fullCommand = (cwd && !rawCommand) ? buildCdPrefix(cwd) + command : command;
 
     return new Promise((resolve, reject) => {
       let stdout = '';
@@ -276,7 +277,7 @@ class SSHManager {
     }
 
     const { cwd, onStdout, onStderr } = options;
-    const fullCommand = cwd ? `cd ${cwd} && ${command}` : command;
+    const fullCommand = cwd ? buildCdPrefix(cwd) + command : command;
 
     return new Promise((resolve, reject) => {
       this.client.exec(fullCommand, (err, stream) => {

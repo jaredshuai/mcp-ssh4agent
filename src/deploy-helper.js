@@ -1,5 +1,6 @@
 import path from 'path';
 import crypto from 'crypto';
+import { shSingleQuote, buildSudoPipeline } from './shell-quote.js';
 
 /**
  * Deploy helper functions for secure file deployment
@@ -52,11 +53,12 @@ export function buildDeploymentStrategy(remotePath, options = {}) {
   }
 
   // Step 3: Copy from temp to final location
+  const quotedRemotePath = shSingleQuote(remotePath);
   const copyCmd = needsSudo && sudoPassword ?
-    `echo "${sudoPassword}" | sudo -S cp {{tempFile}} "${remotePath}"` :
+    buildSudoPipeline(sudoPassword, `cp {{tempFile}} ${quotedRemotePath}`).command :
     needsSudo ?
-      `sudo cp {{tempFile}} "${remotePath}"` :
-      `cp {{tempFile}} "${remotePath}"`;
+      `sudo cp {{tempFile}} ${quotedRemotePath}` :
+      `cp {{tempFile}} ${quotedRemotePath}`;
 
   strategy.steps.push({
     type: 'copy',
@@ -66,8 +68,8 @@ export function buildDeploymentStrategy(remotePath, options = {}) {
   // Step 4: Set ownership if specified
   if (owner) {
     const chownCmd = sudoPassword ?
-      `echo "${sudoPassword}" | sudo -S chown ${owner} "${remotePath}"` :
-      `sudo chown ${owner} "${remotePath}"`;
+      buildSudoPipeline(sudoPassword, `chown ${owner} ${quotedRemotePath}`).command :
+      `sudo chown ${owner} ${quotedRemotePath}`;
 
     strategy.steps.push({
       type: 'chown',
@@ -78,8 +80,8 @@ export function buildDeploymentStrategy(remotePath, options = {}) {
   // Step 5: Set permissions if specified
   if (permissions) {
     const chmodCmd = sudoPassword ?
-      `echo "${sudoPassword}" | sudo -S chmod ${permissions} "${remotePath}"` :
-      `sudo chmod ${permissions} "${remotePath}"`;
+      buildSudoPipeline(sudoPassword, `chmod ${permissions} ${quotedRemotePath}`).command :
+      `sudo chmod ${permissions} ${quotedRemotePath}`;
 
     strategy.steps.push({
       type: 'chmod',

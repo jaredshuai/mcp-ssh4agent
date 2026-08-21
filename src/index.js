@@ -46,6 +46,7 @@ import {
   getActiveProfileName
 } from './profile-loader.js';
 import { logger } from './logger.js';
+import { shSingleQuote, buildCdPrefix, buildSudoPipeline } from './shell-quote.js';
 import { parseRsyncStats } from './rsync-stats.js';
 import { toRsyncLocalPath } from './rsync-path.js';
 import {
@@ -358,20 +359,7 @@ async function execCommandWithTimeout(ssh, command, options = {}, timeoutMs = 30
     } catch (error) {
       // If timeout occurred, remove connection from pool
       if (error.message.includes('timeout')) {
-        for (const [name, conn] of connections.entries()) {
-          if (conn === ssh) {
-            logger.warn(`Removing timed-out connection for ${name}`);
-            connections.delete(name);
-            connectionTimestamps.delete(name);
-            if (keepaliveIntervals.has(name)) {
-              clearInterval(keepaliveIntervals.get(name));
-              keepaliveIntervals.delete(name);
-            }
-            // Force close the connection
-            ssh.dispose();
-            break;
-          }
-        }
+        invalidateConnection(ssh);
       }
       throw error;
     }
@@ -447,6 +435,21 @@ function closeConnection(serverName) {
   jumpDependencies.delete(normalizedName);
 
   logger.logConnection(serverName, 'closed');
+}
+
+// Remove a pooled connection by instance identity. Used when only the SSH
+// handle is at hand (e.g. the command running on it timed out) rather than
+// the server name it is pooled under. Delegates to closeConnection so the
+// keepalive timer, timestamp and jump-dependency records are all cleaned
+// up consistently — the inline cleanup this replaced missed jumpDependencies.
+function invalidateConnection(ssh) {
+  for (const [name, conn] of connections.entries()) {
+    if (conn === ssh) {
+      logger.warn(`Removing unhealthy connection for ${name}`);
+      closeConnection(name);
+      break;
+    }
+  }
 }
 
 // Clean up old connections
@@ -714,17 +717,9 @@ registerToolConditional(
       const platform = serverConfig?.platform || 'linux';
 
       // Build cwd-prefixed command using platform-appropriate syntax
-      let fullCommand;
-      if (workingDir) {
-        if (platform === 'windows') {
-          const escapedDir = workingDir.replace(/'/g, '\'\'');
-          fullCommand = `Set-Location '${escapedDir}'; ${expandedCommand}`;
-        } else {
-          fullCommand = `cd ${workingDir} && ${expandedCommand}`;
-        }
-      } else {
-        fullCommand = expandedCommand;
-      }
+      const fullCommand = workingDir
+        ? buildCdPrefix(workingDir, platform) + expandedCommand
+        : expandedCommand;
 
       // Log command execution
       const startTime = logger.logCommand(serverName, fullCommand, workingDir);
@@ -1941,18 +1936,9 @@ registerToolConditional(
           const serverConfig = servers[serverName.toLowerCase()];
           const workingDir = cwd || serverConfig?.defaultDir;
           const platform = serverConfig?.platform || 'linux';
-          let fullCommand;
-          if (workingDir) {
-            if (platform === 'windows') {
-              // Single-quote escaping: replace ' with '' (PowerShell convention)
-              const escapedDir = workingDir.replace(/'/g, '\'\'');
-              fullCommand = `Set-Location '${escapedDir}'; ${command}`;
-            } else {
-              fullCommand = `cd ${workingDir} && ${command}`;
-            }
-          } else {
-            fullCommand = command;
-          }
+          const fullCommand = workingDir
+            ? buildCdPrefix(workingDir, platform) + command
+            : command;
 
           const execResult = await execCommandWithTimeout(ssh, fullCommand, { platform }, 30000);
 
@@ -2356,44 +2342,32 @@ registerToolConditional(
       const resolvedName = resolveServerName(server, servers);
       const serverConfig = servers[resolvedName];
 
-      // Build the full command
-      let fullCommand = command;
+      // Build the full command. Quoting is centralized in shell-quote.js:
+      // passwords and directories go through buildSudoPipeline/buildCdPrefix
+      // so special characters can never break out of their quoting.
+      const platform = serverConfig?.platform || 'linux';
+      const sudoPassword = password || serverConfig?.sudoPassword;
 
-      // Add sudo if not already present
-      if (!fullCommand.startsWith('sudo ')) {
-        fullCommand = `sudo ${fullCommand}`;
-      }
-
-      // Add password if provided
-      if (password) {
-        fullCommand = `echo "${password}" | sudo -S ${command.replace(/^sudo /, '')}`;
-      } else if (serverConfig?.sudoPassword) {
-        // Use configured sudo password if available
-        fullCommand = `echo "${serverConfig.sudoPassword}" | sudo -S ${command.replace(/^sudo /, '')}`;
+      let fullCommand;
+      let maskedCommand;
+      if (sudoPassword) {
+        const pipe = buildSudoPipeline(sudoPassword, command);
+        fullCommand = pipe.command;
+        maskedCommand = pipe.masked;
+      } else {
+        fullCommand = command.startsWith('sudo ') ? command : `sudo ${command}`;
+        maskedCommand = fullCommand;
       }
 
       // Add working directory if specified
-      const platform = serverConfig?.platform || 'linux';
-      if (cwd) {
-        if (platform === 'windows') {
-          const escapedDir = cwd.replace(/'/g, '\'\'');
-          fullCommand = `Set-Location '${escapedDir}'; ${fullCommand}`;
-        } else {
-          fullCommand = `cd ${cwd} && ${fullCommand}`;
-        }
-      } else if (serverConfig?.defaultDir) {
-        if (platform === 'windows') {
-          const escapedDir = serverConfig.defaultDir.replace(/'/g, '\'\'');
-          fullCommand = `Set-Location '${escapedDir}'; ${fullCommand}`;
-        } else {
-          fullCommand = `cd ${serverConfig.defaultDir} && ${fullCommand}`;
-        }
+      const workingDir = cwd || serverConfig?.defaultDir;
+      if (workingDir) {
+        const prefix = buildCdPrefix(workingDir, platform);
+        fullCommand = prefix + fullCommand;
+        maskedCommand = prefix + maskedCommand;
       }
 
       const result = await execCommandWithTimeout(ssh, fullCommand, { platform }, timeout);
-
-      // Mask password in output for security
-      const maskedCommand = fullCommand.replace(/echo "[^"]+" \| sudo -S/, 'sudo');
 
       return {
         content: [
