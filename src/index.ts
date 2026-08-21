@@ -622,7 +622,7 @@ async function main() {
   console.error('🚀 MCP SSH Manager Server started');
   console.error(`📦 Profile: ${activeProfile}`);
   console.error(`🖥️  Available servers: ${serverList.length > 0 ? serverList.join(', ') : 'none configured'}`);
-  console.error('💡 Use server-manager.py to configure servers');
+  console.error('💡 Use "ssh-manager server add" (or edit ~/.ssh-manager/.env) to configure servers');
   console.error('🔄 Connection management: Auto-reconnect enabled, 30min timeout');
 
   // Set up periodic cleanup of old connections (every 10 minutes).

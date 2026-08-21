@@ -84,9 +84,9 @@ node --check src/index.ts                   # Check source syntax (native type s
 
 ### Debug Tools (in `debug/` directory)
 ```bash
-npx tsx debug/test-claude-code.ts  # Test Claude Code integration (TypeScript, cross-platform)
-node debug/test-mcp.js             # Test MCP connection
-node debug/test-ssh-command.js     # Test SSH command execution
+npx tsx debug/test-claude-code.ts    # Test Claude Code integration (TypeScript, cross-platform)
+npx tsx debug/test-mcp.ts            # Test MCP connection (initialize + tools/list via SDK client)
+npx tsx debug/test-ssh-command.ts    # Test SSH command execution (skips when no server configured)
 ```
 
 ## MCP Tools Available
