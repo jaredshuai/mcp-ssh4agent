@@ -1,24 +1,23 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI agents when working with code in this repository.
 
 ## Project Overview
 
-MCP SSH Manager is a Model Context Protocol server that enables Claude Code to manage multiple SSH connections. It provides tools for executing commands, transferring files, and managing deployments across remote servers.
+MCP SSH Manager is a Model Context Protocol server that enables any MCP-compatible AI agent to manage multiple SSH connections. It provides tools for executing commands, transferring files, and managing deployments across remote servers.
 
 ## Architecture
 
 The system consists of three main components:
 
 1. **MCP Server** (`src/index.js`): Node.js-based MCP server using the Model Context Protocol SDK
-   - Handles SSH connections via node-ssh library
+   - Handles SSH connections via ssh2 library
    - Manages connection pooling to avoid reconnecting
-   - Provides MCP tools for Claude Code integration
+   - Provides MCP tools for any AI agent integration (Claude Code, Codex, Cursor, Cline, etc.)
 
-2. **Server Management** (`tools/server_manager.py`): Python CLI for configuration
-   - Manages `.env` file with server configurations
-   - Tests connections using Paramiko
-   - Configures Claude Code integration
+2. **Server Management CLI** (`cli/ssh-manager.js`, a tsx ESM loader running the TypeScript sources in `cli/`): interactive CLI for configuration
+   - Pure TypeScript (`cli/lib/*.ts`, `cli/commands/*.ts`), run via tsx — cross-platform, no Bash/Git Bash needed
+   - Manages `.env` / TOML server configurations; tests connections; server / group / tool operations
 
 3. **Deployment Helpers** (`src/deploy-helper.js`, `src/server-aliases.js`): Advanced features
    - Automated deployment strategies with permission handling
@@ -30,16 +29,19 @@ The system consists of three main components:
 ### Setup and Installation
 ```bash
 npm install                                    # Install Node.js dependencies
-./scripts/setup-hooks.sh                      # Setup pre-commit hooks for development
+npm run setup-hooks                           # Install git pre-commit hooks (cross-platform TS, no Python)
+npm run install-cli                           # Install ssh-manager CLI globally (npm link)
 ```
 
-### Server Management (Bash CLI)
+> **Cross-platform**: all scripts run via `tsx` (pure Node.js — no Bash, no Python). The `ssh-manager` CLI is TypeScript loaded through `cli/ssh-manager.js` (a tsx ESM loader); it runs natively on Windows, macOS, and Linux with no Git Bash/WSL requirement.
+
+### Server Management (TypeScript CLI)
 ```bash
 ssh-manager server add                        # Add a new server
 ssh-manager server list                       # List configured servers
 ssh-manager server test SERVER                # Test connection to specific server
 ssh-manager server remove SERVER              # Remove a server
-ssh-manager server show SERVER                # Show server details
+ssh-manager server show SERVER                 # Show server details
 ```
 
 ### OpenAI Codex Integration
@@ -73,29 +75,22 @@ npm start                                     # Start MCP server (requires stdin
 npm test                                      # Run the full test suite
 npm run typecheck                             # Type-check JSDoc with tsc (no build, nothing emitted)
 npm run test:all                              # Tests + typecheck + validation
-./scripts/validate.sh                        # Run all validation checks
+npm run validate                              # Run all validation checks (B2: tsx scripts/validate.ts)
 node --check src/index.js                   # Check JavaScript syntax
-python -m py_compile tools/*.py             # Check Python syntax
 ```
 
-**Typecheck**: `tsconfig.json` runs TypeScript in `checkJs`/`noEmit` mode over the plain JS —
-this project ships JavaScript straight from `src/` with no build step, and that must stay true.
-The baseline is 0 errors and CI enforces it, so add JSDoc annotations (or a narrow
-`/** @type {...} */` cast) rather than leaving new errors. `typescript` is pinned to `^6`
-because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
+**Language / typecheck**: `tsconfig.json` runs TypeScript in `checkJs`/`noEmit` mode. Existing server code in `src/` is plain JS run directly (`node src/index.js`) — no build step, and that must stay true for the server. **New code is written in TypeScript (`.ts`) and run directly via `tsx`** (still no build step) — e.g. `scripts/validate.ts` (B2) and the `cli/` TS port (B3). Baseline is 0 typecheck errors; CI enforces it. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
 
 ### Debug Tools (in `debug/` directory)
 ```bash
-./debug/test-claude-code.sh                 # Test Claude Code integration
-node debug/test-mcp.js                      # Test MCP connection
-node debug/test-ssh-command.js              # Test SSH command execution
-python debug/test_basic.py                  # Basic Python tests
-python debug/test_fastmcp.py                # FastMCP integration test
+npx tsx debug/test-claude-code.ts  # Test Claude Code integration (TypeScript, cross-platform)
+node debug/test-mcp.js             # Test MCP connection
+node debug/test-ssh-command.js     # Test SSH command execution
 ```
 
 ## MCP Tools Available
 
-The server exposes these tools to Claude Code and OpenAI Codex:
+The server exposes these tools to any MCP-compatible AI agent (Claude Code, Codex, Cursor, Cline, etc.):
 
 ### Core Tools
 - `ssh_list_servers`: List all configured SSH servers
@@ -143,15 +138,15 @@ The server exposes these tools to Claude Code and OpenAI Codex:
 
 MCP SSH Manager supports two configuration formats:
 
-1. **Environment Variables (.env)** - Traditional format for Claude Code
-2. **TOML** - Modern format for OpenAI Codex
+1. **Environment Variables (.env)** - Traditional format, widely supported across agents
+2. **TOML** - Modern format (used by OpenAI Codex; also readable by other agents)
 
 ### Configuration Loading Priority
 
 The system loads configurations in this order (highest to lowest priority):
 1. Environment variables (process.env)
-2. `.env` file in project root
-3. TOML file (specified by SSH_CONFIG_PATH or ~/.codex/ssh-config.toml)
+2. `.env` file (resolved via a fallback chain: `SSH_ENV_PATH` env var → `~/.ssh-manager/.env` → `cwd/.env` → `~/.env` → `<project-root>/.env`)
+3. TOML file (specified by `SSH_CONFIG_PATH` or `~/.codex/ssh-config.toml`)
 
 ### .env Format
 ```
@@ -190,17 +185,17 @@ forward_agent = true                       # Optional: forward local ssh-agent t
 
 ## Key Implementation Details
 
-1. **Connection Pooling**: The server maintains persistent SSH connections in a Map to avoid reconnection overhead (src/index.js:31)
+1. **Connection Pooling**: The server maintains persistent SSH connections in a `Map` (the `connections` map in `src/index.js`) to avoid reconnection overhead
 
-2. **Server Resolution**: Server names are resolved through aliases first, then direct lookup. Names are normalized to lowercase (src/index.js:54-68)
+2. **Server Resolution**: Server names are resolved through aliases first, then direct lookup. Names are normalized to lowercase (see `resolveServerName` in `src/server-aliases.js`)
 
 3. **Default Directories**: If a server has a DEFAULT_DIR configured and no cwd is provided to ssh_execute, commands run in that directory
 
 4. **Deployment Strategy**: The deploy helper detects permission issues and automatically creates scripts for sudo execution when needed
 
-5. **Environment Loading**: Uses dotenv to load configuration from `.env` file in project root
+5. **Environment Loading**: Uses dotenv to load configuration from `.env`, resolved via the same fallback chain as the CLI (see `resolveEnvFilePath` in `src/index.js`; `SSH_ENV_PATH` overrides the chain)
 
-6. **Proxy Command Support**: Custom proxy commands (SOCKS5, ssh -W, etc.) are executed locally to establish connections, with proper error handling and timeout management (src/index.js:389-432)
+6. **Proxy Command Support**: Custom proxy commands (SOCKS5, ssh -W, etc.) are executed locally to establish connections, with proper error handling and timeout management (see `createProxyCommandSocket` in `src/index.js`)
 
 7. **Server Groups**: Membership is the union of two sources — the explicit lists in `.server-groups.json` (created via `ssh_group_manage`, which also hold strategy/delay/stopOnError) and the per-server `group` field of the SSH config. Config-derived groups are resolved at read time, never written to `.server-groups.json`, and are read-only for `ssh_group_manage`. `src/index.js` injects the loaded config into the group layer via `setServerConfigProvider()`; without it the module can only see `.env` servers (src/server-groups.js)
 
@@ -214,18 +209,48 @@ forward_agent = true                       # Optional: forward local ssh-agent t
 
 ## Validation and Quality
 
-Run `./scripts/validate.sh` before commits to check:
-- JavaScript syntax validity
-- Python syntax validity
-- No `.env` file in git
+Run `npm run validate` before commits to check:
+- JavaScript syntax validity (`node --check`)
+- No `.env` file tracked in git
 - MCP server startup
 - Dependencies installed
 
-## Claude Code Integration
+Install the git hook once with `npm run setup-hooks` to run typecheck + validate automatically before each commit.
 
-To install in Claude Code:
+## AI Agent Integration
+
+This server is MCP-compatible, so any agent that speaks MCP can drive it. Each agent has its own install path — the entry point is always `node src/index.js`; only the registration command differs.
+
+**Claude Code:**
 ```bash
 claude mcp add ssh-manager node /absolute/path/to/mcp-ssh-manager/src/index.js
 ```
+Config stored at `~/.config/claude-code/claude_code_config.json`
 
-Configuration is stored in `~/.config/claude-code/claude_code_config.json`
+**OpenAI Codex:** run `ssh-manager codex setup` (writes TOML to `~/.codex/ssh-config.toml`).
+
+**Other agents (Cursor, Cline, etc.):** point their MCP client at `node /absolute/path/to/mcp-ssh-manager/src/index.js` and pass servers via `.env` or `SSH_CONFIG_PATH`.
+
+## Agent skills
+
+### Commit identity
+
+This machine has no `git user.name`/`user.email` configured, and agents must never modify git config. Resolve the commit identity through `gh` (already authenticated):
+
+1. `gh api user --jq "{login, id}"` → e.g. `{"login":"jaredshuai","id":17944691}`
+2. Derive the privacy-preserving noreply email: `<id>+<login>@users.noreply.github.com`
+3. Commit with one-shot env vars (no config change): `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL`
+
+Prefer `git commit -F <msgfile>` over inline here-strings — multi-line `-m` arguments are unreliable in PowerShell.
+
+### Issue tracker
+
+GitHub issues (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

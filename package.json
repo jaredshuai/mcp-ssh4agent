@@ -82,12 +82,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bvisible/mcp-ssh-manager.git"
+    "url": "git+https://github.com/jaredshuai/mcp-ssh4agent.git"
   },
   "bugs": {
-    "url": "https://github.com/bvisible/mcp-ssh-manager/issues"
+    "url": "https://github.com/jaredshuai/mcp-ssh4agent/issues"
   },
-  "homepage": "https://github.com/bvisible/mcp-ssh-manager#readme",
+  "homepage": "https://github.com/jaredshuai/mcp-ssh4agent#readme",
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.30.0",

@@ -231,7 +231,7 @@ This release adds **12 new MCP tools** transforming SSH Manager into a comprehen
 - **⚠️ Smart Alerts** - Configurable health thresholds and notifications
 
 ### v2.0 Features
-- **🚀 Bash CLI** - Lightning-fast pure Bash CLI for server management
+- **🚀 TypeScript CLI** - Cross-platform CLI for server management (runs via tsx, no build step, native on Windows/macOS/Linux)
 - **📊 Advanced Logging** - Comprehensive logging system with levels and history
 - **🔄 Rsync Integration** - Bidirectional file sync with rsync support
 - **💻 Persistent Sessions** - Maintain shell context across multiple commands
@@ -300,8 +300,7 @@ ssh-manager tools disable backup
 - **Platforms**: Linux, macOS, Windows
 - **For Claude Code**: Claude Code CLI installed
 - **For OpenAI Codex**: Codex CLI configured
-- Bash 4.0+ (for CLI management tools)
-- rsync (for file synchronization)
+- rsync (optional, for file synchronization)
 - sshpass (optional, for rsync with password authentication)
   - macOS: `brew install hudochenkov/sshpass/sshpass`
   - Linux: `apt-get install sshpass`
@@ -328,8 +327,8 @@ git clone https://github.com/bvisible/mcp-ssh-manager.git
 cd mcp-ssh-manager
 npm install
 
-# Install the Bash CLI
-cd cli && ./install.sh
+# Install the ssh-manager CLI globally (optional — uses npm link)
+npm run install-cli
 
 # Configure your first server
 ssh-manager server add
@@ -725,16 +724,16 @@ SSH_SERVER_INTERNAL_PROXYJUMP=bastion
 SSH_SERVER_INTERNAL_DESCRIPTION=Private server behind bastion
 ```
 
-### Server Management Tool
+### Server Management CLI
 
-The Python management tool (`tools/server_manager.py`) provides:
+The `ssh-manager` CLI (TypeScript, run via tsx — see [cli/README.md](cli/README.md)) provides:
 
-1. **List servers** - View all configured servers
-2. **Add server** - Interactive server configuration
-3. **Test connection** - Verify server connectivity
-4. **Remove server** - Delete server configuration
-5. **Update Claude Code** - Configure MCP in Claude Code
-6. **Install dependencies** - Setup required packages
+1. **List servers** - `ssh-manager server list`
+2. **Add server** - `ssh-manager server add` (interactive wizard)
+3. **Test connection** - `ssh-manager server test <name>`
+4. **Remove server** - `ssh-manager server remove <name>`
+5. **Show details** - `ssh-manager server show <name>`
+6. **Tool management** - `ssh-manager tools list` / `configure` / `enable` / `disable`
 
 ## 📁 Project Structure
 
@@ -752,9 +751,10 @@ mcp-ssh-manager/
 │   ├── server-groups.js      # Group operations
 │   └── ...
 ├── cli/
-│   ├── ssh-manager           # Bash CLI entrypoint
-│   ├── commands/              # CLI command modules
-│   └── lib/                   # CLI libraries
+│   ├── ssh-manager.js         # CLI launcher (registers tsx ESM loader)
+│   ├── ssh-manager.ts         # CLI main entry (TypeScript)
+│   ├── commands/              # CLI command modules (.ts)
+│   └── lib/                   # CLI libraries (.ts)
 ├── profiles/                  # Configuration profiles (frappe, docker, nodejs...)
 ├── examples/                  # Example configs
 ├── docs/                      # Documentation
@@ -766,7 +766,7 @@ mcp-ssh-manager/
 ### Test Server Connection
 
 ```bash
-python tools/test-connection.py production
+ssh-manager server test production
 ```
 
 ### Verify MCP Installation
@@ -1016,7 +1016,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for complete guide.
 
 For detailed backup examples, see [examples/backup-workflow.js](examples/backup-workflow.js) and [docs/BACKUP_GUIDE.md](docs/BACKUP_GUIDE.md).
 
-### Using the Bash CLI
+### Using the CLI
 
 ```bash
 # Basic server management
@@ -1068,7 +1068,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 2. Clone and install dependencies
 3. **Setup pre-commit hooks** for code quality:
    ```bash
-   ./scripts/setup-hooks.sh
+   npm run setup-hooks
    ```
 4. Create your feature branch
 5. Make your changes (hooks will validate on commit)
@@ -1078,14 +1078,13 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 ### Code Quality
 
 This project uses automated quality checks:
+- **TypeScript typecheck** (tsc in `checkJs`/`noEmit` mode) over JS + TS source
 - **ESLint** for JavaScript linting
-- **Black** for Python formatting
-- **Flake8** for Python linting
 - **Prettier** for code formatting
-- **Pre-commit hooks** for automated validation
-- **Secret detection** to prevent credential leaks
+- **Pre-commit hooks** (`npm run setup-hooks`) for automated validation
+- **`.env` tracking check** to prevent credential leaks
 
-Run validation manually: `./scripts/validate.sh`
+Run validation manually: `npm run validate`
 
 ## 📄 License
 
@@ -1095,8 +1094,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Built for [Claude Code](https://claude.ai/code)
 - Uses the [Model Context Protocol](https://modelcontextprotocol.io)
-- SSH handling via [node-ssh](https://www.npmjs.com/package/node-ssh)
-- Server management with [Paramiko](https://www.paramiko.org)
+- SSH handling via [ssh2](https://www.npmjs.com/package/ssh2)
 
 ---
 
