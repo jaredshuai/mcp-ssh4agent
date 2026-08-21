@@ -10,8 +10,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Log levels
-export const LOG_LEVELS = {
+// Log levels (module-internal since debug/test-logger.js was removed).
+const LOG_LEVELS = {
   DEBUG: 0,
   INFO: 1,
   WARN: 2,

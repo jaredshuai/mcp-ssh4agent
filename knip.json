@@ -4,7 +4,6 @@
     "cli/**/*.js",
     "tests/*.js",
     "tests/*.ts",
-    "debug/*.js",
     "debug/*.ts"
   ],
   "project": ["src/**/*.ts"]
