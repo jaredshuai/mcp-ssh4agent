@@ -330,31 +330,31 @@ export class ConfigLoader {
       for (const spec of SERVER_FIELDS) {
         const value = server[spec.camel];
         switch (spec.camel) {
-          case 'host':
-          case 'user':
-            // Always emitted; unquoted (machine-shaped values).
+        case 'host':
+        case 'user':
+          // Always emitted; unquoted (machine-shaped values).
+          lines.push(serverEnvLine(upperName, spec, value));
+          break;
+        case 'port':
+          lines.push(serverEnvLine(upperName, spec, value || 22));
+          break;
+        case 'forwardAgent':
+          // Only emit when opted in, matching the TOML export rule.
+          if (value === true) lines.push(serverEnvLine(upperName, spec, 'true'));
+          break;
+        case 'mode':
+          if (value && value !== 'unrestricted') {
             lines.push(serverEnvLine(upperName, spec, value));
-            break;
-          case 'port':
-            lines.push(serverEnvLine(upperName, spec, value || 22));
-            break;
-          case 'forwardAgent':
-            // Only emit when opted in, matching the TOML export rule.
-            if (value === true) lines.push(serverEnvLine(upperName, spec, 'true'));
-            break;
-          case 'mode':
-            if (value && value !== 'unrestricted') {
-              lines.push(serverEnvLine(upperName, spec, value));
-            }
-            break;
-          case 'allowPatterns':
-          case 'denyPatterns':
-            if (Array.isArray(value) && value.length > 0) {
-              lines.push(serverEnvLine(upperName, spec, value));
-            }
-            break;
-          default:
-            if (value) lines.push(serverEnvLine(upperName, spec, value));
+          }
+          break;
+        case 'allowPatterns':
+        case 'denyPatterns':
+          if (Array.isArray(value) && value.length > 0) {
+            lines.push(serverEnvLine(upperName, spec, value));
+          }
+          break;
+        default:
+          if (value) lines.push(serverEnvLine(upperName, spec, value));
         }
       }
 

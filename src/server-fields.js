@@ -94,17 +94,17 @@ function parsePatternList(raw) {
 function coerceServerField(raw, spec) {
   if (raw === undefined || raw === null || raw === '') return undefined;
   switch (spec.type) {
-    case 'int':
-      return parseInt(String(raw), 10);
-    case 'bool':
-      return parseBool(raw);
-    case 'patternList':
-      return parsePatternList(raw);
-    default: {
-      let text = String(raw);
-      if (spec.lowercase) text = text.toLowerCase();
-      return text;
-    }
+  case 'int':
+    return parseInt(String(raw), 10);
+  case 'bool':
+    return parseBool(raw);
+  case 'patternList':
+    return parsePatternList(raw);
+  default: {
+    let text = String(raw);
+    if (spec.lowercase) text = text.toLowerCase();
+    return text;
+  }
   }
 }
 

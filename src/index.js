@@ -2,7 +2,6 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
 import SSHManager from './ssh-manager.js';
 import * as dotenv from 'dotenv';
 import fs from 'fs';
@@ -10,138 +9,12 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { ServerConfigManager } from './server-config-manager.js';
-import {
-  getTempFilename,
-  buildDeploymentStrategy,
-  detectDeploymentNeeds
-} from './deploy-helper.js';
-import {
-  resolveServerName,
-  addAlias,
-  removeAlias,
-  listAliases
-} from './server-aliases.js';
-import {
-  expandCommandAlias,
-  addCommandAlias,
-  removeCommandAlias,
-  listCommandAliases,
-  suggestAliases
-} from './command-aliases.js';
-import {
-  TIMEOUTS,
-  truncateOutput,
-  formatJSONResponse
-} from './config.js';
-import {
-  initializeHooks,
-  executeHook,
-  toggleHook,
-  listHooks
-} from './hooks-system.js';
-import {
-  loadProfile,
-  listProfiles,
-  setActiveProfile,
-  getActiveProfileName
-} from './profile-loader.js';
+import { resolveServerName, listAliases } from './server-aliases.js';
+import { formatJSONResponse } from './config.js';
+import { initializeHooks, executeHook } from './hooks-system.js';
+import { getActiveProfileName } from './profile-loader.js';
 import { logger } from './logger.js';
-import { shSingleQuote, buildCdPrefix, buildSudoPipeline } from './shell-quote.js';
-import { parseRsyncStats } from './rsync-stats.js';
-import { toRsyncLocalPath } from './rsync-path.js';
-import {
-  createSession,
-  getSession,
-  listSessions,
-  closeSession
-} from './session-manager.js';
-import {
-  setServerConfigProvider,
-  getGroup,
-  createGroup,
-  updateGroup,
-  deleteGroup,
-  addServersToGroup,
-  removeServersFromGroup,
-  listGroups,
-  executeOnGroup
-} from './server-groups.js';
-import {
-  createTunnel,
-  listTunnels,
-  closeTunnel,
-  closeServerTunnels
-} from './tunnel-manager.js';
-import {
-  getHostKeyFingerprint,
-  isHostKnown,
-  getCurrentHostKey,
-  removeHostKey,
-  addHostKey,
-  updateHostKey,
-  hasHostKeyChanged,
-  listKnownHosts,
-  detectSSHKeyError,
-  extractHostFromSSHError
-} from './ssh-key-manager.js';
-import {
-  BACKUP_TYPES,
-  DEFAULT_BACKUP_DIR,
-  generateBackupId,
-  getBackupMetadataPath,
-  getBackupFilePath,
-  buildMySQLDumpCommand,
-  buildPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand,
-  buildFilesBackupCommand,
-  buildRestoreCommand,
-  createBackupMetadata,
-  buildSaveMetadataCommand,
-  buildListBackupsCommand,
-  parseBackupsList,
-  buildCleanupCommand,
-  buildCronScheduleCommand
-} from './backup-manager.js';
-import {
-  HEALTH_STATUS,
-  buildServiceStatusCommand,
-  parseServiceStatus,
-  buildProcessListCommand,
-  parseProcessList,
-  buildKillProcessCommand,
-  buildProcessInfoCommand,
-  createAlertConfig,
-  buildSaveAlertConfigCommand,
-  buildLoadAlertConfigCommand,
-  checkAlertThresholds,
-  buildComprehensiveHealthCheckCommand,
-  parseComprehensiveHealthCheck,
-  resolveServiceName
-} from './health-monitor.js';
-import {
-  DB_TYPES,
-  buildMySQLDumpCommand as buildDBMySQLDumpCommand,
-  buildPostgreSQLDumpCommand as buildDBPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand as buildDBMongoDBDumpCommand,
-  buildMySQLImportCommand,
-  buildPostgreSQLImportCommand,
-  buildMongoDBRestoreCommand,
-  buildMySQLListDatabasesCommand,
-  buildMySQLListTablesCommand,
-  buildPostgreSQLListDatabasesCommand,
-  buildPostgreSQLListTablesCommand,
-  buildMongoDBListDatabasesCommand,
-  buildMongoDBListCollectionsCommand,
-  buildMySQLQueryCommand,
-  buildPostgreSQLQueryCommand,
-  buildMongoDBQueryCommand,
-  isSafeQuery,
-  countQueryRows,
-  parseDatabaseList,
-  parseTableList,
-  parseSize,
-  formatBytes
-} from './database-manager.js';
+import { setServerConfigProvider } from './server-groups.js';
 import { loadToolConfig, isToolEnabled } from './tool-config-manager.js';
 import { evaluatePolicy } from './policy.js';
 import { auditLog } from './audit.js';

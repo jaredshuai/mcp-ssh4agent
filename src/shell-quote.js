@@ -21,7 +21,7 @@
  * @returns {string} The quoted value, e.g. `it's` → `'it'\''s'`.
  */
 export function shSingleQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+  return `'${String(value).replace(/'/g, '\'\\\'\'')}'`;
 }
 
 /**
@@ -37,7 +37,7 @@ export function shSingleQuote(value) {
  */
 export function buildCdPrefix(dir, platform = 'linux') {
   if (platform === 'windows') {
-    const escapedDir = String(dir).replace(/'/g, `''`);
+    const escapedDir = String(dir).replace(/'/g, '\'\'');
     return `Set-Location '${escapedDir}'; `;
   }
   return `cd ${shSingleQuote(dir)} && `;
