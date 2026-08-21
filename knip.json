@@ -3,8 +3,9 @@
   "entry": [
     "cli/**/*.js",
     "tests/*.js",
-    "debug/*.js"
+    "tests/*.ts",
+    "debug/*.js",
+    "debug/*.ts"
   ],
-  "project": ["src/**/*.js"],
-  "ignoreBinaries": ["wsl.exe", "pip", "python", "ssh-keyscan"]
+  "project": ["src/**/*.js", "src/**/*.ts"]
 }

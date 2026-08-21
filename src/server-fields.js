@@ -63,30 +63,22 @@ export const SERVER_FIELDS = [
 /** Lookup by resolved-config field name. @type {Map<string, ServerFieldSpec>} */
 export const FIELD_BY_CAMEL = new Map(SERVER_FIELDS.map((f) => [f.camel, f]));
 
-/**
- * Parse a boolean-ish config value. Native booleans (TOML) pass through; the
- * strings "true"/"1"/"yes"/"on" (case-insensitive) from .env are true.
- * Everything else — "false", "0", "", undefined — is false, so an opt-in
- * flag never turns on by accident.
- *
- * @param {unknown} raw
- * @returns {boolean}
- */
-export function parseBool(raw) {
+// Parse a boolean-ish config value. Native booleans (TOML) pass through; the
+// strings "true"/"1"/"yes"/"on" (case-insensitive) from .env are true.
+// Everything else — "false", "0", "", undefined — is false, so an opt-in
+// flag never turns on by accident. (Internal: exercised through the
+// serverFrom*Record builders.)
+function parseBool(raw) {
   if (raw === true) return true;
   if (typeof raw !== 'string') return false;
   return ['true', '1', 'yes', 'on'].includes(raw.trim().toLowerCase());
 }
 
-/**
- * Parse a `;`-separated list of regex pattern strings. TOML arrays pass
- * through; empty entries are dropped. We do NOT compile here — that happens
- * lazily in policy.js so this module stays free of regex error handling.
- *
- * @param {unknown} raw
- * @returns {string[]}
- */
-export function parsePatternList(raw) {
+// Parse a `;`-separated list of regex pattern strings. TOML arrays pass
+// through; empty entries are dropped. We do NOT compile here — that happens
+// lazily in policy.js so this module stays free of regex error handling.
+// (Internal: exercised through the serverFrom*Record builders.)
+function parsePatternList(raw) {
   if (Array.isArray(raw)) return raw.map((s) => String(s)).filter((s) => s.length > 0);
   if (!raw || typeof raw !== 'string') return [];
   return raw
@@ -95,16 +87,11 @@ export function parsePatternList(raw) {
     .filter((s) => s.length > 0);
 }
 
-/**
- * Coerce a raw source value (env string / TOML value) to its resolved-config
- * form according to the field spec. Returns `undefined` for absent values so
- * callers keep their own defaults (e.g. port 22).
- *
- * @param {unknown} raw
- * @param {ServerFieldSpec} spec
- * @returns {string|number|boolean|string[]|undefined}
- */
-export function coerceServerField(raw, spec) {
+// Coerce a raw source value (env string / TOML value) to its resolved-config
+// form according to the field spec. Returns `undefined` for absent values so
+// callers keep their own defaults (e.g. port 22). (Internal: exercised
+// through the serverFrom*Record builders.)
+function coerceServerField(raw, spec) {
   if (raw === undefined || raw === null || raw === '') return undefined;
   switch (spec.type) {
     case 'int':
