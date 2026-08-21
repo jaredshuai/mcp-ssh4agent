@@ -1,0 +1,76 @@
+// Cross-platform debug helper (replaces debug/test-tunnels.sh).
+// Run via: `npx tsx debug/test-tunnels.ts`
+//
+// Prints example `ssh_tunnel_*` invocations and use cases. Pure echo →
+// console.log; no shell-isms.
+
+console.log('🔧 Test SSH Tunnels');
+console.log('===================');
+console.log('');
+console.log('SSH tunnels allow secure port forwarding and SOCKS proxy creation');
+console.log('for accessing remote services and networks.');
+console.log('');
+console.log('📋 Test Commands for SSH Tunnels:');
+console.log('==================================');
+console.log('');
+console.log('# 1. Local Port Forwarding');
+console.log('# Access remote service (e.g., database) locally');
+console.log('ssh_tunnel_create server:"prod1" type:"local" localPort:3307 remoteHost:"localhost" remotePort:3306');
+console.log('# Now you can access remote MySQL on localhost:3307');
+console.log('');
+console.log('# 2. Remote Port Forwarding');
+console.log('# Expose local service to remote server');
+console.log('ssh_tunnel_create server:"prod1" type:"remote" localPort:8080 remoteHost:"0.0.0.0" remotePort:8080');
+console.log('# Remote users can now access your local service');
+console.log('');
+console.log('# 3. Dynamic Port Forwarding (SOCKS Proxy)');
+console.log('# Create SOCKS5 proxy for secure browsing');
+console.log('ssh_tunnel_create server:"prod1" type:"dynamic" localPort:1080');
+console.log('# Configure browser to use SOCKS5 proxy at localhost:1080');
+console.log('');
+console.log('# 4. List active tunnels');
+console.log('ssh_tunnel_list');
+console.log('ssh_tunnel_list server:"prod1"  # Filter by server');
+console.log('');
+console.log('# 5. Close tunnels');
+console.log('ssh_tunnel_close tunnelId:"tunnel_1234567_abcd"  # Close specific tunnel');
+console.log('ssh_tunnel_close server:"prod1"  # Close all tunnels for server');
+console.log('');
+console.log('💡 Common Use Cases:');
+console.log('====================');
+console.log('');
+console.log('1. Access Remote Database:');
+console.log('   ssh_tunnel_create server:"dbserver" type:"local" localPort:5433 remoteHost:"localhost" remotePort:5432');
+console.log('   psql -h localhost -p 5433 -U user dbname');
+console.log('');
+console.log('2. Access Remote Web Service:');
+console.log('   ssh_tunnel_create server:"webserver" type:"local" localPort:8080 remoteHost:"localhost" remotePort:80');
+console.log('   # Browse to http://localhost:8080');
+console.log('');
+console.log('3. Expose Local Development Server:');
+console.log('   ssh_tunnel_create server:"public-server" type:"remote" localPort:3000 remoteHost:"0.0.0.0" remotePort:8080');
+console.log('   # Access your dev server via public-server:8080');
+console.log('');
+console.log('4. Secure Browsing via SOCKS:');
+console.log('   ssh_tunnel_create server:"vpn-server" type:"dynamic" localPort:1080');
+console.log('   # Configure browser: SOCKS5 proxy localhost:1080');
+console.log('');
+console.log('5. Access Private Network Services:');
+console.log('   ssh_tunnel_create server:"gateway" type:"local" localPort:8000 remoteHost:"internal.service" remotePort:80');
+console.log('   # Access internal service via localhost:8000');
+console.log('');
+console.log('🔒 Security Notes:');
+console.log('==================');
+console.log('• Tunnels are encrypted end-to-end via SSH');
+console.log('• Local forwarding: Secure access to remote services');
+console.log('• Remote forwarding: Be careful exposing local services');
+console.log('• SOCKS proxy: Routes all traffic through SSH server');
+console.log('• Auto-reconnect enabled with exponential backoff');
+console.log('• Idle tunnel monitoring every 30 seconds');
+console.log('');
+console.log('⚙️ Advanced Options:');
+console.log('====================');
+console.log('• localHost: Bind to specific interface (default: 127.0.0.1)');
+console.log('• Multiple tunnels can be created per server');
+console.log('• Tunnels persist until explicitly closed or server disconnects');
+console.log('• Statistics tracked: connections, bytes transferred, errors');
