@@ -42,13 +42,11 @@ jobs:
       run: npm test
       
     - name: Run validation script
-      run: ./scripts/validate.sh
-      
+      run: npm run validate
+
     - name: Validate profile JSON files
       run: |
-        for file in profiles/*.json; do
-          python -m json.tool "$file" > /dev/null
-        done
+        node -e "const fs=require('fs');for(const f of fs.readdirSync('profiles').filter(x=>x.endsWith('.json'))){JSON.parse(fs.readFileSync('profiles/'+f,'utf8'));}console.log('profile JSON valid');"
       
     - name: Test profile system
       run: node tests/test-profiles.js

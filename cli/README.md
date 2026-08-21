@@ -1,45 +1,39 @@
 # SSH Manager CLI
 
-A simple, powerful, and fast Bash-based CLI for managing SSH servers.
+A simple, powerful, and fast cross-platform CLI for managing SSH servers.
 
 ## Features
 
-- 🚀 **Fast**: Pure Bash, no runtime dependencies
+- 🚀 **Fast**: Pure TypeScript, run directly via tsx (no build step)
 - 🎨 **Beautiful**: Colored output with emojis
 - 📦 **Simple**: Single command for all operations
 - 🔧 **Powerful**: Tunnels, sync, monitoring, and more
 - 🔌 **Integrated**: Works with MCP SSH Manager server
+- 🪟 **Cross-platform**: Runs natively on Windows, macOS, and Linux — no Bash/Git Bash/WSL required
 
 ## Installation
 
 ### Quick Install
 
 ```bash
-cd cli
-./install.sh
+# From the project root
+npm run install-cli     # checks deps + `npm link` (creates the ssh-manager shim)
 ```
 
-### Manual Install
+### Manual Run (no global install)
 
 ```bash
-# Copy CLI to your home
-cp -r cli ~/.ssh-manager-cli
-
-# Create symlink
-sudo ln -s ~/.ssh-manager-cli/ssh-manager /usr/local/bin/ssh-manager
-
-# Make executable
-chmod +x ~/.ssh-manager-cli/ssh-manager
+node cli/ssh-manager.js --help
 ```
 
 ### Dependencies
 
 **Required:**
-- `bash` (4.0+)
+- Node.js (>=18) and `npm`
 - `ssh`
-- `rsync`
 
 **Optional:**
+- `rsync` - For `ssh-manager sync` (not bundled on Windows; install separately if needed)
 - `jq` - For JSON configuration management
 - `sshpass` - For password authentication testing
 
@@ -226,50 +220,36 @@ smt prod1    # Test prod1
 smc prod1    # Connect to prod1
 ```
 
-## Comparison with Python CLI
-
-| Feature | Bash CLI | Python CLI |
-|---------|----------|------------|
-| Speed | ⚡ Very fast | 🐢 Slower startup |
-| Dependencies | ✅ None (bash/ssh) | ❌ Python packages |
-| Installation | ✅ Simple copy | ❌ pip install |
-| Windows | ❌ WSL needed | ✅ Native |
-| Features | ✅ All essential | ✅ All features |
-
 ## Troubleshooting
 
 ### Command not found
 
-```bash
-# Check if installed
-which ssh-manager
+After `npm run install-cli`, the `ssh-manager` shim lives in npm's global bin
+directory (`%APPDATA%\npm` on Windows; `/usr/local/bin` or `~/.npm-global/bin`
+on macOS/Linux). If your shell can't find it:
 
-# Add to PATH if needed
-export PATH="$PATH:/usr/local/bin"
-```
+- **Restart your terminal** so PATH refreshes (common need on Windows).
+- Verify the link: `npm ls -g mcp-ssh-manager` should list it.
+- Or skip the global shim entirely and run directly: `node cli/ssh-manager.js --help`
 
-### Permission denied
+### Missing optional dependencies
 
-```bash
-# Make executable
-chmod +x ~/.ssh-manager-cli/ssh-manager
-
-# Install with sudo if needed
-sudo ./install.sh
-```
-
-### Missing dependencies
+`rsync` / `jq` / `sshpass` are optional — install only what you need:
 
 ```bash
 # macOS
-brew install jq
+brew install jq sshpass
 
 # Ubuntu/Debian
 sudo apt-get install jq sshpass
 
-# RHEL/CentOS
-sudo yum install jq sshpass
+# RHEL/CentOS/Fedora
+sudo dnf install jq sshpass
 ```
+
+On Windows, `rsync` is not bundled — install it via MSYS2, Scoop
+(`scoop install rsync`), or WSL if you need `ssh-manager sync`. `jq` is
+available via Scoop/Chocolatey; `sshpass` has no native Windows build.
 
 ## Contributing
 

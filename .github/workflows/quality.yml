@@ -53,9 +53,7 @@ jobs:
       run: npx knip
 
     - name: Run validation script
-      run: |
-        chmod +x scripts/validate.sh
-        ./scripts/validate.sh
+      run: npm run validate
     
     - name: Check for secrets
       uses: trufflesecurity/trufflehog@main
