@@ -1,5 +1,5 @@
 /**
- * Test Suite for src/server-fields.js — the shared field table.
+ * Test Suite for src/server-fields.ts — the shared field table.
  *
  * Locks the contract BOTH sides depend on:
  *  - table integrity (unique camel/env keys, no cross-field TOML alias clashes)
@@ -8,7 +8,7 @@
  *  - value coercion (int / bool-absent-is-false / lowercase / pattern lists)
  *  - CLI-writes → server-reads round-trip through the REAL writers:
  *    cli/lib/config.ts add_server_to_env / update_server_in_env produce a file
- *    that src/config-loader.js parses back into the expected camelCase config,
+ *    that src/config-loader.ts parses back into the expected camelCase config,
  *    including passwords containing quotes, spaces, `#` and `$()`.
  *
  * This closes the gap noted on test-config-field-names.js, which only locks
@@ -26,8 +26,8 @@ import {
   serverFromEnvRecord,
   serverFromTomlRecord,
   canonicalTomlKey,
-} from '../src/server-fields.js';
-import { ConfigLoader } from '../src/config-loader.js';
+} from '../src/server-fields.ts';
+import { ConfigLoader } from '../src/config-loader.ts';
 
 let passed = 0;
 let failed = 0;

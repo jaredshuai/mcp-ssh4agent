@@ -9,7 +9,7 @@ import {
   listProfiles, 
   setActiveProfile, 
   getActiveProfileName 
-} from '../src/profile-loader.js';
+} from '../src/profile-loader.ts';
 import assert from 'assert';
 import fs from 'fs';
 import path from 'path';

@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 // Map to store active sessions
 const sessions = new Map();
@@ -23,6 +23,24 @@ const SESSION_STATES = {
 };
 
 class SSHSession {
+  id: string;
+  serverName: string;
+  // ssh2 Client; the library ships no bundled types, keep it loose.
+  ssh: any;
+  state: string;
+  context: {
+    cwd: string | null;
+    env: Record<string, string>;
+    history: Array<{ command: string; timestamp: Date; cwd: string | null }>;
+    variables: Record<string, any>;
+  };
+  createdAt: Date;
+  lastActivity: Date;
+  // ssh2 ClientChannel, null until initialize() / after close().
+  shell: any;
+  outputBuffer: string;
+  errorBuffer: string;
+
   constructor(id, serverName, ssh) {
     this.id = id;
     this.serverName = serverName;
@@ -157,7 +175,7 @@ class SSHSession {
   /**
    * Execute a command in the session
    */
-  async execute(command, options = {}) {
+  async execute(command, options: { silent?: boolean; timeout?: number } = {}) {
     if (this.state !== SESSION_STATES.READY) {
       throw new Error(`Session ${this.id} is not ready (state: ${this.state})`);
     }

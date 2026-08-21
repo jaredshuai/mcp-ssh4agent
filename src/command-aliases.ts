@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { loadProfile } from './profile-loader.js';
+import { loadProfile } from './profile-loader.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const ALIASES_FILE = path.join(__dirname, '..', '.command-aliases.json');
 
 // Get aliases from the active profile
-let profileAliases = {};
+let profileAliases: Record<string, string> = {};
 try {
   const profile = loadProfile();
   profileAliases = profile.commandAliases || {};

@@ -2,7 +2,7 @@ import assert from 'assert';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { ServerConfigManager } from '../src/server-config-manager.js';
+import { ServerConfigManager } from '../src/server-config-manager.ts';
 
 let passed = 0;
 function ok(label) { console.log(`[32m✓[0m ${label}`); passed++; }

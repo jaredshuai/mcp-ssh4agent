@@ -1,4 +1,4 @@
-import { countQueryRows, DB_TYPES } from '../src/database-manager.js';
+import { countQueryRows, DB_TYPES } from '../src/database-manager.ts';
 
 /**
  * Regression tests for issue #45: ssh_db_query reported `row_count` one greater than the

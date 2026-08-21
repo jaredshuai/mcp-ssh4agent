@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { toRsyncLocalPath } from '../src/rsync-path.js';
+import { toRsyncLocalPath } from '../src/rsync-path.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ssh_sync's registration moved to src/tools/core.ts when index.js was split;
@@ -153,7 +153,7 @@ assert.throws(
 );
 ok('unsupported Windows device namespaces fail clearly');
 
-// ── 6. Wiring guard on src/index.js ──────────────────────────────────────────
+// ── 6. Wiring guard on src/tools/core.ts ─────────────────────────────────────
 //
 // The conversion is worthless if ssh_sync stops using it, and that cannot be
 // observed from a test here: the handler opens a real SSH connection before
@@ -165,7 +165,7 @@ const indexSource = fs.readFileSync(INDEX_PATH, 'utf8');
 
 assert.match(
   indexSource,
-  /import \{ toRsyncLocalPath \} from '\.\.\/rsync-path\.js';/,
+  /import \{ toRsyncLocalPath \} from '\.\.\/rsync-path\.ts';/,
   'the ssh_sync tool module must import toRsyncLocalPath'
 );
 assert.match(

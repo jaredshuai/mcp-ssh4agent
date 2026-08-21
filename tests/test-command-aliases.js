@@ -11,7 +11,7 @@ import {
   removeCommandAlias,
   listCommandAliases,
   suggestAliases
-} from '../src/command-aliases.js';
+} from '../src/command-aliases.ts';
 import assert from 'assert';
 import fs from 'fs';
 import path from 'path';

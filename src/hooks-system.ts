@@ -8,7 +8,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
-import { loadProfile } from './profile-loader.js';
+import { loadProfile } from './profile-loader.ts';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -17,8 +17,8 @@ const __dirname = path.dirname(__filename);
 const HOOKS_CONFIG_FILE = path.join(__dirname, '..', '.hooks-config.json');
 const HOOKS_DIR = path.join(__dirname, '..', 'hooks');
 
-// Get hooks from the active profile
-let profileHooks = {};
+// Get hooks from the active profile — hook shapes vary per profile, keep loose.
+let profileHooks: Record<string, any> = {};
 try {
   const profile = loadProfile();
   profileHooks = profile.hooks || {};
@@ -91,12 +91,13 @@ export async function initializeHooks() {
 export function loadHooksConfig() {
   try {
     // Start with profile hooks
-    let hooks = { ...profileHooks };
+    let hooks: Record<string, any> = { ...profileHooks };
 
     // Merge with custom hooks from file
     if (fs.existsSync(HOOKS_CONFIG_FILE)) {
       const data = fs.readFileSync(HOOKS_CONFIG_FILE, 'utf8');
-      const customHooks = JSON.parse(data);
+      // External config file written by saveHooksConfig; shapes vary per hook.
+      const customHooks: Record<string, any> = JSON.parse(data);
 
       // Deep merge hooks
       for (const [hookName, hookConfig] of Object.entries(customHooks)) {
@@ -136,7 +137,7 @@ function saveHooksConfig(config) {
 /**
  * Execute a hook
  */
-export async function executeHook(hookName, context = {}) {
+export async function executeHook(hookName, context: Record<string, any> = {}) {
   const config = loadHooksConfig();
   const hook = config[hookName];
 
@@ -201,11 +202,25 @@ export async function executeHook(hookName, context = {}) {
   };
 }
 
+// One executed hook action; optional fields are populated per action type.
+interface ActionResult {
+  action: string;
+  type: string;
+  timestamp: string;
+  output?: string;
+  error?: string;
+  success?: boolean;
+  backupInfo?: { timestamp: string; command: string };
+  notified?: boolean;
+  validated?: boolean;
+  verified?: boolean;
+}
+
 /**
  * Execute a single action
  */
-async function executeAction(action, command, context) {
-  const result = {
+async function executeAction(action, command, context: Record<string, any>): Promise<ActionResult> {
+  const result: ActionResult = {
     action: action.name,
     type: action.type,
     timestamp: new Date().toISOString()

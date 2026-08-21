@@ -1,6 +1,6 @@
 import path from 'path';
 import crypto from 'crypto';
-import { shSingleQuote, buildSudoPipeline } from './shell-quote.js';
+import { shSingleQuote, buildSudoPipeline } from './shell-quote.ts';
 
 /**
  * Deploy helper functions for secure file deployment
@@ -20,7 +20,13 @@ export function getTempFilename(originalName) {
 /**
  * Build deployment strategy based on target path and permissions
  */
-export function buildDeploymentStrategy(remotePath, options = {}) {
+export function buildDeploymentStrategy(remotePath, options: {
+  sudoPassword?: string | null;
+  owner?: string | null;
+  permissions?: string | null;
+  backup?: boolean;
+  restart?: string | null;
+} = {}) {
   const {
     sudoPassword = null,
     owner = null,

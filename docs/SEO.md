@@ -37,7 +37,7 @@ Traditional SSH requires manual terminal commands and script writing. With **MCP
 git clone https://github.com/bvisible/mcp-ssh-manager.git
 cd mcp-ssh-manager
 npm install
-claude mcp add ssh-manager node /path/to/mcp-ssh-manager/src/index.js
+claude mcp add ssh-manager node /path/to/mcp-ssh-manager/src/index.ts
 ```
 
 ### Natural Language SSH Commands
@@ -65,7 +65,7 @@ Configure in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.ssh-manager]
 command = "node"
-args = ["/path/to/mcp-ssh-manager/src/index.js"]
+args = ["/path/to/mcp-ssh-manager/src/index.ts"]
 env = { SSH_CONFIG_PATH = "/Users/you/.codex/ssh-config.toml" }
 ```
 

@@ -12,7 +12,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 // Field names whose values should never appear in the audit log even if a tool
 // somehow passed them through args. Case-insensitive.
@@ -29,10 +29,11 @@ const REDACT_FIELDS = new Set([
 
 const REDACTED = '***';
 
-function sanitize(value) {
+// Recursive shape: arrays and plain objects are walked, scalars pass through.
+function sanitize(value: unknown): unknown {
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(sanitize);
-  const out = {};
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
     if (REDACT_FIELDS.has(k.toLowerCase())) {
       out[k] = REDACTED;
@@ -43,23 +44,36 @@ function sanitize(value) {
   return out;
 }
 
-let warnedPaths = new Set();
+let warnedPaths = new Set<string>();
+
+// One JSONL line; optional fields are only populated when their inputs exist.
+interface AuditEntry {
+  ts: string;
+  server: string;
+  tool: string;
+  args: unknown;
+  allowed: boolean;
+  reason?: string;
+  exitCode?: number;
+  success?: boolean;
+  error?: string;
+}
 
 /**
  * Append one audit line. No-op if the server has no auditLog configured.
  * Failures are logged but never propagated — auditing must not break tool execution.
- *
- * @param {Object} serverConfig
- * @param {string} toolName
- * @param {Object} args              - tool arguments (will be sanitized)
- * @param {Object} policyResult      - { allowed, reason? } from evaluatePolicy
- * @param {Object} [executionResult] - { code, success, error? } if the tool ran
  */
-export function auditLog(serverConfig, toolName, args, policyResult, executionResult) {
+export function auditLog(
+  serverConfig: { name: string; auditLog?: string } | null | undefined,
+  toolName: string,
+  args: unknown,
+  policyResult: { allowed: boolean; reason?: string },
+  executionResult?: { code?: number; success?: boolean; error?: unknown }
+): void {
   if (!serverConfig || !serverConfig.auditLog) return;
 
   const auditPath = serverConfig.auditLog;
-  const entry = {
+  const entry: AuditEntry = {
     ts: new Date().toISOString(),
     server: serverConfig.name,
     tool: toolName,
@@ -92,6 +106,6 @@ export function auditLog(serverConfig, toolName, args, policyResult, executionRe
 }
 
 // Exposed for tests.
-export function _resetWarnedPaths() {
+export function _resetWarnedPaths(): void {
   warnedPaths.clear();
 }

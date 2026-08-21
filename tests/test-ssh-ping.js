@@ -1,4 +1,4 @@
-import { isPingAlive } from '../src/ssh-manager.js';
+import { isPingAlive } from '../src/ssh-manager.ts';
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';

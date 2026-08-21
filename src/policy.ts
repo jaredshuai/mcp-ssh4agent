@@ -13,7 +13,7 @@
  * a refusal into an MCP-level error response.
  */
 
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 const MODE_UNRESTRICTED = 'unrestricted';
 const MODE_READONLY = 'readonly';
@@ -56,7 +56,7 @@ export const COMMAND_BEARING_TOOLS = new Set([
 //
 // The user can layer their own DENY_PATTERNS on top via restricted mode for
 // finer control.
-const READONLY_DENY_REGEX = [
+const READONLY_DENY_REGEX: RegExp[] = [
   /(^|[\s;&|])rm(\s|$)/,
   /(^|[\s;&|])rmdir(\s|$)/,
   /(^|[\s;&|])mv(\s|$)/,
@@ -92,17 +92,20 @@ const READONLY_DENY_REGEX = [
   /wget\s+[^|]*\|\s*(sh|bash)/,
 ];
 
+// The subset of the resolved server config that policy evaluation reads.
+export interface PolicyServerConfig {
+  name: string;
+  mode?: string;
+  allowPatterns?: string[];
+  denyPatterns?: string[];
+}
+
 /**
  * Compile a list of regex source strings into RegExp objects.
  * Invalid regexes are logged and skipped (returned list may be shorter than input).
- *
- * @param {string[]} patterns
- * @param {string} contextLabel - for log messages ("ALLOW" / "DENY")
- * @param {string} serverName
- * @returns {RegExp[]}
  */
-function compilePatterns(patterns, contextLabel, serverName) {
-  const compiled = [];
+function compilePatterns(patterns: string[], contextLabel: string, serverName: string): RegExp[] {
+  const compiled: RegExp[] = [];
   for (const src of patterns) {
     if (!src || typeof src !== 'string') continue;
     try {
@@ -118,26 +121,32 @@ function compilePatterns(patterns, contextLabel, serverName) {
 
 // Per-server compiled-regex cache, keyed by server name. Patterns rarely change at runtime
 // (they're loaded once from config), so this avoids recompiling on every tool call.
-const compiledCache = new Map();
+interface CompiledCacheEntry {
+  allow: RegExp[];
+  deny: RegExp[];
+  allowSrc: string;
+  denySrc: string;
+}
+const compiledCache = new Map<string, CompiledCacheEntry>();
 
-function getCompiledPatterns(serverConfig) {
+function getCompiledPatterns(serverConfig: PolicyServerConfig): CompiledCacheEntry {
   const key = serverConfig.name;
   const cached = compiledCache.get(key);
   // Cache invalidation: if the raw pattern strings change, drop the cached entry.
   if (
     cached &&
-    cached.allowSrc === (serverConfig.allowPatterns || []).join('') &&
-    cached.denySrc === (serverConfig.denyPatterns || []).join('')
+    cached.allowSrc === (serverConfig.allowPatterns || []).join('') &&
+    cached.denySrc === (serverConfig.denyPatterns || []).join('')
   ) {
     return cached;
   }
   const allow = compilePatterns(serverConfig.allowPatterns || [], 'ALLOW', key);
   const deny = compilePatterns(serverConfig.denyPatterns || [], 'DENY', key);
-  const entry = {
+  const entry: CompiledCacheEntry = {
     allow,
     deny,
-    allowSrc: (serverConfig.allowPatterns || []).join(''),
-    denySrc: (serverConfig.denyPatterns || []).join(''),
+    allowSrc: (serverConfig.allowPatterns || []).join(''),
+    denySrc: (serverConfig.denyPatterns || []).join(''),
   };
   compiledCache.set(key, entry);
   return entry;
@@ -149,12 +158,14 @@ function getCompiledPatterns(serverConfig) {
  * Performance: in the common case (mode === 'unrestricted' or undefined), this
  * returns immediately with no allocations beyond the result object.
  *
- * @param {Object} serverConfig - the server config object from config-loader.js
- * @param {string} toolName     - MCP tool name (e.g. "ssh_execute")
- * @param {string} [command]    - optional command string for COMMAND_BEARING_TOOLS
- * @returns {{ allowed: boolean, reason?: string }}
+ * `serverConfig` is the resolved config object from config-loader.js; `command`
+ * is only consulted for COMMAND_BEARING_TOOLS.
  */
-export function evaluatePolicy(serverConfig, toolName, command) {
+export function evaluatePolicy(
+  serverConfig: PolicyServerConfig | null | undefined,
+  toolName: string,
+  command?: string
+): { allowed: boolean; reason?: string } {
   // Backward-compat fast path: no server config, missing mode, or unrestricted mode
   // → identical behavior to pre-v3.5.0. Not a single regex is compiled or matched.
   const mode = serverConfig && serverConfig.mode;
@@ -242,6 +253,6 @@ export function evaluatePolicy(serverConfig, toolName, command) {
 }
 
 // Exposed for tests only.
-export function _clearCompiledCache() {
+export function _clearCompiledCache(): void {
   compiledCache.clear();
 }

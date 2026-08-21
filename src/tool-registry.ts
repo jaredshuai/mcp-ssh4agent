@@ -6,33 +6,34 @@
  */
 
 /**
- * Runtime context handed to each src/tools/<group>.js registration function.
- * Built once by the entry point (src/index.js) and passed as the single
+ * Runtime context handed to each src/tools/<group>.ts registration function.
+ * Built once by the entry point (src/index.ts) and passed as the single
  * argument, so tool modules never import the entry point (no import cycles) —
- * the same provider-injection pattern src/server-groups.js uses for config.
+ * the same provider-injection pattern src/server-groups.ts uses for config.
  *
  * `register` is typed so inline tool handlers keep contextually-typed `any`
  * args (mirrors the original registerToolConditional JSDoc that lived in
  * src/index.js before the split). The infrastructure members are loosely
- * typed; their definition sites in src/index.js carry the real JSDoc.
- *
- * @typedef {Object} ToolContext
- * @property {(toolName: string, schema: any, handler: (args: any, extra?: any) => any) => void} register Register a tool unless disabled in tool config.
- * @property {any} getConnection
- * @property {any} closeConnection
- * @property {any} execCommandWithTimeout
- * @property {any} loadServerConfig
- * @property {any} getServerConfig
- * @property {any} applyServerPolicy
- * @property {any} auditOk
- * @property {any} isConnectionValid
- * @property {any} cleanupOldConnections
- * @property {any} connections
- * @property {any} connectionTimestamps
- * @property {any} keepaliveIntervals
- * @property {number} CONNECTION_TIMEOUT
- * @property {number} KEEPALIVE_INTERVAL
+ * typed; their definition sites in src/index.ts carry the real types.
  */
+export interface ToolContext {
+  /** Register a tool unless disabled in tool config. */
+  register: (toolName: string, schema: any, handler: (args: any, extra?: any) => any) => void;
+  getConnection: any;
+  closeConnection: any;
+  execCommandWithTimeout: any;
+  loadServerConfig: any;
+  getServerConfig: any;
+  applyServerPolicy: any;
+  auditOk: any;
+  isConnectionValid: any;
+  cleanupOldConnections: any;
+  connections: any;
+  connectionTimestamps: any;
+  keepaliveIntervals: any;
+  CONNECTION_TIMEOUT: number;
+  KEEPALIVE_INTERVAL: number;
+}
 
 /**
  * Tool groups with their associated tools

@@ -1,13 +1,13 @@
 {
   "//": [
-    "Type-checking only — no emit, no build step. Existing server code in",
-    "src/ ships as plain JavaScript (typechecked via checkJs over JSDoc).",
-    "New code is TypeScript (.ts) in scripts/ and cli/, run directly via tsx",
-    "(`npm run validate` / the `ssh-manager` CLI) without emitting files.",
-    "tsc here is purely a static checker (`npm run typecheck`); tsx handles",
-    "execution. Strictness is deliberately moderate: the goal is catching the",
-    "mistakes that actually bit this project (reading a config field that does",
-    "not exist — see issue #49 — wrong argument counts, typos on typed objects)."
+    "Type-checking only — no emit, no build step. The server (src/**/*.ts)",
+    "is TypeScript run natively by Node's type stripping (entry: node",
+    "src/index.ts). allowJs/checkJs stay on for the remaining plain-JS test",
+    "files; scripts/ and cli/ run via tsx. tsc here is purely a static",
+    "checker (`npm run typecheck`). Strictness is deliberately moderate:",
+    "the goal is catching the mistakes that actually bit this project",
+    "(reading a config field that does not exist — see issue #49 — wrong",
+    "argument counts, typos on typed objects)."
   ],
   "compilerOptions": {
     "target": "ES2022",

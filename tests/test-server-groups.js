@@ -13,7 +13,7 @@ import assert from 'assert';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { ServerGroups } from '../src/server-groups.js';
+import { ServerGroups } from '../src/server-groups.ts';
 
 let passed = 0;
 function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }

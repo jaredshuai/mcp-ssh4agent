@@ -2,22 +2,23 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import SSHManager from './ssh-manager.js';
+import SSHManager from './ssh-manager.ts';
 import * as dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { ServerConfigManager } from './server-config-manager.js';
-import { resolveServerName, listAliases } from './server-aliases.js';
-import { formatJSONResponse } from './config.js';
-import { initializeHooks, executeHook } from './hooks-system.js';
-import { getActiveProfileName } from './profile-loader.js';
-import { logger } from './logger.js';
-import { setServerConfigProvider } from './server-groups.js';
-import { loadToolConfig, isToolEnabled } from './tool-config-manager.js';
-import { evaluatePolicy } from './policy.js';
-import { auditLog } from './audit.js';
+import { ServerConfigManager } from './server-config-manager.ts';
+import { resolveServerName, listAliases } from './server-aliases.ts';
+import { formatJSONResponse } from './config.ts';
+import { initializeHooks, executeHook } from './hooks-system.ts';
+import { getActiveProfileName } from './profile-loader.ts';
+import { logger } from './logger.ts';
+import { setServerConfigProvider } from './server-groups.ts';
+import { loadToolConfig, isToolEnabled } from './tool-config-manager.ts';
+import { evaluatePolicy } from './policy.ts';
+import { auditLog } from './audit.ts';
+import type { ToolContext } from './tool-registry.ts';
 import { registerCoreTools } from './tools/core.ts';
 import { registerSessionsTools } from './tools/sessions.ts';
 import { registerMonitoringTools } from './tools/monitoring.ts';
@@ -183,14 +184,12 @@ async function auditOk(serverName, toolName, args, executionResult) {
 }
 
 // Execute command with timeout - using child_process timeout for real kill
-/**
- * @param {any} ssh
- * @param {string} command
- * @param {{rawCommand?: boolean, platform?: string, execOptions?: Record<string, any>,
- *   [key: string]: any}} [options]
- * @param {number} [timeoutMs]
- */
-async function execCommandWithTimeout(ssh, command, options = {}, timeoutMs = 30000) {
+async function execCommandWithTimeout(
+  ssh: any,
+  command: string,
+  options: { rawCommand?: boolean; platform?: string; execOptions?: Record<string, any>; [key: string]: any } = {},
+  timeoutMs = 30000
+) {
   // Pass through rawCommand and platform if specified
   const { rawCommand, platform = 'linux', ...otherOptions } = options;
 
@@ -359,11 +358,11 @@ async function createProxyCommandSocket(proxyCommand, host, port) {
 
     // Cast: Node accepts a {readable, writable} pair here, but the bundled
     // types only model the stream/iterable overloads.
-    const socket = Duplex.from(/** @type {any} */ ({
+    const socket = Duplex.from({
       readable: child.stdout,
       writable: child.stdin,
       allowHalfOpen: false
-    }));
+    } as any);
 
     // Forward proxy stderr to the MCP server's stderr for debugging
     child.stderr.on('data', (chunk) => {
@@ -537,17 +536,11 @@ const server = new McpServer({
 
 logger.info('MCP Server initialized', { version: serverVersion });
 
-/**
- * Helper function to conditionally register tools based on configuration
- * @param {string} toolName - Name of the tool
- * @param {any} schema - Tool schema (description + zod inputSchema)
- * @param {(args: any, extra?: any) => any} handler - Tool handler function
- */
-function registerToolConditional(toolName, schema, handler) {
+function registerToolConditional(toolName: string, schema: any, handler: (args: any, extra?: any) => any) {
   if (isToolEnabled(toolName)) {
     // Cast: registerTool infers its handler signature from the zod schema, which
     // this generic wrapper cannot express while staying one helper for 37 tools.
-    server.registerTool(toolName, schema, /** @type {any} */ (handler));
+    server.registerTool(toolName, schema, handler as any);
     logger.debug(`Registered tool: ${toolName}`);
   } else {
     logger.debug(`Skipped disabled tool: ${toolName}`);
@@ -558,10 +551,10 @@ function registerToolConditional(toolName, schema, handler) {
 
 // ── Tool registration ────────────────────────────────────────────────────────
 // Tool definitions live in src/tools/<group>.ts (37 tools, 6 groups — see
-// src/tool-registry.js), loaded natively via Node type stripping. Each group
+// src/tool-registry.ts), loaded natively via Node type stripping. Each group
 // module receives this shared runtime context instead of importing it, keeping
 // the tool files free of circular dependencies on this entry point.
-const toolContext = {
+const toolContext: ToolContext = {
   register: registerToolConditional,
   getConnection,
   closeConnection,

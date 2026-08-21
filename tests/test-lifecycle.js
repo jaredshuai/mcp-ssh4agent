@@ -12,7 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SERVER = path.join(__dirname, '..', 'src', 'index.js');
+const SERVER = path.join(__dirname, '..', 'src', 'index.ts');
 
 // Isolate from the developer's real .env / ~/.codex config: the test only cares
 // about process lifetime, not about which servers get loaded.

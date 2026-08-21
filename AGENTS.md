@@ -10,17 +10,17 @@ MCP SSH Manager is a Model Context Protocol server that enables any MCP-compatib
 
 The system consists of three main components:
 
-1. **MCP Server** (`src/index.js`): Node.js-based MCP server using the Model Context Protocol SDK
+1. **MCP Server** (`src/index.ts`): Node.js-based MCP server using the Model Context Protocol SDK
    - Handles SSH connections via ssh2 library
    - Manages connection pooling to avoid reconnecting
    - Provides MCP tools for any AI agent integration (Claude Code, Codex, Cursor, Cline, etc.)
-   - Tool definitions live in `src/tools/<group>.ts` (37 tools, 6 groups, see `src/tool-registry.js`); each group module receives a shared runtime context instead of importing the entry point — see the `ToolContext` typedef in `src/tool-registry.js`
+   - Tool definitions live in `src/tools/<group>.ts` (37 tools, 6 groups, see `src/tool-registry.ts`); each group module receives a shared runtime context instead of importing the entry point — see the `ToolContext` interface in `src/tool-registry.ts`
 
 2. **Server Management CLI** (`cli/ssh-manager.js`, a tsx ESM loader running the TypeScript sources in `cli/`): interactive CLI for configuration
    - Pure TypeScript (`cli/lib/*.ts`, `cli/commands/*.ts`), run via tsx — cross-platform, no Bash/Git Bash needed
    - Manages `.env` / TOML server configurations; tests connections; server / group / tool operations
 
-3. **Deployment Helpers** (`src/deploy-helper.js`, `src/server-aliases.js`): Advanced features
+3. **Deployment Helpers** (`src/deploy-helper.ts`, `src/server-aliases.ts`): Advanced features
    - Automated deployment strategies with permission handling
    - Server alias management for simplified access
    - Batch deployment scripts generation
@@ -74,13 +74,13 @@ See [docs/TOOL_MANAGEMENT.md](docs/TOOL_MANAGEMENT.md) for complete guide.
 ```bash
 npm start                                     # Start MCP server (requires stdin)
 npm test                                      # Run the full test suite
-npm run typecheck                             # Type-check JSDoc with tsc (no build, nothing emitted)
+npm run typecheck                             # Type-check with tsc (no build, nothing emitted)
 npm run test:all                              # Tests + typecheck + validation
 npm run validate                              # Run all validation checks (B2: tsx scripts/validate.ts)
-node --check src/index.js                   # Check JavaScript syntax
+node --check src/index.ts                   # Check source syntax (native type stripping)
 ```
 
-**Language / typecheck**: `tsconfig.json` runs TypeScript in `checkJs`/`noEmit` mode. The server entry and infrastructure (`src/*.js`) are plain JS run directly (`node src/index.js`) — no build step. Server tool modules (`src/tools/*.ts`) are TypeScript loaded **natively by Node's type stripping** (`engines: ">=23.6.0"`; no tsx, no build — the `node src/index.js` contract is unchanged). Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs via tsx. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
+**Language / typecheck**: the entire server (`src/**/*.ts`, entry `src/index.ts`) is TypeScript run **natively by Node's type stripping** (`engines: ">=23.6.0"`; no tsx, no build, nothing emitted) — `node src/index.ts` is the whole runtime contract. `tsconfig.json` is `noEmit` type-checking only; `allowJs`/`checkJs` stay on for the remaining plain-JS test files. Type-stripping caveats apply: only erasable syntax (no enums/namespaces/parameter properties), and relative imports must carry explicit `.ts` extensions. Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs via tsx. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
 
 ### Debug Tools (in `debug/` directory)
 ```bash
@@ -186,19 +186,19 @@ forward_agent = true                       # Optional: forward local ssh-agent t
 
 ## Key Implementation Details
 
-1. **Connection Pooling**: The server maintains persistent SSH connections in a `Map` (the `connections` map in `src/index.js`) to avoid reconnection overhead
+1. **Connection Pooling**: The server maintains persistent SSH connections in a `Map` (the `connections` map in `src/index.ts`) to avoid reconnection overhead
 
-2. **Server Resolution**: Server names are resolved through aliases first, then direct lookup. Names are normalized to lowercase (see `resolveServerName` in `src/server-aliases.js`)
+2. **Server Resolution**: Server names are resolved through aliases first, then direct lookup. Names are normalized to lowercase (see `resolveServerName` in `src/server-aliases.ts`)
 
 3. **Default Directories**: If a server has a DEFAULT_DIR configured and no cwd is provided to ssh_execute, commands run in that directory
 
 4. **Deployment Strategy**: The deploy helper detects permission issues and automatically creates scripts for sudo execution when needed
 
-5. **Environment Loading**: Uses dotenv to load configuration from `.env`, resolved via the same fallback chain as the CLI (see `resolveEnvFilePath` in `src/index.js`; `SSH_ENV_PATH` overrides the chain)
+5. **Environment Loading**: Uses dotenv to load configuration from `.env`, resolved via the same fallback chain as the CLI (see `resolveEnvFilePath` in `src/index.ts`; `SSH_ENV_PATH` overrides the chain)
 
-6. **Proxy Command Support**: Custom proxy commands (SOCKS5, ssh -W, etc.) are executed locally to establish connections, with proper error handling and timeout management (see `createProxyCommandSocket` in `src/index.js`)
+6. **Proxy Command Support**: Custom proxy commands (SOCKS5, ssh -W, etc.) are executed locally to establish connections, with proper error handling and timeout management (see `createProxyCommandSocket` in `src/index.ts`)
 
-7. **Server Groups**: Membership is the union of two sources — the explicit lists in `.server-groups.json` (created via `ssh_group_manage`, which also hold strategy/delay/stopOnError) and the per-server `group` field of the SSH config. Config-derived groups are resolved at read time, never written to `.server-groups.json`, and are read-only for `ssh_group_manage`. `src/index.js` injects the loaded config into the group layer via `setServerConfigProvider()`; without it the module can only see `.env` servers (src/server-groups.js)
+7. **Server Groups**: Membership is the union of two sources — the explicit lists in `.server-groups.json` (created via `ssh_group_manage`, which also hold strategy/delay/stopOnError) and the per-server `group` field of the SSH config. Config-derived groups are resolved at read time, never written to `.server-groups.json`, and are read-only for `ssh_group_manage`. `src/index.ts` injects the loaded config into the group layer via `setServerConfigProvider()`; without it the module can only see `.env` servers (src/server-groups.ts)
 
 ## Security Considerations
 
@@ -222,17 +222,17 @@ CI (GitHub Actions): pushes to `main` run the Tests and Code Quality workflows o
 
 ## AI Agent Integration
 
-This server is MCP-compatible, so any agent that speaks MCP can drive it. Each agent has its own install path — the entry point is always `node src/index.js`; only the registration command differs.
+This server is MCP-compatible, so any agent that speaks MCP can drive it. Each agent has its own install path — the entry point is always `node src/index.ts`; only the registration command differs.
 
 **Claude Code:**
 ```bash
-claude mcp add ssh-manager node /absolute/path/to/mcp-ssh-manager/src/index.js
+claude mcp add ssh-manager node /absolute/path/to/mcp-ssh-manager/src/index.ts
 ```
 Config stored at `~/.config/claude-code/claude_code_config.json`
 
 **OpenAI Codex:** run `ssh-manager codex setup` (writes TOML to `~/.codex/ssh-config.toml`).
 
-**Other agents (Cursor, Cline, etc.):** point their MCP client at `node /absolute/path/to/mcp-ssh-manager/src/index.js` and pass servers via `.env` or `SSH_CONFIG_PATH`.
+**Other agents (Cursor, Cline, etc.):** point their MCP client at `node /absolute/path/to/mcp-ssh-manager/src/index.ts` and pass servers via `.env` or `SSH_CONFIG_PATH`.
 
 ## Agent skills
 

@@ -1,5 +1,5 @@
 /**
- * Test Suite for src/shell-quote.js
+ * Test Suite for src/shell-quote.ts
  *
  * Validates:
  *  - shSingleQuote: POSIX single-quote escaping (' → '\'')
@@ -15,7 +15,7 @@ import {
   shSingleQuote,
   buildCdPrefix,
   buildSudoPipeline,
-} from '../src/shell-quote.js';
+} from '../src/shell-quote.ts';
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';

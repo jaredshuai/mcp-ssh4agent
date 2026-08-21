@@ -15,7 +15,7 @@ import {
   validateToolRegistry,
   getToolStats,
   verifyIntegrity
-} from '../src/tool-registry.js';
+} from '../src/tool-registry.ts';
 
 // Test colors
 const GREEN = '\x1b[32m';

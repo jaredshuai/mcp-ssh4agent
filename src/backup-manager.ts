@@ -6,7 +6,7 @@
 
 import path from 'path';
 import crypto from 'crypto';
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 // Backup types
 export const BACKUP_TYPES = {
@@ -356,7 +356,13 @@ function buildFilesRestoreCommand(backupFile, options) {
 /**
  * Create backup metadata object
  */
-export function createBackupMetadata(backupId, type, options = {}) {
+export function createBackupMetadata(backupId, type, options: {
+  server?: string;
+  database?: string | null;
+  paths?: string[];
+  compress?: boolean;
+  retention?: number;
+} = {}) {
   return {
     id: backupId,
     type,

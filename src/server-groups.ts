@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +22,15 @@ const EXECUTION_STRATEGIES = {
 };
 
 export class ServerGroups {
-  constructor(options = {}) {
+  groupsFile: string;
+  serverConfigProvider: (() => Record<string, any>) | null;
+  // Group shapes vary (stored vs dynamic vs config-derived); keep loose.
+  groups: Record<string, any>;
+
+  constructor(options: {
+    groupsFile?: string;
+    serverConfigProvider?: (() => Record<string, any>) | null;
+  } = {}) {
     // Both options exist so this class can be instantiated in isolation (tests,
     // embedding). The exported singleton below keeps the historical defaults.
     this.groupsFile = options.groupsFile || GROUPS_FILE;
@@ -76,7 +84,8 @@ export class ServerGroups {
     try {
       if (fs.existsSync(this.groupsFile)) {
         const data = fs.readFileSync(this.groupsFile, 'utf8');
-        const stored = JSON.parse(data);
+        // Written by saveGroups; keys are group names with varying shapes.
+        const stored: Record<string, any> = JSON.parse(data);
 
         // Dynamic groups are deliberately never persisted (see saveGroups), so
         // they are missing from every file written after the first group edit.
@@ -117,7 +126,7 @@ export class ServerGroups {
   saveGroups() {
     try {
       // Don't save dynamic groups
-      const groupsToSave = {};
+      const groupsToSave: Record<string, any> = {};
       for (const [name, group] of Object.entries(this.groups)) {
         if (!group.dynamic) {
           groupsToSave[name] = group;
@@ -267,7 +276,13 @@ export class ServerGroups {
   /**
    * Create a new group
    */
-  createGroup(name, servers = [], options = {}) {
+  createGroup(name, servers = [], options: {
+    overwrite?: boolean;
+    description?: string;
+    strategy?: string;
+    delay?: number;
+    stopOnError?: boolean;
+  } = {}) {
     const groupName = name.toLowerCase();
 
     if (this.groups[groupName] && !options.overwrite) {
@@ -433,7 +448,7 @@ export class ServerGroups {
   /**
    * Execute command on group with strategy
    */
-  async executeOnGroup(groupName, executor, options = {}) {
+  async executeOnGroup(groupName, executor, options: { strategy?: string; delay?: number; stopOnError?: boolean } = {}) {
     const group = this.getGroup(groupName);
     const results = [];
     const strategy = options.strategy || group.strategy || EXECUTION_STRATEGIES.PARALLEL;

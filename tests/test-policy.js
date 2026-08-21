@@ -18,8 +18,8 @@ import {
   READONLY_BLOCKED_TOOLS,
   COMMAND_BEARING_TOOLS,
   _clearCompiledCache,
-} from '../src/policy.js';
-import { auditLog, _resetWarnedPaths } from '../src/audit.js';
+} from '../src/policy.ts';
+import { auditLog, _resetWarnedPaths } from '../src/audit.ts';
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';

@@ -42,9 +42,9 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import SSHManager from '../src/ssh-manager.js';
-import { evaluatePolicy, _clearCompiledCache } from '../src/policy.js';
-import { auditLog, _resetWarnedPaths } from '../src/audit.js';
+import SSHManager from '../src/ssh-manager.ts';
+import { evaluatePolicy, _clearCompiledCache } from '../src/policy.ts';
+import { auditLog, _resetWarnedPaths } from '../src/audit.ts';
 
 const G = '\x1b[32m', R = '\x1b[31m', Y = '\x1b[33m', N = '\x1b[0m', C = '\x1b[36m';
 

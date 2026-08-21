@@ -66,7 +66,7 @@ Claude Code:
   "mcpServers": {
     "ssh-manager": {
       "command": "node",
-      "args": ["/path/to/mcp-ssh-manager/src/index.js"]
+      "args": ["/path/to/mcp-ssh-manager/src/index.ts"]
     }
   }
 }

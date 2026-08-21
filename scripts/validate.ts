@@ -25,9 +25,9 @@ console.log('🔍 MCP SSH Manager - Code Validation');
 console.log('=====================================');
 console.log('');
 
-// 1. JavaScript syntax checks via `node --check`.
-console.log('📋 Checking JavaScript syntax...');
-const syntaxTargets = ['src/index.js', 'src/ssh-manager.js'];
+// 1. Syntax checks via `node --check` (native type stripping handles .ts).
+console.log('📋 Checking source syntax...');
+const syntaxTargets = ['src/index.ts', 'src/ssh-manager.ts'];
 for (const target of syntaxTargets) {
   const result = spawnSync(process.execPath, ['--check', target], {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -83,7 +83,7 @@ if (errors === 0) {
 }
 
 /**
- * Spawn `node src/index.js`, close stdin (EOF), wait up to 2s.
+ * Spawn `node src/index.ts`, close stdin (EOF), wait up to 2s.
  * - Still running after 2s → syntax OK, kill it → return true.
  * - Exited with code 0 or 143 (SIGTERM) → syntax OK → return true.
  * - Exited with any other code → failure → return false.
@@ -105,7 +105,7 @@ async function testServerStartup(): Promise<boolean> {
     };
 
     try {
-      child = spawn(process.execPath, ['src/index.js'], {
+      child = spawn(process.execPath, ['src/index.ts'], {
         stdio: ['pipe', 'ignore', 'ignore'],
       });
     } catch {

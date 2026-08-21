@@ -5,7 +5,7 @@
 // agentForward is true without an agent. We drive connect() with a stubbed ssh2
 // client that captures the connConfig instead of opening a socket.
 import assert from 'assert';
-import SSHManager from '../src/ssh-manager.js';
+import SSHManager from '../src/ssh-manager.ts';
 
 let passed = 0;
 function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }

@@ -73,7 +73,7 @@ if (fs.existsSync(claudeConfig)) {
     fail('SSH Manager not found in Claude Code config');
     console.log('   Register it with:');
     console.log('   claude mcp add ssh-manager node ' +
-      path.join(PROJECT_ROOT, 'src', 'index.js').replace(/\\/g, '/'));
+      path.join(PROJECT_ROOT, 'src', 'index.ts').replace(/\\/g, '/'));
   }
 } else {
   fail(`Claude Code config not found at ${claudeConfig}`);
@@ -84,7 +84,7 @@ console.log('');
 console.log('🎯 Configuration Summary:');
 console.log('========================');
 console.log(
-  `MCP Server Path: ${path.join(PROJECT_ROOT, 'src', 'index.js').replace(/\\/g, '/')}`,
+  `MCP Server Path: ${path.join(PROJECT_ROOT, 'src', 'index.ts').replace(/\\/g, '/')}`,
 );
 const envText2 = fs.existsSync(envPath)
   ? fs.readFileSync(envPath, 'utf8')

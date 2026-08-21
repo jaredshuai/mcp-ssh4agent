@@ -15,7 +15,7 @@ const ALIASES_FILE = path.join(__dirname, '..', '.server-aliases.json');
 /**
  * Load server aliases from configuration file
  */
-function loadAliases() {
+function loadAliases(): Record<string, string> {
   try {
     if (fs.existsSync(ALIASES_FILE)) {
       const content = fs.readFileSync(ALIASES_FILE, 'utf8');

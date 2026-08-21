@@ -1,9 +1,9 @@
 import { Client } from 'ssh2';
 import fs from 'fs';
 import os from 'os';
-import { isHostKnown, addHostKey } from './ssh-key-manager.js';
-import { logger } from './logger.js';
-import { buildCdPrefix } from './shell-quote.js';
+import { isHostKnown, addHostKey } from './ssh-key-manager.ts';
+import { logger } from './logger.ts';
+import { buildCdPrefix } from './shell-quote.ts';
 
 // Validate liveness-probe output across shells (bash, cmd.exe, PowerShell).
 // Normalize CRLF, stray quotes/backslashes and case before matching so quoted
@@ -22,6 +22,17 @@ export function isPingAlive(stdout) {
 }
 
 class SSHManager {
+  // Resolved server config plus manager-specific flags; shapes vary by source.
+  config: any;
+  client: Client;
+  connected: boolean;
+  // ssh2 SFTP wrapper; ships no bundled types, null until getSFTP().
+  sftp: any;
+  cachedHomeDir: string | null;
+  autoAcceptHostKey: boolean;
+  hostKeyVerification: boolean;
+  jumpConnection: any;
+
   constructor(config) {
     this.config = config;
     this.client = new Client();
@@ -34,8 +45,8 @@ class SSHManager {
   }
 
   /** @returns {Promise<void>} */
-  async connect(options = {}) {
-    return new Promise((resolve, reject) => {
+  async connect(options: { sock?: any } = {}) {
+    return new Promise<void>((resolve, reject) => {
       this.client.on('ready', () => {
         this.connected = true;
         resolve();
@@ -50,8 +61,8 @@ class SSHManager {
         this.connected = false;
       });
 
-      // Build connection config
-      const connConfig = {
+      // Build connection config (ssh2 ConnectConfig, extended below).
+      const connConfig: Record<string, any> = {
         host: this.config.host,
         port: this.config.port || 22,
         username: this.config.user,
@@ -184,7 +195,7 @@ class SSHManager {
     });
   }
 
-  async execCommand(command, options = {}) {
+  async execCommand(command, options: { timeout?: number; cwd?: string; rawCommand?: boolean } = {}) {
     if (!this.connected) {
       throw new Error('Not connected to SSH server');
     }
@@ -192,7 +203,7 @@ class SSHManager {
     const { timeout = 30000, cwd, rawCommand = false } = options;
     const fullCommand = (cwd && !rawCommand) ? buildCdPrefix(cwd) + command : command;
 
-    return new Promise((resolve, reject) => {
+    return new Promise<{ stdout: string; stderr: string; code: number; signal?: string }>((resolve, reject) => {
       let stdout = '';
       let stderr = '';
       let completed = false;
@@ -271,7 +282,7 @@ class SSHManager {
     });
   }
 
-  async execCommandStream(command, options = {}) {
+  async execCommandStream(command, options: { cwd?: string; onStdout?: (chunk: string) => void; onStderr?: (chunk: string) => void } = {}) {
     if (!this.connected) {
       throw new Error('Not connected to SSH server');
     }
@@ -316,7 +327,7 @@ class SSHManager {
     });
   }
 
-  async requestShell(options = {}) {
+  async requestShell(options: Record<string, any> = {}) {
     if (!this.connected) {
       throw new Error('Not connected to SSH server');
     }
@@ -447,7 +458,7 @@ class SSHManager {
         return;
       }
 
-      sftp.fastPut(localPath, resolvedRemotePath, (/** @type {Error|undefined} */ err) => {
+      sftp.fastPut(localPath, resolvedRemotePath, (err) => {
         if (err) reject(err);
         else resolve(undefined);
       });
@@ -478,14 +489,14 @@ class SSHManager {
 
     const sftp = await this.getSFTP();
     return new Promise((resolve, reject) => {
-      sftp.fastGet(resolvedRemotePath, localPath, (/** @type {Error|undefined} */ err) => {
+      sftp.fastGet(resolvedRemotePath, localPath, (err) => {
         if (err) reject(err);
         else resolve(undefined);
       });
     });
   }
 
-  async putFiles(files, options = {}) {
+  async putFiles(files, options: { stopOnError?: boolean } = {}) {
     await this.getSFTP();
     const results = [];
 

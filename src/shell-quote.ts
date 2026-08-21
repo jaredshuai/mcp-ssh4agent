@@ -16,11 +16,8 @@
  * Uses single quotes (the only quoting form with no expansions inside):
  * everything literal except the single quote itself, which is emitted as
  * the standard close-quote/escape/reopen sequence '\''.
- *
- * @param {string} value - Raw value to quote.
- * @returns {string} The quoted value, e.g. `it's` → `'it'\''s'`.
  */
-export function shSingleQuote(value) {
+export function shSingleQuote(value: unknown): string {
   return `'${String(value).replace(/'/g, '\'\\\'\'')}'`;
 }
 
@@ -30,12 +27,9 @@ export function shSingleQuote(value) {
  * Linux:    `cd '/opt/app' && `   (POSIX single-quote safe for any path)
  * Windows:  `Set-Location 'C:\app'; ` (PowerShell convention: ' doubled)
  *
- * @param {string} dir - Working directory (assumed non-empty; callers check).
- * @param {string} [platform='linux'] - Target platform; anything other than
- *   'windows' is treated as POSIX.
- * @returns {string} Prefix to prepend to the command.
+ * Anything other than 'windows' is treated as POSIX.
  */
-export function buildCdPrefix(dir, platform = 'linux') {
+export function buildCdPrefix(dir: string, platform = 'linux'): string {
   if (platform === 'windows') {
     const escapedDir = String(dir).replace(/'/g, '\'\'');
     return `Set-Location '${escapedDir}'; `;
@@ -50,13 +44,9 @@ export function buildCdPrefix(dir, platform = 'linux') {
  * form is reconstructed (not regex-replaced) so a password containing quotes
  * can never leak into logs through an incomplete match.
  *
- * @param {string} password - sudo password (any characters).
- * @param {string} command - Command to run under sudo, WITHOUT a leading
- *   `sudo ` prefix (this function adds it).
- * @returns {{command: string, masked: string}} `command` is the runnable
- *   pipeline; `masked` shows `********` in place of the password.
+ * `command` must NOT carry a leading `sudo ` prefix (this function adds it).
  */
-export function buildSudoPipeline(password, command) {
+export function buildSudoPipeline(password: string, command: string): { command: string; masked: string } {
   const bare = String(command).replace(/^sudo\s+/, '');
   const quoted = shSingleQuote(password);
   return {

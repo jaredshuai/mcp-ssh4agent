@@ -18,8 +18,8 @@ export const LOG_LEVELS = {
   ERROR: 3
 };
 
-// Colors for terminal output
-const COLORS = {
+// Colors for terminal output — keyed by level name looked up at runtime.
+const COLORS: Record<string, string> = {
   DEBUG: '\x1b[36m', // Cyan
   INFO: '\x1b[32m',  // Green
   WARN: '\x1b[33m',  // Yellow
@@ -27,19 +27,36 @@ const COLORS = {
   RESET: '\x1b[0m'
 };
 
-// Icons for each level
-const ICONS = {
+// Icons for each level — keyed by level name looked up at runtime.
+const ICONS: Record<string, string> = {
   DEBUG: '🔍',
   INFO: '✅',
   WARN: '⚠️',
   ERROR: '❌'
 };
 
+// One recorded command execution; fields mirror what saveCommandToHistory writes.
+interface HistoryEntry {
+  timestamp: string;
+  server: string;
+  command: string;
+  success: boolean;
+  duration: string;
+  error?: string;
+}
+
 class Logger {
+  currentLevel: number;
+  verbose: boolean;
+  logFile: string;
+  historyFile: string;
+  commandHistory: HistoryEntry[];
+
   constructor() {
     // Set log level from environment variable
     const envLevel = process.env.SSH_LOG_LEVEL?.toUpperCase() || 'INFO';
-    this.currentLevel = LOG_LEVELS[envLevel] ?? LOG_LEVELS.INFO;
+    // Arbitrary env string index: unknown levels fall back to INFO via ??.
+    this.currentLevel = (LOG_LEVELS as Record<string, number>)[envLevel] ?? LOG_LEVELS.INFO;
 
     // Enable verbose mode from environment
     this.verbose = process.env.SSH_VERBOSE === 'true';
@@ -57,11 +74,12 @@ class Logger {
   /**
    * Load command history from file
    */
-  loadCommandHistory() {
+  loadCommandHistory(): HistoryEntry[] {
     try {
       if (fs.existsSync(this.historyFile)) {
         const data = fs.readFileSync(this.historyFile, 'utf8');
-        return JSON.parse(data);
+        // External JSON written by saveCommandToHistory; trust its shape.
+        return JSON.parse(data) as HistoryEntry[];
       }
     } catch (error) {
       // Ignore errors, start with empty history
@@ -72,7 +90,7 @@ class Logger {
   /**
    * Save command to history
    */
-  saveCommandToHistory(command, server, result) {
+  saveCommandToHistory(command: string, server: string, result: { success: boolean; duration: string; error?: string }) {
     const entry = {
       timestamp: new Date().toISOString(),
       server,
@@ -99,9 +117,9 @@ class Logger {
   /**
    * Format log message with timestamp and level
    */
-  formatMessage(level, message, data = {}) {
+  formatMessage(level: number, message: string, data: Record<string, unknown> = {}) {
     const timestamp = new Date().toISOString();
-    const levelName = Object.keys(LOG_LEVELS).find(key => LOG_LEVELS[key] === level) || 'INFO';
+    const levelName = Object.keys(LOG_LEVELS).find(key => (LOG_LEVELS as Record<string, number>)[key] === level) || 'INFO';
 
     // Console format with colors
     const consoleFormat = `${COLORS[levelName]}${ICONS[levelName]} [${timestamp}] [${levelName}]${COLORS.RESET} ${message}`;
@@ -124,7 +142,7 @@ class Logger {
   /**
    * Main log function
    */
-  log(level, message, data = {}) {
+  log(level: number, message: string, data: Record<string, unknown> = {}) {
     // Check if we should log this level
     if (level < this.currentLevel) {
       return;
@@ -144,26 +162,26 @@ class Logger {
   }
 
   // Convenience methods
-  debug(message, data) {
+  debug(message: string, data?: Record<string, unknown>) {
     this.log(LOG_LEVELS.DEBUG, message, data);
   }
 
-  info(message, data) {
+  info(message: string, data?: Record<string, unknown>) {
     this.log(LOG_LEVELS.INFO, message, data);
   }
 
-  warn(message, data) {
+  warn(message: string, data?: Record<string, unknown>) {
     this.log(LOG_LEVELS.WARN, message, data);
   }
 
-  error(message, data) {
+  error(message: string, data?: Record<string, unknown>) {
     this.log(LOG_LEVELS.ERROR, message, data);
   }
 
   /**
    * Log SSH command execution
    */
-  logCommand(server, command, cwd = null) {
+  logCommand(server: string, command: string, cwd: string | null = null) {
     const logData = {
       server,
       command: this.verbose ? command : command.substring(0, 100) + (command.length > 100 ? '...' : ''),
@@ -182,7 +200,7 @@ class Logger {
   /**
    * Log SSH command result
    */
-  logCommandResult(server, command, startTime, result) {
+  logCommandResult(server: string, command: string, startTime: number, result: { code: number; stderr?: string }) {
     const duration = Date.now() - startTime;
 
     const resultData = {
@@ -204,7 +222,7 @@ class Logger {
   /**
    * Log SSH connection events
    */
-  logConnection(server, event, data = {}) {
+  logConnection(server: string, event: string, data: Record<string, unknown> = {}) {
     const message = `SSH connection ${event}: ${server}`;
 
     switch (event) {
@@ -228,8 +246,15 @@ class Logger {
   /**
    * Log file transfer operations
    */
-  logTransfer(operation, server, source, destination, result = null) {
-    const data = { server, source, destination };
+  logTransfer(
+    operation: string,
+    server: string,
+    source: string,
+    destination: string,
+    result: { success: boolean; size?: unknown; duration?: string; error?: unknown } | null = null
+  ) {
+    // Loose bag: success/size/duration are only added when result exists.
+    const data: Record<string, unknown> = { server, source, destination };
 
     if (result) {
       data.success = result.success;

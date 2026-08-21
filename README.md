@@ -338,13 +338,13 @@ ssh-manager server add
 
 ```bash
 # For personal use (current user only)
-claude mcp add ssh-manager node /path/to/mcp-ssh-manager/src/index.js
+claude mcp add ssh-manager node /path/to/mcp-ssh-manager/src/index.ts
 
 # For team sharing (creates .mcp.json in project)
-claude mcp add ssh-manager --scope project node /path/to/mcp-ssh-manager/src/index.js
+claude mcp add ssh-manager --scope project node /path/to/mcp-ssh-manager/src/index.ts
 
 # For all your projects
-claude mcp add ssh-manager --scope user node /path/to/mcp-ssh-manager/src/index.js
+claude mcp add ssh-manager --scope user node /path/to/mcp-ssh-manager/src/index.ts
 ```
 
 ### 3. Configure Auto-Approval (Optional but Recommended)
@@ -358,7 +358,7 @@ Edit `~/.config/claude-code/claude_code_config.json`:
   "mcpServers": {
     "ssh-manager": {
       "command": "node",
-      "args": ["/path/to/mcp-ssh-manager/src/index.js"],
+      "args": ["/path/to/mcp-ssh-manager/src/index.ts"],
       "autoApprove": [
         "mcp__ssh-manager__ssh_execute",
         "mcp__ssh-manager__ssh_list_servers",
@@ -441,7 +441,7 @@ If you prefer manual setup, add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.ssh-manager]
 command = "node"
-args = ["/absolute/path/to/mcp-ssh-manager/src/index.js"]
+args = ["/absolute/path/to/mcp-ssh-manager/src/index.ts"]
 env = { SSH_CONFIG_PATH = "/Users/you/.codex/ssh-config.toml" }
 startup_timeout_ms = 20000
 ```

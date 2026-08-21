@@ -12,7 +12,7 @@ import {
   removeHook,
   toggleHook,
   listHooks
-} from '../src/hooks-system.js';
+} from '../src/hooks-system.ts';
 import assert from 'assert';
 import fs from 'fs';
 import path from 'path';

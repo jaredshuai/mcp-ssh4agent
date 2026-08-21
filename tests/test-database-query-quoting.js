@@ -3,7 +3,7 @@ import {
   buildMySQLQueryCommand,
   buildPostgreSQLQueryCommand,
   buildMongoDBQueryCommand
-} from '../src/database-manager.js';
+} from '../src/database-manager.ts';
 
 /**
  * Regression tests for issue #44: ssh_db_query must not let the remote shell parse the

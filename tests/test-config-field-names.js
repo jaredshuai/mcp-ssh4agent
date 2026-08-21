@@ -10,7 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ConfigLoader } from '../src/config-loader.js';
+import { ConfigLoader } from '../src/config-loader.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = path.join(__dirname, '..', 'src');
@@ -212,11 +212,11 @@ async function testGroupExportRoundTrip() {
 }
 
 // Static guard: no handler may access the stale snake_case/lowercase names on a
-// config object. config-loader.js legitimately references them (it parses TOML
-// source keys and serializes back); ssh-manager.js keeps an intentional
+// config object. config-loader.ts legitimately references them (it parses TOML
+// source keys and serializes back); ssh-manager.ts keeps an intentional
 // `keyPath || keypath` fallback for configs supplied by external callers.
 function testNoStaleAccessInSource() {
-  const excluded = new Set(['config-loader.js', 'ssh-manager.js']);
+  const excluded = new Set(['config-loader.ts', 'ssh-manager.ts']);
   const staleAccess = /\.(sudo_password|default_dir|keypath)\b/;
   const offenders = [];
 
@@ -224,7 +224,7 @@ function testNoStaleAccessInSource() {
   // scan both the top-level modules and the tool group modules.
   const scanTargets = [];
   for (const file of fs.readdirSync(SRC_DIR)) {
-    if (file.endsWith('.js') && !excluded.has(file)) scanTargets.push(file);
+    if ((file.endsWith('.js') || file.endsWith('.ts')) && !excluded.has(file)) scanTargets.push(file);
   }
   const toolsDir = path.join(SRC_DIR, 'tools');
   if (fs.existsSync(toolsDir)) {

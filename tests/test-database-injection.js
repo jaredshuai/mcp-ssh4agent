@@ -25,7 +25,7 @@ import {
   buildMySQLDumpCommand, buildPostgreSQLDumpCommand, buildMongoDBDumpCommand,
   buildMySQLImportCommand, buildPostgreSQLImportCommand, buildMongoDBRestoreCommand,
   buildMySQLQueryCommand, buildPostgreSQLQueryCommand, buildMongoDBQueryCommand
-} from '../src/database-manager.js';
+} from '../src/database-manager.ts';
 
 let passed = 0;
 function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }

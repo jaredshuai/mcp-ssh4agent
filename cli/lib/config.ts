@@ -2,9 +2,9 @@
 //
 // Cross-platform TypeScript port of cli/lib/config.sh. Parses the .env file
 // itself (does not import src/ runtime modules — the CLI stays independent of
-// the MCP server code). The ONE shared thing is src/server-fields.js: the
+// the MCP server code). The ONE shared thing is src/server-fields.ts: the
 // single source of truth for field names / quoting, so what the CLI writes is
-// exactly what src/config-loader.js reads (and vice versa). Replaces bash
+// exactly what src/config-loader.ts reads (and vice versa). Replaces bash
 // `grep`/`sed`/`mktemp`/`jq` with node: built-ins.
 
 import * as os from 'node:os';
@@ -18,7 +18,7 @@ import {
   print_success,
   print_warning,
 } from './colors.ts';
-import { FIELD_BY_CAMEL, serverEnvLine } from '../../src/server-fields.js';
+import { FIELD_BY_CAMEL, serverEnvLine } from '../../src/server-fields.ts';
 
 // Render one `SSH_SERVER_<NAME>_<KEY>=value` line for a camelCase field,
 // through the shared field table (key names + quoting rules).
@@ -44,7 +44,7 @@ export const SSH_MANAGER_CONFIG: string = path.join(SSH_MANAGER_HOME, 'config.js
 
 export const SSH_MANAGER_ALIASES: string = path.join(SSH_MANAGER_HOME, 'aliases.json');
 
-// Resolve .env path with the same fallback chain as config.sh (and src/index.js):
+// Resolve .env path with the same fallback chain as config.sh (and src/index.ts):
 // 1. SSH_MANAGER_ENV env var (explicit override)
 // 2. ~/.ssh-manager/.env
 // 3. $PWD/.env

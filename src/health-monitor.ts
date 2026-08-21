@@ -3,7 +3,7 @@
  * Provides system health checks, service monitoring, and process management
  */
 
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 // Health status levels
 export const HEALTH_STATUS = {
@@ -210,7 +210,7 @@ export function parseServiceStatus(output, serviceName) {
 /**
  * Build command to list running processes
  */
-export function buildProcessListCommand(options = {}) {
+export function buildProcessListCommand(options: { sortBy?: string; limit?: number; filter?: string | null } = {}) {
   const {
     sortBy = 'cpu',  // cpu, memory, pid
     limit = 20,
@@ -376,7 +376,8 @@ export function buildComprehensiveHealthCheckCommand() {
  */
 export function parseComprehensiveHealthCheck(output) {
   const sections = output.split('=== ').filter(s => s);
-  const result = {};
+  // Sections are populated dynamically by parsed output name; keep it loose.
+  const result: Record<string, any> = {};
 
   for (const section of sections) {
     const [name, ...content] = section.split('\n');

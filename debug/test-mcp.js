@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 console.log('🔧 Testing MCP SSH Manager Server...\n');
 
 // Start the MCP server
-const serverPath = path.join(__dirname, 'src', 'index.js');
+const serverPath = path.join(__dirname, 'src', 'index.ts');
 const server = spawn('node', [serverPath], {
   stdio: ['pipe', 'pipe', 'pipe']
 });

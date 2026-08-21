@@ -5,7 +5,7 @@
 
 import { randomUUID } from 'node:crypto';
 import net from 'net';
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 // Map to store active tunnels
 const tunnels = new Map();
@@ -25,7 +25,7 @@ const tunnels = new Map();
  * @param {string} host
  * @returns {Promise<void>}
  */
-export function listenOrReject(server, port, host) {
+export function listenOrReject(server: net.Server, port: number, host: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (error) => {
       server.removeListener('listening', onListening);
@@ -59,6 +59,27 @@ const TUNNEL_STATES = {
 };
 
 class SSHTunnel {
+  id: string;
+  serverName: string;
+  // ssh2 Client; the library ships no bundled types, keep it loose.
+  ssh: any;
+  type: string;
+  // Tunnel config shape varies by type (local/remote/dynamic).
+  config: any;
+  state: string;
+  createdAt: Date;
+  lastActivity: Date;
+  connections: Set<net.Socket>;
+  server: net.Server | null;
+  reconnectAttempts: number;
+  maxReconnectAttempts: number;
+  stats: {
+    bytesTransferred: number;
+    connectionsTotal: number;
+    connectionsActive: number;
+    errors: number;
+  };
+
   constructor(id, serverName, ssh, config) {
     this.id = id;
     this.serverName = serverName;
@@ -201,8 +222,7 @@ class SSHTunnel {
     const { localHost, localPort, remoteHost, remotePort } = this.config;
 
     // Request remote forwarding from SSH server
-    /** @type {Promise<void>} */
-    const forwarded = new Promise((resolve, reject) => {
+    const forwarded = new Promise<void>((resolve, reject) => {
       this.ssh.forwardIn(remoteHost, remotePort, (err) => {
         if (err) reject(err);
         else resolve();
@@ -287,7 +307,7 @@ class SSHTunnel {
           // Send auth method response
           localSocket.write(Buffer.from([0x05, 0x00]));
 
-          localSocket.once('data', async (/** @type {Buffer} */ chunk2) => {
+          localSocket.once('data', async (chunk2: Buffer) => {
             // Parse connection request
             if (chunk2[0] === 0x05 && chunk2[1] === 0x01) { // CONNECT
               const addrType = chunk2[3];

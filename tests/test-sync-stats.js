@@ -1,4 +1,4 @@
-// Unit tests for rsync --stats parsing (src/rsync-stats.js).
+// Unit tests for rsync --stats parsing (src/rsync-stats.ts).
 //
 // Regression guard for ssh_sync's false "no files needed to be transferred"
 // report. The tool scrapes rsync's stats block, whose shape varies by rsync
@@ -6,7 +6,7 @@
 // and host locale (thousands/decimal separators). These cases pin every variant
 // seen in the wild — the openrsync samples are captured verbatim from a live
 // macOS run, the GNU/locale samples mirror documented rsync output.
-import { parseRsyncStats, parseGroupedNumber } from '../src/rsync-stats.js';
+import { parseRsyncStats, parseGroupedNumber } from '../src/rsync-stats.ts';
 
 let passed = 0;
 let failed = 0;

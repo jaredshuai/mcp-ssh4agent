@@ -7,5 +7,5 @@
     "debug/*.js",
     "debug/*.ts"
   ],
-  "project": ["src/**/*.js", "src/**/*.ts"]
+  "project": ["src/**/*.ts"]
 }

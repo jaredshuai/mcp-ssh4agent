@@ -6,12 +6,11 @@ import path from 'path';
  * Node must keep using the native Windows path for filesystem checks. Only the
  * argument handed to rsync is converted, otherwise a drive prefix such as
  * `C:` is parsed by rsync as a remote host name.
- *
- * @param {string} localPath
- * @param {{ platform?: NodeJS.Platform, cwd?: string }} [options]
- * @returns {string}
  */
-export function toRsyncLocalPath(localPath, options = {}) {
+export function toRsyncLocalPath(
+  localPath: string,
+  options: { platform?: NodeJS.Platform; cwd?: string } = {}
+): string {
   const platform = options.platform ?? process.platform;
   if (platform !== 'win32') return localPath;
   if (localPath.length === 0) {

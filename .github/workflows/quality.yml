@@ -38,8 +38,8 @@ jobs:
     
     - name: Run JavaScript syntax check
       run: |
-        node --check src/index.js
-        node --check src/ssh-manager.js
+        node --check src/index.ts
+        node --check src/ssh-manager.ts
     
     - name: Run ESLint
       run: npx eslint src/

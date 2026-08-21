@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { logger } from './logger.js';
+import { logger } from './logger.ts';
 
 // Path to known_hosts file
 const KNOWN_HOSTS_PATH = path.join(os.homedir(), '.ssh', 'known_hosts');
@@ -29,8 +29,16 @@ function parseKnownHostEntry(line) {
 /**
  * Get the SSH host key fingerprint for a server
  */
-export async function getHostKeyFingerprint(host, port = 22) {
-  return new Promise((resolve, reject) => {
+// One host key entry parsed from ssh-keyscan / known_hosts.
+interface HostKeyInfo {
+  host: string;
+  type: string;
+  fingerprint: string;
+  fullKey: string;
+}
+
+export async function getHostKeyFingerprint(host, port = 22): Promise<HostKeyInfo[]> {
+  return new Promise<HostKeyInfo[]>((resolve, reject) => {
     const cmd = spawn('ssh-keyscan', ['-p', port.toString(), '-t', 'ed25519,rsa,ecdsa', host]);
     let stdout = '';
     let stderr = '';

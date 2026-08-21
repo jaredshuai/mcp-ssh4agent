@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 
 console.log('🔧 Testing SSH command execution through MCP...\n');
 
-const serverPath = path.join(__dirname, 'src', 'index.js');
+const serverPath = path.join(__dirname, 'src', 'index.ts');
 const server = spawn('node', [serverPath], {
   stdio: ['pipe', 'pipe', 'pipe']
 });

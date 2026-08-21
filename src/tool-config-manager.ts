@@ -8,8 +8,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { logger } from './logger.js';
-import { TOOL_GROUPS, findToolGroup, getAllTools } from './tool-registry.js';
+import { logger } from './logger.ts';
+import { TOOL_GROUPS, findToolGroup, getAllTools } from './tool-registry.ts';
 
 /**
  * Configuration file location
@@ -22,6 +22,10 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'tools-config.json');
  * Tool Configuration Manager Class
  */
 class ToolConfigManager {
+  // Loaded JSON config; shape varies by mode, null before load().
+  config: any;
+  configPath: string;
+
   constructor() {
     this.config = null;
     this.configPath = CONFIG_FILE;

@@ -2,14 +2,14 @@
   "name": "mcp-ssh-manager",
   "version": "3.8.0",
   "description": "MCP SSH Manager: Model Context Protocol server for SSH remote server management. Control SSH connections from any MCP-compatible AI agent (Claude Code, Codex, Cursor, Cline, etc.) - execute commands, transfer files, database operations, backups, health monitoring, and DevOps automation. NEW: Tool activation system reduces context usage by 92%",
-  "main": "src/index.js",
+  "main": "src/index.ts",
   "bin": {
-    "mcp-ssh-manager": "src/index.js",
+    "mcp-ssh-manager": "src/index.ts",
     "ssh-manager": "cli/ssh-manager.js"
   },
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/index.ts",
     "setup": "npm install",
     "test": "npm run test:profiles && npm run test:aliases && npm run test:hooks && npm run test:tools && npm run test:policy && npm run test:shellquote && npm run test:ping && npm run test:config && npm run test:fieldnames && npm run test:serverfields && npm run test:groups && npm run test:agentforward && npm run test:lifecycle && npm run test:tunnel && npm run test:sync && npm run test:sync-path && npm run test:dbquoting && npm run test:dbinjection && npm run test:dbrowcount",
     "test:profiles": "node tests/test-profiles.js",
@@ -37,8 +37,8 @@
     "setup-hooks": "tsx scripts/setup-hooks.ts",
     "demo": "tsx scripts/demo.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint src/*.js",
-    "format": "prettier --write 'src/**/*.js' 'tests/**/*.js'"
+    "lint": "eslint src/*.ts",
+    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.js'"
   },
   "keywords": [
     "mcp",

@@ -51,7 +51,7 @@ const RESPONSE_FORMAT = {
 };
 
 // Helper function to truncate output
-export function truncateOutput(text, maxLength = OUTPUT_LIMITS.MAX_OUTPUT_LENGTH) {
+export function truncateOutput(text: string, maxLength = OUTPUT_LIMITS.MAX_OUTPUT_LENGTH): string {
   if (!text) return '';
 
   if (text.length <= maxLength) return text;
@@ -60,8 +60,8 @@ export function truncateOutput(text, maxLength = OUTPUT_LIMITS.MAX_OUTPUT_LENGTH
   return text.substring(0, maxLength) + `\n\n... [${truncated} characters truncated]`;
 }
 
-// Helper function to format JSON response
-export function formatJSONResponse(data) {
+// Helper function to format JSON response — accepts any serializable payload.
+export function formatJSONResponse(data: unknown): string {
   return JSON.stringify(
     data,
     null,
@@ -72,7 +72,7 @@ export function formatJSONResponse(data) {
 // Helper function to format a duration in seconds as a human-readable string.
 // Shared by the session and group tools (moved out of src/index.js when the
 // tool registrations were split into src/tools/).
-export function formatDuration(seconds) {
+export function formatDuration(seconds: number): string {
   if (seconds < 60) {
     return `${seconds}s`;
   } else if (seconds < 3600) {

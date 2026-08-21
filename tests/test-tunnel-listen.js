@@ -12,7 +12,7 @@
 // uncaught 'error' event would abort the run.
 import assert from 'assert';
 import net from 'net';
-import { listenOrReject } from '../src/tunnel-manager.js';
+import { listenOrReject } from '../src/tunnel-manager.ts';
 
 let passed = 0;
 function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }

@@ -14,13 +14,13 @@
 //      thousands separator (and the opposite char as the decimal separator).
 //
 // Keeping this in its own module makes it unit-testable without booting the MCP
-// server (importing src/index.js starts the stdio server as a side effect).
+// server (importing src/index.ts starts the stdio server as a side effect).
 
 // Parse a number rsync may have grouped with locale-specific separators.
 // Counts and sizes are integers (raw bytes); speed carries an optional
 // fractional part, so `allowDecimal` says whether the last separator may be a
 // decimal point rather than a thousands group.
-export function parseGroupedNumber(raw, { allowDecimal = false } = {}) {
+export function parseGroupedNumber(raw: string, { allowDecimal = false }: { allowDecimal?: boolean } = {}): number {
   const separators = raw.match(/[.,]/g) || [];
   if (separators.length === 0) return Number(raw);
 
@@ -47,12 +47,20 @@ export function parseGroupedNumber(raw, { allowDecimal = false } = {}) {
   return Number(`${integerPart}.${fractionPart}`);
 }
 
+// Statistics ssh_sync reports; speed only present when rsync printed that line.
+export interface RsyncStats {
+  filesTransferred: number;
+  totalSize: number;
+  totalTime: number;
+  speed?: number;
+}
+
 // Extract the statistics ssh_sync reports from a full rsync stdout capture.
 // Counts default to 0 (never null) when the matching line is absent — e.g. an
 // rsync build that produced no --stats block — so callers can use the result
 // directly. `speed` is only set when present, matching the optional output line.
-export function parseRsyncStats(output, totalTime) {
-  const stats = {
+export function parseRsyncStats(output: string, totalTime: number): RsyncStats {
+  const stats: RsyncStats = {
     filesTransferred: 0,
     totalSize: 0,
     totalTime,

@@ -3,15 +3,15 @@ import TOML from '@iarna/toml';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { logger } from './logger.js';
-import { VALID_MODES } from './policy.js';
+import { logger } from './logger.ts';
+import { VALID_MODES } from './policy.ts';
 import {
   SERVER_FIELDS,
   serverFromEnvRecord,
   serverFromTomlRecord,
   serverEnvLine,
   canonicalTomlKey,
-} from './server-fields.js';
+} from './server-fields.ts';
 
 /**
  * A resolved SSH server configuration, as produced by this loader and consumed
@@ -23,29 +23,49 @@ import {
  * pre-v3.0.0 snake_case names, which silently evaluated to `undefined`. Anything
  * typed as a `ServerConfig` now makes that a type error rather than a runtime
  * no-op. `tests/test-config-field-names.js` guards the same contract at runtime.
- *
- * @typedef {Object} ServerConfig
- * @property {string} name Normalized (lowercased) server name.
- * @property {string} host Hostname or IP address.
- * @property {string} [user] SSH user.
- * @property {string} [password] Password for password authentication.
- * @property {string} [keyPath] Path to the private key (`KEYPATH` / `key_path`).
- * @property {string} [passphrase] Passphrase for a protected private key.
- * @property {number} [port] TCP port; defaults to 22.
- * @property {string} [defaultDir] Working directory used when a tool omits `cwd`.
- * @property {string} [sudoPassword] Password piped to `sudo -S`.
- * @property {string} [description] Free-form description.
- * @property {string} [group] Free-form group label; also feeds server groups.
- * @property {string} [platform] `'linux'` (default) or `'windows'`.
- * @property {string} [proxyJump] Name of another configured server to jump through.
- * @property {string} [proxyCommand] Custom proxy command (`%h` / `%p` placeholders).
- * @property {boolean} [forwardAgent] Forward the local ssh-agent to this server.
- * @property {string} [mode] Security mode: `unrestricted`, `readonly` or `restricted`.
- * @property {string[]} [allowPatterns] Regex sources allowed in `restricted` mode.
- * @property {string[]} [denyPatterns] Regex sources always refused.
- * @property {string} [auditLog] Path to a per-server audit log.
- * @property {'env'|'toml'} [source] Which configuration source won for this server.
  */
+export interface ServerConfig {
+  /** Normalized (lowercased) server name. */
+  name: string;
+  /** Hostname or IP address. */
+  host: string;
+  /** SSH user. */
+  user?: string;
+  /** Password for password authentication. */
+  password?: string;
+  /** Path to the private key (`KEYPATH` / `key_path`). */
+  keyPath?: string;
+  /** Passphrase for a protected private key. */
+  passphrase?: string;
+  /** TCP port; defaults to 22. */
+  port?: number;
+  /** Working directory used when a tool omits `cwd`. */
+  defaultDir?: string;
+  /** Password piped to `sudo -S`. */
+  sudoPassword?: string;
+  /** Free-form description. */
+  description?: string;
+  /** Free-form group label; also feeds server groups. */
+  group?: string;
+  /** `'linux'` (default) or `'windows'`. */
+  platform?: string;
+  /** Name of another configured server to jump through. */
+  proxyJump?: string;
+  /** Custom proxy command (`%h` / `%p` placeholders). */
+  proxyCommand?: string;
+  /** Forward the local ssh-agent to this server. */
+  forwardAgent?: boolean;
+  /** Security mode: `unrestricted`, `readonly` or `restricted`. */
+  mode?: string;
+  /** Regex sources allowed in `restricted` mode. */
+  allowPatterns?: string[];
+  /** Regex sources always refused. */
+  denyPatterns?: string[];
+  /** Path to a per-server audit log. */
+  auditLog?: string;
+  /** Which configuration source won for this server. */
+  source?: 'env' | 'toml';
+}
 
 // Normalize a mode string. Returns 'unrestricted' for any falsy/unknown input,
 // after logging a warning when the input is set but invalid. This keeps existing
@@ -64,10 +84,11 @@ function normalizeMode(raw, serverName) {
 }
 
 export class ConfigLoader {
+  servers: Map<string, ServerConfig>;
+  configSource: string | null;
+
   constructor() {
-    /** @type {Map<string, ServerConfig>} */
     this.servers = new Map();
-    /** @type {string|null} */
     this.configSource = null;
   }
 
@@ -76,10 +97,8 @@ export class ConfigLoader {
    * 1. Environment variables (highest priority)
    * 2. .env file
    * 3. TOML config file (lowest priority)
-   *
-   * @returns {Promise<Map<string, ServerConfig>>}
    */
-  async load(options = {}) {
+  async load(options: { envPath?: string; tomlPath?: string; preferToml?: boolean } = {}): Promise<Map<string, ServerConfig>> {
     const {
       envPath = path.join(process.cwd(), '.env'),
       tomlPath = process.env.SSH_CONFIG_PATH || path.join(os.homedir(), '.codex', 'ssh-config.toml'),
@@ -144,7 +163,7 @@ export class ConfigLoader {
       for (const [name, serverConfig] of Object.entries(config.ssh_servers)) {
         const normalizedName = name.toLowerCase();
         // Field names, alias chains and value coercion come from the shared
-        // SERVER_FIELDS table (src/server-fields.js) — the same single source
+        // SERVER_FIELDS table (src/server-fields.ts) — the same single source
         // of truth the CLI-side writer consumes. Cast: the builder returns a
         // wide value union; per-field types are guaranteed by the table.
         const raw = /** @type {any} */ (serverFromTomlRecord(serverConfig));
@@ -196,7 +215,7 @@ export class ConfigLoader {
   /**
    * Parse environment variables for SSH server configurations
    */
-  parseEnvVariables(env) {
+  parseEnvVariables(env: Record<string, string | undefined>) {
     const serverPattern = /^SSH_SERVER_([A-Z0-9_]+)_HOST$/;
     const processedServers = new Set();
 
@@ -210,7 +229,7 @@ export class ConfigLoader {
       if (processedServers.has(serverName)) continue;
 
       // Field names and coercion come from the shared SERVER_FIELDS table
-      // (src/server-fields.js) — the same table the CLI-side writer uses.
+      // (src/server-fields.ts) — the same table the CLI-side writer uses.
       // Cast: wide value union; per-field types are guaranteed by the table.
       const raw = /** @type {any} */ (serverFromEnvRecord(env, match[1]));
       const allow = raw.allowPatterns || [];
@@ -221,11 +240,11 @@ export class ConfigLoader {
         );
       }
 
-      /** @type {ServerConfig} */
-      const server = {
+      const server: ServerConfig = {
         name: serverName,
         ...raw,
-        host: value,
+        // The key matched SSH_SERVER_<NAME>_HOST, so the value is present.
+        host: value as string,
         // Matches the pre-table behaviour: a missing PORT becomes 22, while a
         // non-numeric PORT stays NaN (surfaced to the user) rather than
         // silently defaulting.
@@ -274,7 +293,7 @@ export class ConfigLoader {
    */
   exportToToml() {
     const config = {
-      ssh_servers: {}
+      ssh_servers: {} as Record<string, any>
     };
 
     for (const [name, server] of this.servers) {
@@ -368,8 +387,8 @@ export class ConfigLoader {
    * Save configuration to Codex TOML format
    */
   async saveToCodexConfig(codexConfigPath = path.join(os.homedir(), '.codex', 'config.toml')) {
-    /** @type {Record<string, any>} */
-    let config = {};
+    // Existing Codex config may hold arbitrary keys; keep it loose.
+    let config: Record<string, any> = {};
 
     // Load existing config if it exists
     if (fs.existsSync(codexConfigPath)) {
@@ -384,7 +403,7 @@ export class ConfigLoader {
 
     config.mcp_servers['ssh-manager'] = {
       command: 'node',
-      args: [path.join(process.cwd(), 'src', 'index.js')],
+      args: [path.join(process.cwd(), 'src', 'index.ts')],
       env: {
         SSH_CONFIG_PATH: path.join(os.homedir(), '.codex', 'ssh-config.toml')
       },
