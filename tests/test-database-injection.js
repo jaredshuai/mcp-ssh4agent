@@ -27,6 +27,15 @@ import {
   buildMySQLQueryCommand, buildPostgreSQLQueryCommand, buildMongoDBQueryCommand
 } from '../src/database-manager.ts';
 
+// The whole point of this suite is driving payloads through a real POSIX shell
+// to prove the heredoc/quoting defenses hold; there is no /bin/sh on Windows
+// by design, and swapping in cmd/PowerShell would test nothing it exists to
+// test. The Linux CI runs the full battery.
+if (process.platform === 'win32') {
+  console.log('⏭ skip: requires real /bin/sh (POSIX-only by design)');
+  process.exit(0);
+}
+
 let passed = 0;
 function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }
 

@@ -52,6 +52,13 @@ function bootAndTeardown(teardown, { bootMs = 800, killAfter = 4000 } = {}) {
 
 const clean = (r) => r.code === 0 && r.signal == null;
 
+// Windows delivers no POSIX signals: child.kill('SIGTERM'/'SIGINT') goes through
+// TerminateProcess and never reaches the server's registered handlers (verified
+// with a minimal repro — the handler never ran, no marker file appeared). The
+// signal scenarios are POSIX-only by nature; graceful shutdown on Windows is
+// covered by the stdin-EOF scenario, which runs everywhere.
+const SKIP_SIGNALS = process.platform === 'win32';
+
 async function main() {
   // 1. Host teardown closes our stdin (EOF). This is the path that used to leak.
   let r = await bootAndTeardown((c) => c.stdin.end());
@@ -59,24 +66,28 @@ async function main() {
     ? ok(`exits cleanly on stdin EOF (${r.ms.toFixed(0)}ms, code 0)`)
     : ko(`stdin EOF did not exit cleanly: code=${r.code} signal=${r.signal} (${r.ms.toFixed(0)}ms) — orphaned?`);
 
-  // 2. SIGTERM — the other standard teardown signal (e.g. process supervisors).
-  r = await bootAndTeardown((c) => c.kill('SIGTERM'));
-  clean(r)
-    ? ok(`exits cleanly on SIGTERM (${r.ms.toFixed(0)}ms, code 0)`)
-    : ko(`SIGTERM did not exit cleanly: code=${r.code} signal=${r.signal}`);
+  if (SKIP_SIGNALS) {
+    console.log('⏭ skip: POSIX signals not deliverable on Windows; graceful shutdown covered by stdin-EOF test');
+  } else {
+    // 2. SIGTERM — the other standard teardown signal (e.g. process supervisors).
+    r = await bootAndTeardown((c) => c.kill('SIGTERM'));
+    clean(r)
+      ? ok(`exits cleanly on SIGTERM (${r.ms.toFixed(0)}ms, code 0)`)
+      : ko(`SIGTERM did not exit cleanly: code=${r.code} signal=${r.signal}`);
 
-  // 3. SIGINT — the original (interactive Ctrl-C) path must still work.
-  r = await bootAndTeardown((c) => c.kill('SIGINT'));
-  clean(r)
-    ? ok(`exits cleanly on SIGINT (${r.ms.toFixed(0)}ms, code 0)`)
-    : ko(`SIGINT did not exit cleanly: code=${r.code} signal=${r.signal}`);
+    // 3. SIGINT — the original (interactive Ctrl-C) path must still work.
+    r = await bootAndTeardown((c) => c.kill('SIGINT'));
+    clean(r)
+      ? ok(`exits cleanly on SIGINT (${r.ms.toFixed(0)}ms, code 0)`)
+      : ko(`SIGINT did not exit cleanly: code=${r.code} signal=${r.signal}`);
 
-  // 4. Idempotent shutdown: overlapping signals (SIGTERM + stdin EOF) must not
-  //    double-dispose or crash — a single clean exit is expected.
-  r = await bootAndTeardown((c) => { c.kill('SIGTERM'); c.stdin.end(); });
-  clean(r)
-    ? ok(`idempotent on overlapping SIGTERM + stdin EOF (${r.ms.toFixed(0)}ms, code 0)`)
-    : ko(`overlapping signals did not exit cleanly: code=${r.code} signal=${r.signal}`);
+    // 4. Idempotent shutdown: overlapping signals (SIGTERM + stdin EOF) must not
+    //    double-dispose or crash — a single clean exit is expected.
+    r = await bootAndTeardown((c) => { c.kill('SIGTERM'); c.stdin.end(); });
+    clean(r)
+      ? ok(`idempotent on overlapping SIGTERM + stdin EOF (${r.ms.toFixed(0)}ms, code 0)`)
+      : ko(`overlapping signals did not exit cleanly: code=${r.code} signal=${r.signal}`);
+  }
 
   fs.rmSync(tmpEnv, { force: true });
   fs.rmSync(tmpToml, { force: true });
