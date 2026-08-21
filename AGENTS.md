@@ -87,6 +87,11 @@ node --check src/index.ts                   # Check source syntax (native type s
 npx tsx debug/test-claude-code.ts    # Test Claude Code integration (TypeScript, cross-platform)
 npx tsx debug/test-mcp.ts            # Test MCP connection (initialize + tools/list via SDK client)
 npx tsx debug/test-ssh-command.ts    # Test SSH command execution (skips when no server configured)
+npx tsx debug/test-groups.ts         # Print ssh_group_* usage examples and execution strategies
+npx tsx debug/test-monitoring.ts     # Print ssh_tail / ssh_monitor usage (writes a sample log to temp)
+npx tsx debug/test-sessions.ts       # Print ssh_session_* usage and session features
+npx tsx debug/test-sync.ts           # Print ssh_sync usage (creates a demo tree in temp)
+npx tsx debug/test-tunnels.ts        # Print ssh_tunnel_* usage and common scenarios
 ```
 
 ## MCP Tools Available
