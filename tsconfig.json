@@ -2,8 +2,10 @@
   "//": [
     "Type-checking only — no emit, no build step. The server (src/**/*.ts)",
     "is TypeScript run natively by Node's type stripping (entry: node",
-    "src/index.ts). allowJs/checkJs stay on for the remaining plain-JS test",
-    "files; scripts/ and cli/ run via tsx. tsc here is purely a static",
+    "src/index.ts). allowJs/checkJs cover the plain-JS test files —",
+    "include lists tests/**/*.js so they really are checked; scripts/,",
+    "cli/ and debug/ are TypeScript too, all run via plain node (no tsx).",
+    "tsc here is purely a static",
     "checker (`npm run typecheck`). Strictness is deliberately moderate:",
     "the goal is catching the mistakes that actually bit this project",
     "(reading a config field that does not exist — see issue #49 — wrong",
@@ -31,6 +33,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.js", "src/**/*.ts", "scripts/**/*.ts", "cli/**/*.ts", "debug/**/*.ts", "tests/**/*.ts"],
+  "include": ["src/**/*.js", "src/**/*.ts", "scripts/**/*.ts", "cli/**/*.ts", "debug/**/*.ts", "tests/**/*.ts", "tests/**/*.js"],
   "exclude": ["node_modules"]
 }

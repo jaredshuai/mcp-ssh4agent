@@ -12,8 +12,8 @@
  *    including passwords containing quotes, spaces, `#` and `$()`.
  *
  * This closes the gap noted on test-config-field-names.js, which only locks
- * the server side. Run via tsx (imports the CLI's TypeScript directly):
- *   npx tsx tests/test-server-fields.ts
+ * the server side. Run natively with Node's type stripping (imports the CLI's TypeScript directly):
+ *   node tests/test-server-fields.ts
  */
 import assert from 'node:assert';
 import fs from 'node:fs';

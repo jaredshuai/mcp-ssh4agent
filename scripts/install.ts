@@ -1,5 +1,5 @@
 // Cross-platform installer for the ssh-manager CLI (replaces cli/install.sh).
-// Run via: `npm run install-cli` → `tsx scripts/install.ts`
+// Run via: `npm run install-cli` → `node scripts/install.ts`
 //
 // Pure Node.js, no shell-isms. Works on Windows, macOS, Linux.
 // - Checks required (ssh) and optional (rsync / jq / sshpass) binaries.
@@ -66,8 +66,8 @@ if (!sshOk) {
 }
 console.log('');
 
-// 2. Ensure project deps are installed (tsx must be present to run the CLI).
-if (!existsSync(`${PROJECT_ROOT}/node_modules/tsx`)) {
+// 2. Ensure project deps are installed (the server's deps back the CLI too).
+if (!existsSync(`${PROJECT_ROOT}/node_modules/@modelcontextprotocol/sdk`)) {
   console.log(`${YELLOW}Installing Node.js dependencies...${RESET}`);
   const npmInstall = spawnSync('npm install', {
     cwd: PROJECT_ROOT,
@@ -129,7 +129,7 @@ if (verify.status === 0) {
   console.log('');
   fail('ssh-manager not found on PATH after install');
   info('Restart your shell (PATH may need to refresh), or run ssh-manager');
-  console.log(`  via:  node ${PROJECT_ROOT.replace(/\\/g, '/')}/cli/ssh-manager.js`);
+  console.log(`  via:  node ${PROJECT_ROOT.replace(/\\/g, '/')}/cli/ssh-manager.ts`);
   process.exit(1);
 }
 console.log('');

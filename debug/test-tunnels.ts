@@ -1,5 +1,5 @@
 // Cross-platform debug helper (replaces debug/test-tunnels.sh).
-// Run via: `npx tsx debug/test-tunnels.ts`
+// Run via: `node debug/test-tunnels.ts`
 //
 // Prints example `ssh_tunnel_*` invocations and use cases. Pure echo →
 // console.log; no shell-isms.

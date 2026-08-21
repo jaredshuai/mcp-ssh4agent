@@ -16,8 +16,8 @@ The system consists of three main components:
    - Provides MCP tools for any AI agent integration (Claude Code, Codex, Cursor, Cline, etc.)
    - Tool definitions live in `src/tools/<group>.ts` (37 tools, 6 groups, see `src/tool-registry.ts`); each group module receives a shared runtime context instead of importing the entry point — see the `ToolContext` interface in `src/tool-registry.ts`
 
-2. **Server Management CLI** (`cli/ssh-manager.js`, a tsx ESM loader running the TypeScript sources in `cli/`): interactive CLI for configuration
-   - Pure TypeScript (`cli/lib/*.ts`, `cli/commands/*.ts`), run via tsx — cross-platform, no Bash/Git Bash needed
+2. **Server Management CLI** (`cli/ssh-manager.ts`, node shebang — native type stripping): interactive CLI for configuration
+   - Pure TypeScript (`cli/lib/*.ts`, `cli/commands/*.ts`), run natively by Node — cross-platform, no Bash/Git Bash needed
    - Manages `.env` / TOML server configurations; tests connections; server / group / tool operations
 
 3. **Deployment Helpers** (`src/deploy-helper.ts`, `src/server-aliases.ts`): Advanced features
@@ -34,7 +34,7 @@ npm run setup-hooks                           # Install git pre-commit hooks (cr
 npm run install-cli                           # Install ssh-manager CLI globally (npm link)
 ```
 
-> **Cross-platform**: all scripts run via `tsx` (pure Node.js — no Bash, no Python). The `ssh-manager` CLI is TypeScript loaded through `cli/ssh-manager.js` (a tsx ESM loader); it runs natively on Windows, macOS, and Linux with no Git Bash/WSL requirement.
+> **Cross-platform**: all scripts run via plain `node` on native type stripping (no Bash, no Python, no build step). The `ssh-manager` CLI is TypeScript at `cli/ssh-manager.ts` (node shebang); it runs natively on Windows, macOS, and Linux with no Git Bash/WSL requirement.
 
 ### Server Management (TypeScript CLI)
 ```bash
@@ -76,22 +76,22 @@ npm start                                     # Start MCP server (requires stdin
 npm test                                      # Run the full test suite
 npm run typecheck                             # Type-check with tsc (no build, nothing emitted)
 npm run test:all                              # Tests + typecheck + validation
-npm run validate                              # Run all validation checks (B2: tsx scripts/validate.ts)
+npm run validate                              # Run all validation checks (B2: node scripts/validate.ts)
 node --check src/index.ts                   # Check source syntax (native type stripping)
 ```
 
-**Language / typecheck**: the entire server (`src/**/*.ts`, entry `src/index.ts`) is TypeScript run **natively by Node's type stripping** (`engines: ">=23.6.0"`; no tsx, no build, nothing emitted) — `node src/index.ts` is the whole runtime contract. `tsconfig.json` is `noEmit` type-checking only; `allowJs`/`checkJs` stay on for the remaining plain-JS test files. Type-stripping caveats apply: only erasable syntax (no enums/namespaces/parameter properties), and relative imports must carry explicit `.ts` extensions. Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs via tsx. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
+**Language / typecheck**: the entire server (`src/**/*.ts`, entry `src/index.ts`) is TypeScript run **natively by Node's type stripping** (`engines: ">=23.6.0"`; no tsx, no build, nothing emitted) — `node src/index.ts` is the whole runtime contract. `tsconfig.json` is `noEmit` type-checking only; `allowJs`/`checkJs` cover the plain-JS test files (`tests/**/*.js` is in the include list). Type-stripping caveats apply: only erasable syntax (no enums/namespaces/parameter properties), and relative imports must carry explicit `.ts` extensions. Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs the same way — plain `node`, no tsx, nothing left in the dependency tree. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
 
 ### Debug Tools (in `debug/` directory)
 ```bash
-npx tsx debug/test-claude-code.ts    # Test Claude Code integration (TypeScript, cross-platform)
-npx tsx debug/test-mcp.ts            # Test MCP connection (initialize + tools/list via SDK client)
-npx tsx debug/test-ssh-command.ts    # Test SSH command execution (skips when no server configured)
-npx tsx debug/test-groups.ts         # Print ssh_group_* usage examples and execution strategies
-npx tsx debug/test-monitoring.ts     # Print ssh_tail / ssh_monitor usage (writes a sample log to temp)
-npx tsx debug/test-sessions.ts       # Print ssh_session_* usage and session features
-npx tsx debug/test-sync.ts           # Print ssh_sync usage (creates a demo tree in temp)
-npx tsx debug/test-tunnels.ts        # Print ssh_tunnel_* usage and common scenarios
+node debug/test-claude-code.ts        # Test Claude Code integration (TypeScript, cross-platform)
+node debug/test-mcp.ts                # Test MCP connection (initialize + tools/list via SDK client)
+node debug/test-ssh-command.ts        # Test SSH command execution (skips when no server configured)
+node debug/test-groups.ts             # Print ssh_group_* usage examples and execution strategies
+node debug/test-monitoring.ts         # Print ssh_tail / ssh_monitor usage (writes a sample log to temp)
+node debug/test-sessions.ts           # Print ssh_session_* usage and session features
+node debug/test-sync.ts               # Print ssh_sync usage (creates a demo tree in temp)
+node debug/test-tunnels.ts            # Print ssh_tunnel_* usage and common scenarios
 ```
 
 ## MCP Tools Available

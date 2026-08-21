@@ -14,7 +14,7 @@
  * and never survive into a resolved config.
  *
  * TypeScript run directly: the MCP server imports it under plain `node`
- * (native type stripping, no build step), the CLI through tsx.
+ * (native type stripping, no build step), and the CLI the same way.
  */
 
 type ServerFieldType = 'string' | 'int' | 'bool' | 'patternList';

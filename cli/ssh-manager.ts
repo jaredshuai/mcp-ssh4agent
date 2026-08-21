@@ -1,9 +1,11 @@
+#!/usr/bin/env node
 // SSH Manager CLI — main entry.
 //
 // Cross-platform TypeScript port of cli/ssh-manager (the bash entry).
 // Implements: VERSION resolution, show_help/show_version, the cmd_exec /
 // cmd_sync / cmd_ssh / cmd_tunnel primitives, the main() dispatcher, and the
-// interactive_mode loop. Run via tsx through cli/ssh-manager.js.
+// interactive_mode loop. Run natively: `node cli/ssh-manager.ts` (Node
+// >=23.6 type stripping).
 //
 // No shell-isms. `ssh` and `rsync` are the only external binaries spawned
 // (both are expected on PATH, matching the bash original). `clear`/`ps`/`sed`/

@@ -4,7 +4,7 @@ A simple, powerful, and fast cross-platform CLI for managing SSH servers.
 
 ## Features
 
-- 🚀 **Fast**: Pure TypeScript, run directly via tsx (no build step)
+- 🚀 **Fast**: Pure TypeScript, run natively by Node type stripping (no build step)
 - 🎨 **Beautiful**: Colored output with emojis
 - 📦 **Simple**: Single command for all operations
 - 🔧 **Powerful**: Tunnels, sync, monitoring, and more

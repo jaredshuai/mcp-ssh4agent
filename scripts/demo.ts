@@ -1,5 +1,5 @@
 // Interactive demo preview for the ssh-manager CLI (replaces cli/demo.sh).
-// Run via: `npm run demo` → `tsx scripts/demo.ts`
+// Run via: `npm run demo` → `node scripts/demo.ts`
 //
 // Pure Node.js, no shell-isms. Cross-platform clear screen via ANSI codes.
 // The mid-script "Press Enter" pause only blocks when stdin is a TTY; in a

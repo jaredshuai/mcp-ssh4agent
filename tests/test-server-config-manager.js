@@ -97,7 +97,7 @@ async function testLazyReload() {
 
   const loader = new SpyLoader();
   loader.behavior = () => new Map([['alpha', { host: '10.0.0.1' }]]);
-  const manager = new ServerConfigManager({ envPath, tomlPath, configLoader: loader });
+  const manager = new ServerConfigManager({ envPath, tomlPath, configLoader: /** @type {any} */ (loader) /* SpyLoader duck-types only the load() surface */ });
 
   await manager.loadInitial();
   assert.strictEqual(loader.loadCount, 1);
@@ -123,7 +123,7 @@ async function testReloadFailureKeepsPrevious() {
 
   const loader = new SpyLoader();
   loader.behavior = () => new Map([['alpha', { host: '1.1.1.1' }]]);
-  const manager = new ServerConfigManager({ envPath, tomlPath, configLoader: loader });
+  const manager = new ServerConfigManager({ envPath, tomlPath, configLoader: /** @type {any} */ (loader) /* SpyLoader duck-types only the load() surface */ });
 
   let servers = await manager.loadInitial();
   assert.deepStrictEqual(Object.keys(servers), ['alpha']);

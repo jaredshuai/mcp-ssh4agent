@@ -1,5 +1,5 @@
 // Cross-platform debug helper (replaces debug/test-groups.sh).
-// Run via: `npx tsx debug/test-groups.ts`
+// Run via: `node debug/test-groups.ts`
 //
 // Prints example `ssh_group_*` / `ssh_execute_group` invocations and the
 // group execution strategies. Pure echo → console.log; no shell-isms.

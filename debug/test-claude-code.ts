@@ -1,5 +1,5 @@
 // Cross-platform debug helper (replaces debug/test-claude-code.sh).
-// Run via: `npx tsx debug/test-claude-code.ts`
+// Run via: `node debug/test-claude-code.ts`
 //
 // Sanity-checks the local setup for driving this MCP server from Claude Code:
 // package.json, node_modules, .env (counts configured servers), and the

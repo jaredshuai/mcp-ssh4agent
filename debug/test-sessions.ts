@@ -1,5 +1,5 @@
 // Cross-platform debug helper (replaces debug/test-sessions.sh).
-// Run via: `npx tsx debug/test-sessions.ts`
+// Run via: `node debug/test-sessions.ts`
 //
 // Prints example `ssh_session_*` invocations and use cases. Pure echo →
 // console.log; no shell-isms.

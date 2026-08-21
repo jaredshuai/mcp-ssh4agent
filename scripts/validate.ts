@@ -1,5 +1,5 @@
 // Cross-platform validation script (replaces scripts/validate.sh).
-// Run via: `npm run validate` → `tsx scripts/validate.ts`
+// Run via: `npm run validate` → `node scripts/validate.ts`
 //
 // Pure Node.js, no shell-isms. Works on Windows, macOS, Linux.
 // Uses only node: built-ins, so it has zero external dependencies.

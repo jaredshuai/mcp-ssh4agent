@@ -159,12 +159,13 @@ function testListGroupsIncludesConfigGroups() {
 function testConfigGroupIsReadOnly() {
   const { groups } = makeGroups(configs);
 
-  for (const [label, run] of [
+  // Tuple annotation so checkJs sees `run` as a function, not string | function.
+  for (const [label, run] of /** @type {[string, () => unknown][]} */ ([
     ['add-servers', () => groups.addServers('edge', ['web1'])],
     ['remove-servers', () => groups.removeServers('edge', ['db1'])],
     ['update', () => groups.updateGroup('edge', { description: 'x' })],
     ['delete', () => groups.deleteGroup('edge')]
-  ]) {
+  ])) {
     assert.throws(run, /SSH server configuration/, `${label} must explain the group comes from the config`);
   }
 

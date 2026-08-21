@@ -1,5 +1,5 @@
 // Debug helper: run one real ssh_execute round-trip through the MCP server.
-// Run via: `npx tsx debug/test-ssh-command.ts`
+// Run via: `node debug/test-ssh-command.ts`
 //
 // The old test-ssh-command.js had been broken since the initial commit (wrong
 // entry path + newline-delimited JSON-RPC instead of MCP's Content-Length

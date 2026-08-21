@@ -1,5 +1,5 @@
 // Debug helper: boot the real MCP server over stdio and verify the handshake.
-// Run via: `npx tsx debug/test-mcp.ts`
+// Run via: `node debug/test-mcp.ts`
 //
 // The old test-mcp.js had been broken since the initial commit (wrong entry
 // path + newline-delimited JSON-RPC instead of MCP's Content-Length framing),

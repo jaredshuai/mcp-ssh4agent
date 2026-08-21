@@ -1,5 +1,5 @@
 // Cross-platform git pre-commit hook setup (replaces scripts/setup-hooks.sh).
-// Run via: `npm run setup-hooks` → `tsx scripts/setup-hooks.ts`
+// Run via: `npm run setup-hooks` → `node scripts/setup-hooks.ts`
 //
 // Pure Node.js, no shell-isms, no Python. Installs a `.git/hooks/pre-commit`
 // file (POSIX `sh` — git runs hooks via sh.exe on Windows, so this works

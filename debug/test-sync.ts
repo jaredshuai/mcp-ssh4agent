@@ -1,5 +1,5 @@
 // Cross-platform debug helper (replaces debug/test-sync.sh).
-// Run via: `npx tsx debug/test-sync.ts`
+// Run via: `node debug/test-sync.ts`
 //
 // Sets up a sample local directory tree under the OS temp dir and prints
 // example `ssh_sync` invocations to try against a configured server.

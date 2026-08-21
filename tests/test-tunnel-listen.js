@@ -29,7 +29,8 @@ function freePort() {
     const probe = net.createServer();
     probe.once('error', reject);
     probe.listen(0, HOST, () => {
-      const { port } = probe.address();
+      // A listening TCP socket always returns AddressInfo (string is pipes only).
+      const { port } = /** @type {import('node:net').AddressInfo} */ (probe.address());
       probe.close(() => resolve(port));
     });
   });
@@ -41,7 +42,7 @@ async function testResolvesOnSuccessfulBind() {
 
   await listenOrReject(server, port, HOST);
   assert.strictEqual(server.listening, true, 'server must be listening after resolve');
-  assert.strictEqual(server.address().port, port, 'bound to the requested port');
+  assert.strictEqual(/** @type {import('node:net').AddressInfo} */ (server.address()).port, port, 'bound to the requested port');
 
   await closeServer(server);
   ok('resolves once the port is actually bound');
@@ -55,7 +56,7 @@ async function testRejectsWhenPortIsTaken() {
   const server = net.createServer();
   await assert.rejects(
     () => listenOrReject(server, port, HOST),
-    (error) => {
+    (/** @type {NodeJS.ErrnoException} */ error) => {
       assert.strictEqual(error.code, 'EADDRINUSE', `expected EADDRINUSE, got ${error.code}`);
       return true;
     },

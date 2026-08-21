@@ -231,7 +231,7 @@ This release adds **12 new MCP tools** transforming SSH Manager into a comprehen
 - **⚠️ Smart Alerts** - Configurable health thresholds and notifications
 
 ### v2.0 Features
-- **🚀 TypeScript CLI** - Cross-platform CLI for server management (runs via tsx, no build step, native on Windows/macOS/Linux)
+- **🚀 TypeScript CLI** - Cross-platform CLI for server management (runs natively via Node type stripping, no build step, native on Windows/macOS/Linux)
 - **📊 Advanced Logging** - Comprehensive logging system with levels and history
 - **🔄 Rsync Integration** - Bidirectional file sync with rsync support
 - **💻 Persistent Sessions** - Maintain shell context across multiple commands
@@ -726,7 +726,7 @@ SSH_SERVER_INTERNAL_DESCRIPTION=Private server behind bastion
 
 ### Server Management CLI
 
-The `ssh-manager` CLI (TypeScript, run via tsx — see [cli/README.md](cli/README.md)) provides:
+The `ssh-manager` CLI (TypeScript, run natively via Node type stripping — see [cli/README.md](cli/README.md)) provides:
 
 1. **List servers** - `ssh-manager server list`
 2. **Add server** - `ssh-manager server add` (interactive wizard)
@@ -751,8 +751,7 @@ mcp-ssh-manager/
 │   ├── server-groups.js      # Group operations
 │   └── ...
 ├── cli/
-│   ├── ssh-manager.js         # CLI launcher (registers tsx ESM loader)
-│   ├── ssh-manager.ts         # CLI main entry (TypeScript)
+│   ├── ssh-manager.ts         # CLI main entry (TypeScript, node shebang)
 │   ├── commands/              # CLI command modules (.ts)
 │   └── lib/                   # CLI libraries (.ts)
 ├── profiles/                  # Configuration profiles (frappe, docker, nodejs...)

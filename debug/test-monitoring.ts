@@ -1,5 +1,5 @@
 // Cross-platform debug helper (replaces debug/test-monitoring.sh).
-// Run via: `npx tsx debug/test-monitoring.ts`
+// Run via: `node debug/test-monitoring.ts`
 //
 // Writes a sample log file under the OS temp dir and prints example
 // `ssh_tail` / `ssh_monitor` invocations. Uses os.tmpdir() instead of /tmp.
