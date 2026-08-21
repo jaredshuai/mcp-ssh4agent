@@ -220,11 +220,23 @@ function testNoStaleAccessInSource() {
   const staleAccess = /\.(sudo_password|default_dir|keypath)\b/;
   const offenders = [];
 
+  // Handlers live in src/tools/*.ts since the index.js split — the guard must
+  // scan both the top-level modules and the tool group modules.
+  const scanTargets = [];
   for (const file of fs.readdirSync(SRC_DIR)) {
-    if (!file.endsWith('.js') || excluded.has(file)) continue;
-    const lines = fs.readFileSync(path.join(SRC_DIR, file), 'utf8').split('\n');
+    if (file.endsWith('.js') && !excluded.has(file)) scanTargets.push(file);
+  }
+  const toolsDir = path.join(SRC_DIR, 'tools');
+  if (fs.existsSync(toolsDir)) {
+    for (const file of fs.readdirSync(toolsDir)) {
+      if (file.endsWith('.js') || file.endsWith('.ts')) scanTargets.push(path.join('tools', file));
+    }
+  }
+
+  for (const rel of scanTargets) {
+    const lines = fs.readFileSync(path.join(SRC_DIR, rel), 'utf8').split('\n');
     lines.forEach((line, i) => {
-      if (staleAccess.test(line)) offenders.push(`${file}:${i + 1}: ${line.trim()}`);
+      if (staleAccess.test(line)) offenders.push(`${rel}:${i + 1}: ${line.trim()}`);
     });
   }
 

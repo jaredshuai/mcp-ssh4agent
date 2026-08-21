@@ -6,6 +6,35 @@
  */
 
 /**
+ * Runtime context handed to each src/tools/<group>.js registration function.
+ * Built once by the entry point (src/index.js) and passed as the single
+ * argument, so tool modules never import the entry point (no import cycles) —
+ * the same provider-injection pattern src/server-groups.js uses for config.
+ *
+ * `register` is typed so inline tool handlers keep contextually-typed `any`
+ * args (mirrors the original registerToolConditional JSDoc that lived in
+ * src/index.js before the split). The infrastructure members are loosely
+ * typed; their definition sites in src/index.js carry the real JSDoc.
+ *
+ * @typedef {Object} ToolContext
+ * @property {(toolName: string, schema: any, handler: (args: any, extra?: any) => any) => void} register Register a tool unless disabled in tool config.
+ * @property {any} getConnection
+ * @property {any} closeConnection
+ * @property {any} execCommandWithTimeout
+ * @property {any} loadServerConfig
+ * @property {any} getServerConfig
+ * @property {any} applyServerPolicy
+ * @property {any} auditOk
+ * @property {any} isConnectionValid
+ * @property {any} cleanupOldConnections
+ * @property {any} connections
+ * @property {any} connectionTimestamps
+ * @property {any} keepaliveIntervals
+ * @property {number} CONNECTION_TIMEOUT
+ * @property {number} KEEPALIVE_INTERVAL
+ */
+
+/**
  * Tool groups with their associated tools
  * Total: 37 tools across 6 groups
  */

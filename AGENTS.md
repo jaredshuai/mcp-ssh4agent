@@ -14,6 +14,7 @@ The system consists of three main components:
    - Handles SSH connections via ssh2 library
    - Manages connection pooling to avoid reconnecting
    - Provides MCP tools for any AI agent integration (Claude Code, Codex, Cursor, Cline, etc.)
+   - Tool definitions live in `src/tools/<group>.ts` (37 tools, 6 groups, see `src/tool-registry.js`); each group module receives a shared runtime context instead of importing the entry point — see the `ToolContext` typedef in `src/tool-registry.js`
 
 2. **Server Management CLI** (`cli/ssh-manager.js`, a tsx ESM loader running the TypeScript sources in `cli/`): interactive CLI for configuration
    - Pure TypeScript (`cli/lib/*.ts`, `cli/commands/*.ts`), run via tsx — cross-platform, no Bash/Git Bash needed
@@ -79,7 +80,7 @@ npm run validate                              # Run all validation checks (B2: t
 node --check src/index.js                   # Check JavaScript syntax
 ```
 
-**Language / typecheck**: `tsconfig.json` runs TypeScript in `checkJs`/`noEmit` mode. Existing server code in `src/` is plain JS run directly (`node src/index.js`) — no build step, and that must stay true for the server. **New code is written in TypeScript (`.ts`) and run directly via `tsx`** (still no build step) — e.g. `scripts/validate.ts` (B2) and the `cli/` TS port (B3). Baseline is 0 typecheck errors; CI enforces it. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
+**Language / typecheck**: `tsconfig.json` runs TypeScript in `checkJs`/`noEmit` mode. The server entry and infrastructure (`src/*.js`) are plain JS run directly (`node src/index.js`) — no build step. Server tool modules (`src/tools/*.ts`) are TypeScript loaded **natively by Node's type stripping** (`engines: ">=23.6.0"`; no tsx, no build — the `node src/index.js` contract is unchanged). Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs via tsx. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
 
 ### Debug Tools (in `debug/` directory)
 ```bash

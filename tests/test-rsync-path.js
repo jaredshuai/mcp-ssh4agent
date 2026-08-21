@@ -9,8 +9,9 @@
 //   2. invariants that must hold for ANY Windows input, including ones nobody
 //      thought to tabulate (no drive-colon, no backslash, idempotence)
 //   3. platform isolation — nothing changes off Windows
-//   4. a wiring guard on src/index.js, since no test on a POSIX CI can observe
-//      the real rsync argv (ssh_sync opens an SSH connection first)
+//   4. a wiring guard on the ssh_sync tool source (src/tools/core.ts since the
+//      index.js split), since no test on a POSIX CI can observe the real rsync
+//      argv (ssh_sync opens an SSH connection first)
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +19,9 @@ import { fileURLToPath } from 'node:url';
 import { toRsyncLocalPath } from '../src/rsync-path.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INDEX_PATH = path.join(__dirname, '..', 'src', 'index.js');
+// ssh_sync's registration moved to src/tools/core.ts when index.js was split;
+// the wiring guard reads the tool source where the handler actually lives.
+const INDEX_PATH = path.join(__dirname, '..', 'src', 'tools', 'core.ts');
 
 let passed = 0;
 function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }
@@ -162,8 +165,8 @@ const indexSource = fs.readFileSync(INDEX_PATH, 'utf8');
 
 assert.match(
   indexSource,
-  /import \{ toRsyncLocalPath \} from '\.\/rsync-path\.js';/,
-  'src/index.js must import toRsyncLocalPath'
+  /import \{ toRsyncLocalPath \} from '\.\.\/rsync-path\.js';/,
+  'the ssh_sync tool module must import toRsyncLocalPath'
 );
 assert.match(
   indexSource,

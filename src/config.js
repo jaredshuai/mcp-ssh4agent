@@ -68,3 +68,16 @@ export function formatJSONResponse(data) {
     RESPONSE_FORMAT.COMPACT_JSON ? 0 : 2
   );
 }
+
+// Helper function to format a duration in seconds as a human-readable string.
+// Shared by the session and group tools (moved out of src/index.js when the
+// tool registrations were split into src/tools/).
+export function formatDuration(seconds) {
+  if (seconds < 60) {
+    return `${seconds}s`;
+  } else if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  } else {
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  }
+}
