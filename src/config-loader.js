@@ -5,6 +5,13 @@ import path from 'path';
 import os from 'os';
 import { logger } from './logger.js';
 import { VALID_MODES } from './policy.js';
+import {
+  SERVER_FIELDS,
+  serverFromEnvRecord,
+  serverFromTomlRecord,
+  serverEnvLine,
+  canonicalTomlKey,
+} from './server-fields.js';
 
 /**
  * A resolved SSH server configuration, as produced by this loader and consumed
@@ -40,20 +47,10 @@ import { VALID_MODES } from './policy.js';
  * @property {'env'|'toml'} [source] Which configuration source won for this server.
  */
 
-// Parse a `;`-separated list of regex pattern strings. Empty entries are dropped.
-// We do NOT compile here — that happens lazily in policy.js so config-loader stays
-// free of regex error handling.
-function parsePatternList(raw) {
-  if (!raw || typeof raw !== 'string') return [];
-  return raw
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
 // Normalize a mode string. Returns 'unrestricted' for any falsy/unknown input,
 // after logging a warning when the input is set but invalid. This keeps existing
-// configs (no MODE field) on the fast path.
+// configs (no MODE field) on the fast path. Key mapping and value coercion live
+// in server-fields.js; only mode *validation* is a loader concern.
 function normalizeMode(raw, serverName) {
   if (raw === undefined || raw === null || raw === '') return 'unrestricted';
   const normalized = String(raw).toLowerCase().trim();
@@ -64,16 +61,6 @@ function normalizeMode(raw, serverName) {
     return 'unrestricted';
   }
   return normalized;
-}
-
-// Parse a boolean-ish config value. Accepts native booleans (TOML) and the
-// strings "true"/"1"/"yes"/"on" (case-insensitive) from .env, where every value
-// is a string. Everything else — "false", "0", "", undefined — is false, so an
-// opt-in flag never turns on by accident.
-function parseBool(raw) {
-  if (raw === true) return true;
-  if (typeof raw !== 'string') return false;
-  return ['true', '1', 'yes', 'on'].includes(raw.trim().toLowerCase());
 }
 
 export class ConfigLoader {
@@ -156,17 +143,15 @@ export class ConfigLoader {
     if (config.ssh_servers) {
       for (const [name, serverConfig] of Object.entries(config.ssh_servers)) {
         const normalizedName = name.toLowerCase();
-        // allow_patterns / deny_patterns may be either a TOML array of strings
-        // or a single `;`-separated string. Normalize to a string[] of regex
-        // sources — compilation happens in policy.js.
-        const tomlAllow = Array.isArray(serverConfig.allow_patterns)
-          ? serverConfig.allow_patterns
-          : parsePatternList(serverConfig.allow_patterns);
-        const tomlDeny = Array.isArray(serverConfig.deny_patterns)
-          ? serverConfig.deny_patterns
-          : parsePatternList(serverConfig.deny_patterns);
-        const mode = normalizeMode(serverConfig.mode, normalizedName);
-        if (mode === 'restricted' && tomlAllow.length === 0) {
+        // Field names, alias chains and value coercion come from the shared
+        // SERVER_FIELDS table (src/server-fields.js) — the same single source
+        // of truth the CLI-side writer consumes. Cast: the builder returns a
+        // wide value union; per-field types are guaranteed by the table.
+        const raw = /** @type {any} */ (serverFromTomlRecord(serverConfig));
+        const allow = raw.allowPatterns || [];
+        const deny = raw.denyPatterns || [];
+        const mode = normalizeMode(raw.mode, normalizedName);
+        if (mode === 'restricted' && allow.length === 0) {
           logger.warn(
             `Server "${normalizedName}" is in "restricted" mode but has no allow_patterns — every command will be refused. Set allow_patterns to enable any execution.`
           );
@@ -174,24 +159,12 @@ export class ConfigLoader {
 
         this.servers.set(normalizedName, {
           name: normalizedName,
-          host: serverConfig.host,
-          user: serverConfig.user || serverConfig.username,
-          password: serverConfig.password,
-          keyPath: serverConfig.key_path || serverConfig.keypath || serverConfig.ssh_key,
-          passphrase: serverConfig.passphrase,
-          port: serverConfig.port || 22,
-          defaultDir: serverConfig.default_dir || serverConfig.default_directory || serverConfig.cwd,
-          sudoPassword: serverConfig.sudo_password,
-          description: serverConfig.description,
-          group: serverConfig.group,
-          platform: serverConfig.platform ? serverConfig.platform.toLowerCase() : undefined,
-          proxyJump: serverConfig.proxy_jump,
-          proxyCommand: serverConfig.proxy_command || serverConfig.proxycommand,
-          forwardAgent: parseBool(serverConfig.forward_agent),
+          ...raw,
+          host: raw.host,
+          port: raw.port || 22,
           mode,
-          allowPatterns: tomlAllow,
-          denyPatterns: tomlDeny,
-          auditLog: serverConfig.audit_log,
+          allowPatterns: allow,
+          denyPatterns: deny,
           source: 'toml'
         });
       }
@@ -229,48 +202,42 @@ export class ConfigLoader {
 
     for (const [key, value] of Object.entries(env)) {
       const match = key.match(serverPattern);
-      if (match) {
-        const serverName = match[1].toLowerCase();
+      if (!match) continue;
 
-        // Skip if already processed from a higher priority source
-        if (processedServers.has(serverName)) continue;
+      const serverName = match[1].toLowerCase();
 
-        const envAllow = parsePatternList(env[`SSH_SERVER_${match[1]}_ALLOW_PATTERNS`]);
-        const envDeny = parsePatternList(env[`SSH_SERVER_${match[1]}_DENY_PATTERNS`]);
-        const mode = normalizeMode(env[`SSH_SERVER_${match[1]}_MODE`], serverName);
-        if (mode === 'restricted' && envAllow.length === 0) {
-          logger.warn(
-            `Server "${serverName}" is in "restricted" mode but has no SSH_SERVER_${match[1]}_ALLOW_PATTERNS — every command will be refused. Set ALLOW_PATTERNS to enable any execution.`
-          );
-        }
+      // Skip if already processed from a higher priority source
+      if (processedServers.has(serverName)) continue;
 
-        /** @type {ServerConfig} */
-        const server = {
-          name: serverName,
-          host: value,
-          user: env[`SSH_SERVER_${match[1]}_USER`],
-          password: env[`SSH_SERVER_${match[1]}_PASSWORD`],
-          keyPath: env[`SSH_SERVER_${match[1]}_KEYPATH`],
-          passphrase: env[`SSH_SERVER_${match[1]}_PASSPHRASE`],
-          port: parseInt(env[`SSH_SERVER_${match[1]}_PORT`] || '22'),
-          defaultDir: env[`SSH_SERVER_${match[1]}_DEFAULT_DIR`],
-          sudoPassword: env[`SSH_SERVER_${match[1]}_SUDO_PASSWORD`],
-          description: env[`SSH_SERVER_${match[1]}_DESCRIPTION`],
-          group: env[`SSH_SERVER_${match[1]}_GROUP`],
-          platform: (env[`SSH_SERVER_${match[1]}_PLATFORM`] || '').toLowerCase() || undefined,
-          proxyJump: env[`SSH_SERVER_${match[1]}_PROXYJUMP`],
-          proxyCommand: env[`SSH_SERVER_${match[1]}_PROXYCOMMAND`],
-          forwardAgent: parseBool(env[`SSH_SERVER_${match[1]}_FORWARD_AGENT`]),
-          mode,
-          allowPatterns: envAllow,
-          denyPatterns: envDeny,
-          auditLog: env[`SSH_SERVER_${match[1]}_AUDIT_LOG`],
-          source: 'env'
-        };
-
-        this.servers.set(serverName, server);
-        processedServers.add(serverName);
+      // Field names and coercion come from the shared SERVER_FIELDS table
+      // (src/server-fields.js) — the same table the CLI-side writer uses.
+      // Cast: wide value union; per-field types are guaranteed by the table.
+      const raw = /** @type {any} */ (serverFromEnvRecord(env, match[1]));
+      const allow = raw.allowPatterns || [];
+      const mode = normalizeMode(raw.mode, serverName);
+      if (mode === 'restricted' && allow.length === 0) {
+        logger.warn(
+          `Server "${serverName}" is in "restricted" mode but has no SSH_SERVER_${match[1]}_ALLOW_PATTERNS — every command will be refused. Set ALLOW_PATTERNS to enable any execution.`
+        );
       }
+
+      /** @type {ServerConfig} */
+      const server = {
+        name: serverName,
+        ...raw,
+        host: value,
+        // Matches the pre-table behaviour: a missing PORT becomes 22, while a
+        // non-numeric PORT stays NaN (surfaced to the user) rather than
+        // silently defaulting.
+        port: raw.port ?? 22,
+        mode,
+        allowPatterns: allow,
+        denyPatterns: raw.denyPatterns || [],
+        source: 'env'
+      };
+
+      this.servers.set(serverName, server);
+      processedServers.add(serverName);
     }
   }
 
@@ -301,7 +268,9 @@ export class ConfigLoader {
   }
 
   /**
-   * Export current configuration to TOML format
+   * Export current configuration to TOML format. Keys come from the shared
+   * SERVER_FIELDS table (canonical alias = toml[0]); only fields with a value
+   * are emitted, plus the security-field clean-up rules noted inline.
    */
   exportToToml() {
     const config = {
@@ -309,34 +278,33 @@ export class ConfigLoader {
     };
 
     for (const [name, server] of this.servers) {
+      /** @type {Record<string, any>} */
       const serverConfig = {
         host: server.host,
         user: server.user,
         port: server.port
       };
 
-      if (server.password) serverConfig.password = server.password;
-      if (server.keyPath) serverConfig.key_path = server.keyPath;
-      if (server.passphrase) serverConfig.passphrase = server.passphrase;
-      if (server.defaultDir) serverConfig.default_dir = server.defaultDir;
-      if (server.sudoPassword) serverConfig.sudo_password = server.sudoPassword;
-      if (server.description) serverConfig.description = server.description;
-      if (server.group) serverConfig.group = server.group;
-      if (server.platform) serverConfig.platform = server.platform;
-      if (server.proxyJump) serverConfig.proxy_jump = server.proxyJump;
-      if (server.proxyCommand) serverConfig.proxy_command = server.proxyCommand;
-      // Only emit when opted in, so generated TOML stays clean by default.
-      if (server.forwardAgent) serverConfig.forward_agent = true;
-      // Only emit security fields if they diverge from defaults — keeps generated
-      // TOML files clean for users who never opted in.
-      if (server.mode && server.mode !== 'unrestricted') serverConfig.mode = server.mode;
-      if (server.allowPatterns && server.allowPatterns.length > 0) {
-        serverConfig.allow_patterns = server.allowPatterns;
+      for (const spec of SERVER_FIELDS) {
+        if (spec.camel === 'host' || spec.camel === 'user' || spec.camel === 'port') continue; // always emitted above
+        const value = server[spec.camel];
+        // Only emit when opted in, so generated TOML stays clean by default.
+        if (spec.camel === 'forwardAgent') {
+          if (value === true) serverConfig[canonicalTomlKey(spec)] = true;
+          continue;
+        }
+        // Only emit security fields if they diverge from defaults — keeps
+        // generated TOML files clean for users who never opted in.
+        if (spec.camel === 'mode') {
+          if (value && value !== 'unrestricted') serverConfig[canonicalTomlKey(spec)] = value;
+          continue;
+        }
+        if (spec.camel === 'allowPatterns' || spec.camel === 'denyPatterns') {
+          if (Array.isArray(value) && value.length > 0) serverConfig[canonicalTomlKey(spec)] = value;
+          continue;
+        }
+        if (value) serverConfig[canonicalTomlKey(spec)] = value;
       }
-      if (server.denyPatterns && server.denyPatterns.length > 0) {
-        serverConfig.deny_patterns = server.denyPatterns;
-      }
-      if (server.auditLog) serverConfig.audit_log = server.auditLog;
 
       config.ssh_servers[name] = serverConfig;
     }
@@ -345,7 +313,10 @@ export class ConfigLoader {
   }
 
   /**
-   * Export current configuration to .env format
+   * Export current configuration to .env format. Lines come from the shared
+   * SERVER_FIELDS table (same key names and quoting rules the CLI writer
+   * uses), including FORWARD_AGENT — which the pre-table hand-rolled version
+   * silently dropped on env export.
    */
   exportToEnv() {
     const lines = ['# SSH Server Configuration'];
@@ -355,33 +326,38 @@ export class ConfigLoader {
     for (const [name, server] of this.servers) {
       const upperName = name.toUpperCase();
       lines.push(`# Server: ${name}`);
-      lines.push(`SSH_SERVER_${upperName}_HOST=${server.host}`);
-      lines.push(`SSH_SERVER_${upperName}_USER=${server.user}`);
-      if (server.password) lines.push(`SSH_SERVER_${upperName}_PASSWORD="${server.password}"`);
-      if (server.keyPath) lines.push(`SSH_SERVER_${upperName}_KEYPATH=${server.keyPath}`);
-      if (server.passphrase) lines.push(`SSH_SERVER_${upperName}_PASSPHRASE="${server.passphrase}"`);
-      lines.push(`SSH_SERVER_${upperName}_PORT=${server.port || 22}`);
-      if (server.defaultDir) lines.push(`SSH_SERVER_${upperName}_DEFAULT_DIR=${server.defaultDir}`);
-      if (server.sudoPassword) lines.push(`SSH_SERVER_${upperName}_SUDO_PASSWORD="${server.sudoPassword}"`);
-      if (server.description) lines.push(`SSH_SERVER_${upperName}_DESCRIPTION="${server.description}"`);
-      // Quoted like DESCRIPTION: free-form text, so an unquoted value would be
-      // truncated at the first ` #` when the generated file is read back.
-      if (server.group) lines.push(`SSH_SERVER_${upperName}_GROUP="${server.group}"`);
-      if (server.platform) lines.push(`SSH_SERVER_${upperName}_PLATFORM=${server.platform}`);
-      if (server.proxyJump) lines.push(`SSH_SERVER_${upperName}_PROXYJUMP=${server.proxyJump}`);
-      if (server.proxyCommand) lines.push(`SSH_SERVER_${upperName}_PROXYCOMMAND=${server.proxyCommand}`);
-      // Security fields — only emit when non-default to avoid clutter in
-      // generated .env files for users who never opted in.
-      if (server.mode && server.mode !== 'unrestricted') {
-        lines.push(`SSH_SERVER_${upperName}_MODE=${server.mode}`);
+
+      for (const spec of SERVER_FIELDS) {
+        const value = server[spec.camel];
+        switch (spec.camel) {
+          case 'host':
+          case 'user':
+            // Always emitted; unquoted (machine-shaped values).
+            lines.push(serverEnvLine(upperName, spec, value));
+            break;
+          case 'port':
+            lines.push(serverEnvLine(upperName, spec, value || 22));
+            break;
+          case 'forwardAgent':
+            // Only emit when opted in, matching the TOML export rule.
+            if (value === true) lines.push(serverEnvLine(upperName, spec, 'true'));
+            break;
+          case 'mode':
+            if (value && value !== 'unrestricted') {
+              lines.push(serverEnvLine(upperName, spec, value));
+            }
+            break;
+          case 'allowPatterns':
+          case 'denyPatterns':
+            if (Array.isArray(value) && value.length > 0) {
+              lines.push(serverEnvLine(upperName, spec, value));
+            }
+            break;
+          default:
+            if (value) lines.push(serverEnvLine(upperName, spec, value));
+        }
       }
-      if (server.allowPatterns && server.allowPatterns.length > 0) {
-        lines.push(`SSH_SERVER_${upperName}_ALLOW_PATTERNS="${server.allowPatterns.join(';')}"`);
-      }
-      if (server.denyPatterns && server.denyPatterns.length > 0) {
-        lines.push(`SSH_SERVER_${upperName}_DENY_PATTERNS="${server.denyPatterns.join(';')}"`);
-      }
-      if (server.auditLog) lines.push(`SSH_SERVER_${upperName}_AUDIT_LOG=${server.auditLog}`);
+
       lines.push('');
     }
 

@@ -1,7 +1,10 @@
 // Configuration management library for ssh-manager CLI.
 //
 // Cross-platform TypeScript port of cli/lib/config.sh. Parses the .env file
-// itself (does not import src/*.js — the CLI is independent). Replaces bash
+// itself (does not import src/ runtime modules — the CLI stays independent of
+// the MCP server code). The ONE shared thing is src/server-fields.js: the
+// single source of truth for field names / quoting, so what the CLI writes is
+// exactly what src/config-loader.js reads (and vice versa). Replaces bash
 // `grep`/`sed`/`mktemp`/`jq` with node: built-ins.
 
 import * as os from 'node:os';
@@ -15,6 +18,19 @@ import {
   print_success,
   print_warning,
 } from './colors.ts';
+import { FIELD_BY_CAMEL, serverEnvLine } from '../../src/server-fields.js';
+
+// Render one `SSH_SERVER_<NAME>_<KEY>=value` line for a camelCase field,
+// through the shared field table (key names + quoting rules).
+function envLineFor(
+  nameUpper: string,
+  camel: string,
+  value: string | number | boolean | string[],
+): string {
+  const spec = FIELD_BY_CAMEL.get(camel);
+  if (!spec) throw new Error(`Unknown server field: ${camel}`);
+  return serverEnvLine(nameUpper, spec, value);
+}
 
 // ── Paths ────────────────────────────────────────────────────────────────────
 // cli/lib/config.ts → cli/lib → cli → <project root>
@@ -191,29 +207,29 @@ export function add_server_to_env(
   const lines: string[] = [];
   lines.push('');
   lines.push(`# Server: ${name}`);
-  lines.push(`SSH_SERVER_${nameUpper}_HOST=${host}`);
-  lines.push(`SSH_SERVER_${nameUpper}_USER=${user}`);
-  lines.push(`SSH_SERVER_${nameUpper}_PORT=${port}`);
+  lines.push(envLineFor(nameUpper, 'host', host));
+  lines.push(envLineFor(nameUpper, 'user', user));
+  lines.push(envLineFor(nameUpper, 'port', port));
 
   if (authType === 'password') {
-    lines.push(`SSH_SERVER_${nameUpper}_PASSWORD=${authValue}`);
+    lines.push(envLineFor(nameUpper, 'password', authValue));
   } else {
-    lines.push(`SSH_SERVER_${nameUpper}_KEYPATH=${authValue}`);
+    lines.push(envLineFor(nameUpper, 'keyPath', authValue));
   }
 
   if (description) {
-    lines.push(`SSH_SERVER_${nameUpper}_DESCRIPTION="${description}"`);
+    lines.push(envLineFor(nameUpper, 'description', description));
   }
 
   // Security mode (v3.5.0+) — only emit non-empty / non-unrestricted values.
   if (mode && mode !== 'unrestricted') {
-    lines.push(`SSH_SERVER_${nameUpper}_MODE=${mode}`);
+    lines.push(envLineFor(nameUpper, 'mode', mode));
   }
   if (allowPatterns) {
-    lines.push(`SSH_SERVER_${nameUpper}_ALLOW_PATTERNS="${allowPatterns}"`);
+    lines.push(envLineFor(nameUpper, 'allowPatterns', allowPatterns));
   }
   if (auditLog) {
-    lines.push(`SSH_SERVER_${nameUpper}_AUDIT_LOG=${auditLog}`);
+    lines.push(envLineFor(nameUpper, 'auditLog', auditLog));
   }
 
   fs.appendFileSync(SSH_MANAGER_ENV, lines.join('\n') + '\n', 'utf8');
@@ -252,19 +268,19 @@ export function update_server_in_env(
   const append: string[] = [];
   append.push('');
   append.push(`# Server: ${name}`);
-  append.push(`SSH_SERVER_${nameUpper}_HOST=${host}`);
-  append.push(`SSH_SERVER_${nameUpper}_USER=${user}`);
-  append.push(`SSH_SERVER_${nameUpper}_PORT=${port}`);
+  append.push(envLineFor(nameUpper, 'host', host));
+  append.push(envLineFor(nameUpper, 'user', user));
+  append.push(envLineFor(nameUpper, 'port', port));
   if (authType === 'password') {
-    append.push(`SSH_SERVER_${nameUpper}_PASSWORD=${authValue}`);
+    append.push(envLineFor(nameUpper, 'password', authValue));
   } else {
-    append.push(`SSH_SERVER_${nameUpper}_KEYPATH=${authValue}`);
+    append.push(envLineFor(nameUpper, 'keyPath', authValue));
   }
   if (description) {
-    append.push(`SSH_SERVER_${nameUpper}_DESCRIPTION="${description}"`);
+    append.push(envLineFor(nameUpper, 'description', description));
   }
   if (defaultDir) {
-    append.push(`SSH_SERVER_${nameUpper}_DEFAULT_DIR=${defaultDir}`);
+    append.push(envLineFor(nameUpper, 'defaultDir', defaultDir));
   }
 
   fs.writeFileSync(SSH_MANAGER_ENV, kept.join('\n') + '\n' + append.join('\n') + '\n', 'utf8');

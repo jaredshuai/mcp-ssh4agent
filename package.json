@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node src/index.js",
     "setup": "npm install",
-    "test": "npm run test:profiles && npm run test:aliases && npm run test:hooks && npm run test:tools && npm run test:policy && npm run test:shellquote && npm run test:ping && npm run test:config && npm run test:fieldnames && npm run test:groups && npm run test:agentforward && npm run test:lifecycle && npm run test:tunnel && npm run test:sync && npm run test:sync-path && npm run test:dbquoting && npm run test:dbinjection && npm run test:dbrowcount",
+    "test": "npm run test:profiles && npm run test:aliases && npm run test:hooks && npm run test:tools && npm run test:policy && npm run test:shellquote && npm run test:ping && npm run test:config && npm run test:fieldnames && npm run test:serverfields && npm run test:groups && npm run test:agentforward && npm run test:lifecycle && npm run test:tunnel && npm run test:sync && npm run test:sync-path && npm run test:dbquoting && npm run test:dbinjection && npm run test:dbrowcount",
     "test:profiles": "node tests/test-profiles.js",
     "test:aliases": "node tests/test-command-aliases.js",
     "test:hooks": "node tests/test-hooks.js",
@@ -21,6 +21,7 @@
     "test:ping": "node tests/test-ssh-ping.js",
     "test:config": "node tests/test-server-config-manager.js",
     "test:fieldnames": "node tests/test-config-field-names.js",
+    "test:serverfields": "tsx tests/test-server-fields.ts",
     "test:groups": "node tests/test-server-groups.js",
     "test:agentforward": "node tests/test-agent-forward.js",
     "test:lifecycle": "node tests/test-lifecycle.js",
