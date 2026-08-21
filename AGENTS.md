@@ -218,6 +218,8 @@ Run `npm run validate` before commits to check:
 
 Install the git hook once with `npm run setup-hooks` to run typecheck + validate automatically before each commit.
 
+CI (GitHub Actions): pushes to `main` run the Tests and Code Quality workflows on Node 24 (`.github/workflows/`). Both also accept `workflow_dispatch`, so they can be triggered manually — `gh workflow run "Tests" --ref main`.
+
 ## AI Agent Integration
 
 This server is MCP-compatible, so any agent that speaks MCP can drive it. Each agent has its own install path — the entry point is always `node src/index.js`; only the registration command differs.
