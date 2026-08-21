@@ -17,9 +17,9 @@
  * (native type stripping, no build step), the CLI through tsx.
  */
 
-export type ServerFieldType = 'string' | 'int' | 'bool' | 'patternList';
+type ServerFieldType = 'string' | 'int' | 'bool' | 'patternList';
 
-export interface ServerFieldSpec {
+interface ServerFieldSpec {
   /** Resolved-config field (camelCase). */
   camel: string;
   /** `.env` key suffix after `SSH_SERVER_<NAME>_`. */

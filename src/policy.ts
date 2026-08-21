@@ -93,7 +93,7 @@ const READONLY_DENY_REGEX: RegExp[] = [
 ];
 
 // The subset of the resolved server config that policy evaluation reads.
-export interface PolicyServerConfig {
+interface PolicyServerConfig {
   name: string;
   mode?: string;
   allowPatterns?: string[];

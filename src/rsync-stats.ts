@@ -48,7 +48,7 @@ export function parseGroupedNumber(raw: string, { allowDecimal = false }: { allo
 }
 
 // Statistics ssh_sync reports; speed only present when rsync printed that line.
-export interface RsyncStats {
+interface RsyncStats {
   filesTransferred: number;
   totalSize: number;
   totalTime: number;
