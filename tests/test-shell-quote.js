@@ -11,11 +11,7 @@
  * (bash CLI era): passwords containing quotes / $() / backticks / semicolons
  * must survive command construction without breaking out of their quoting.
  */
-import {
-  shSingleQuote,
-  buildCdPrefix,
-  buildSudoPipeline,
-} from '../src/shell-quote.ts';
+import { shSingleQuote, buildCdPrefix, buildSudoPipeline } from '../src/shell-quote.ts';
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
@@ -38,7 +34,9 @@ function test(name, fn) {
 
 function assertEqual(actual, expected, message) {
   if (actual !== expected) {
-    throw new Error(`${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`);
+    throw new Error(
+      `${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`
+    );
   }
 }
 
@@ -86,10 +84,11 @@ test('linux prefix with quote in path cannot break out', () => {
 });
 
 test('windows prefix uses Set-Location with doubled quotes', () => {
-  assertEqual(buildCdPrefix('C:\\Program Files\\app', 'windows'),
-    `Set-Location 'C:\\Program Files\\app'; `);
-  assertEqual(buildCdPrefix("C:\\o'brien", 'windows'),
-    `Set-Location 'C:\\o''brien'; `);
+  assertEqual(
+    buildCdPrefix('C:\\Program Files\\app', 'windows'),
+    `Set-Location 'C:\\Program Files\\app'; `
+  );
+  assertEqual(buildCdPrefix("C:\\o'brien", 'windows'), `Set-Location 'C:\\o''brien'; `);
 });
 
 // ── buildSudoPipeline ────────────────────────────────────────────────────────
@@ -133,8 +132,10 @@ for (const pw of NASTY_PASSWORDS) {
     // 3) The masked variant must not contain ANY substring of the password
     //    longer than 2 chars (defence against partial leaks).
     for (let i = 0; i + 3 <= pw.length; i++) {
-      assertFalse(masked.includes(pw.slice(i, i + 3)),
-        `masked output leaks password fragment: ${JSON.stringify(pw.slice(i, i + 3))}`);
+      assertFalse(
+        masked.includes(pw.slice(i, i + 3)),
+        `masked output leaks password fragment: ${JSON.stringify(pw.slice(i, i + 3))}`
+      );
     }
   });
 }

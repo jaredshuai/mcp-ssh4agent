@@ -22,7 +22,7 @@ function parseKnownHostEntry(line) {
     host: parts[0],
     keyType: parts[1],
     key: parts[2],
-    comment: parts.slice(3).join(' ') || ''
+    comment: parts.slice(3).join(' ') || '',
   };
 }
 
@@ -57,7 +57,10 @@ export async function getHostKeyFingerprint(host, port = 22): Promise<HostKeyInf
         return;
       }
 
-      const lines = stdout.trim().split('\n').filter(l => l && !l.startsWith('#'));
+      const lines = stdout
+        .trim()
+        .split('\n')
+        .filter((l) => l && !l.startsWith('#'));
       const fingerprints = [];
 
       for (const line of lines) {
@@ -71,7 +74,7 @@ export async function getHostKeyFingerprint(host, port = 22): Promise<HostKeyInf
             host: entry.host,
             type: entry.keyType,
             fingerprint: `SHA256:${hash}`,
-            fullKey: line
+            fullKey: line,
           });
         }
       }
@@ -130,7 +133,7 @@ export function getCurrentHostKey(host, port = 22) {
           host: entry.host,
           type: entry.keyType,
           fingerprint: `SHA256:${hash}`,
-          fullKey: line
+          fullKey: line,
         });
       }
     }
@@ -173,7 +176,7 @@ export async function addHostKey(host, port = 22, keyData = null) {
       if (fingerprints.length === 0) {
         throw new Error('No host keys found');
       }
-      keyData = fingerprints.map(fp => fp.fullKey).join('\n');
+      keyData = fingerprints.map((fp) => fp.fullKey).join('\n');
     }
 
     // Ensure .ssh directory exists
@@ -241,8 +244,8 @@ export async function hasHostKeyChanged(host, port = 22) {
     return {
       changed: true,
       reason: 'key_mismatch',
-      currentFingerprints: currentKeys.map(k => k.fingerprint),
-      newFingerprints: newKeys.map(k => k.fingerprint)
+      currentFingerprints: currentKeys.map((k) => k.fingerprint),
+      newFingerprints: newKeys.map((k) => k.fingerprint),
     };
   } catch (error) {
     logger.error('Failed to verify host key', { host, port, error: error.message });
@@ -286,13 +289,13 @@ export function listKnownHosts() {
           hosts.set(hostKey, {
             host,
             port,
-            keys: []
+            keys: [],
           });
         }
 
         hosts.get(hostKey).keys.push({
           type: entry.keyType,
-          fingerprint: `SHA256:${hash}`
+          fingerprint: `SHA256:${hash}`,
         });
       }
     }
@@ -313,7 +316,7 @@ export function detectSSHKeyError(stderr) {
     'RSA host key for .* has changed',
     'ED25519 host key for .* has changed',
     'Offending key in',
-    'Add correct host key in'
+    'Add correct host key in',
   ];
 
   for (const pattern of keyErrorPatterns) {
@@ -335,7 +338,7 @@ export function extractHostFromSSHError(stderr) {
     /Host key for \[([^\]]+)\]:(\d+) has changed/i,
     /Host key for ([^\s]+) has changed/i,
     /The authenticity of host '\[([^\]]+)\]:(\d+)'/i,
-    /The authenticity of host '([^\s]+) \(/i
+    /The authenticity of host '([^\s]+) \(/i,
   ];
 
   for (const pattern of patterns) {

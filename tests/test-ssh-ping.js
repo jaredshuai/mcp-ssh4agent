@@ -22,7 +22,9 @@ function test(name, fn) {
 
 function assertEqual(actual, expected, message) {
   if (actual !== expected) {
-    throw new Error(`${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`);
+    throw new Error(
+      `${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`
+    );
   }
 }
 

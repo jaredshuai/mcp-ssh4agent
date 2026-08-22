@@ -9,10 +9,23 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 
 import {
-  BOLD, CYAN, GRAY, GREEN, YELLOW, NC,
-  ARROW, CHECK, LIGHTBULB,
-  print_header, print_subheader, print_info, print_warning, print_error, print_success,
-  prompt_yes_no, question,
+  BOLD,
+  CYAN,
+  GRAY,
+  GREEN,
+  YELLOW,
+  NC,
+  ARROW,
+  CHECK,
+  LIGHTBULB,
+  print_header,
+  print_subheader,
+  print_info,
+  print_warning,
+  print_error,
+  print_success,
+  prompt_yes_no,
+  question,
 } from '../lib/colors.ts';
 
 // Tool configuration file location — matches bash ($HOME/.ssh-manager/...).
@@ -23,25 +36,39 @@ type Group = (typeof GROUPS)[number];
 
 function get_tool_count(group: string): number {
   switch (group) {
-    case 'core': return 5;
-    case 'sessions': return 4;
-    case 'monitoring': return 6;
-    case 'backup': return 4;
-    case 'database': return 4;
-    case 'advanced': return 14;
-    default: return 0;
+    case 'core':
+      return 5;
+    case 'sessions':
+      return 4;
+    case 'monitoring':
+      return 6;
+    case 'backup':
+      return 4;
+    case 'database':
+      return 4;
+    case 'advanced':
+      return 14;
+    default:
+      return 0;
   }
 }
 
 function get_tool_description(group: string): string {
   switch (group) {
-    case 'core': return 'Essential SSH operations (list, execute, upload, download, sync)';
-    case 'sessions': return 'Persistent SSH sessions with state management';
-    case 'monitoring': return 'System health checks, service monitoring, process management, and alerts';
-    case 'backup': return 'Automated backup and restore for databases and files';
-    case 'database': return 'Database operations (MySQL, PostgreSQL, MongoDB)';
-    case 'advanced': return 'Advanced features (deployment, sudo, tunnels, groups, aliases, hooks, profiles)';
-    default: return '';
+    case 'core':
+      return 'Essential SSH operations (list, execute, upload, download, sync)';
+    case 'sessions':
+      return 'Persistent SSH sessions with state management';
+    case 'monitoring':
+      return 'System health checks, service monitoring, process management, and alerts';
+    case 'backup':
+      return 'Automated backup and restore for databases and files';
+    case 'database':
+      return 'Database operations (MySQL, PostgreSQL, MongoDB)';
+    case 'advanced':
+      return 'Advanced features (deployment, sudo, tunnels, groups, aliases, hooks, profiles)';
+    default:
+      return '';
   }
 }
 
@@ -114,7 +141,9 @@ export async function cmd_tools(action?: string, ...rest: string[]): Promise<voi
     default:
       print_error(`Unknown tools command: ${action}`);
       process.stdout.write('\n');
-      process.stdout.write('Available commands: list, configure, enable, disable, reset, export-claude\n');
+      process.stdout.write(
+        'Available commands: list, configure, enable, disable, reset, export-claude\n'
+      );
       process.exitCode = 1;
   }
 }
@@ -163,8 +192,12 @@ export function cmd_tools_list(): void {
   process.stdout.write('\n');
 
   // Header row (matches bash column widths).
-  process.stdout.write(`${BOLD}${'GROUP'.padEnd(12)} ${'STATUS'.padEnd(10)} ${'TOOLS'.padEnd(8)} DESCRIPTION${NC}\n`);
-  process.stdout.write(`${GRAY}${'────────────'.padEnd(12)} ${'──────────'.padEnd(10)} ${'────────'.padEnd(8)} ${'─'.repeat(41)}${NC}\n`);
+  process.stdout.write(
+    `${BOLD}${'GROUP'.padEnd(12)} ${'STATUS'.padEnd(10)} ${'TOOLS'.padEnd(8)} DESCRIPTION${NC}\n`
+  );
+  process.stdout.write(
+    `${GRAY}${'────────────'.padEnd(12)} ${'──────────'.padEnd(10)} ${'────────'.padEnd(8)} ${'─'.repeat(41)}${NC}\n`
+  );
 
   for (const group of GROUPS) {
     let enabled = true;
@@ -196,18 +229,24 @@ export function cmd_tools_list(): void {
     const count = get_tool_count(group);
     const desc = get_tool_description(group);
     // bash: printf "%-12s %s %-8s %-8s %s\n"  (status icon+text inline)
-    process.stdout.write(`${group.padEnd(12)} ${statusIcon} ${statusText} ${String(count).padEnd(8)} ${desc}\n`);
+    process.stdout.write(
+      `${group.padEnd(12)} ${statusIcon} ${statusText} ${String(count).padEnd(8)} ${desc}\n`
+    );
   }
 
   process.stdout.write('\n');
 
   if (mode === 'all') {
-    print_info(`${LIGHTBULB} Tip: Switch to ${CYAN}minimal${NC} mode to reduce context usage by 92%`);
+    print_info(
+      `${LIGHTBULB} Tip: Switch to ${CYAN}minimal${NC} mode to reduce context usage by 92%`
+    );
     process.stdout.write(`        Run: ${CYAN}ssh-manager tools configure${NC}\n`);
   } else if (mode === 'minimal') {
     print_success(`${CHECK} Optimized! Using only 5 core tools (saves ~40k tokens in Claude Code)`);
     process.stdout.write('\n');
-    process.stdout.write(`        To enable more tools: ${CYAN}ssh-manager tools enable <group>${NC}\n`);
+    process.stdout.write(
+      `        To enable more tools: ${CYAN}ssh-manager tools enable <group>${NC}\n`
+    );
   }
 
   process.stdout.write('\n');
@@ -239,14 +278,18 @@ export function cmd_tools_enable(group?: string): void {
   if (!group) {
     print_error('Usage: ssh-manager tools enable <group>');
     process.stdout.write('\n');
-    process.stdout.write('Available groups: core, sessions, monitoring, backup, database, advanced\n');
+    process.stdout.write(
+      'Available groups: core, sessions, monitoring, backup, database, advanced\n'
+    );
     process.exitCode = 1;
     return;
   }
   if (!GROUPS.includes(group as Group)) {
     print_error(`Unknown group: ${group}`);
     process.stdout.write('\n');
-    process.stdout.write('Available groups: core, sessions, monitoring, backup, database, advanced\n');
+    process.stdout.write(
+      'Available groups: core, sessions, monitoring, backup, database, advanced\n'
+    );
     process.exitCode = 1;
     return;
   }
@@ -375,13 +418,17 @@ export async function cmd_tools_configure(): Promise<void> {
   print_header('Tool Configuration Wizard');
 
   process.stdout.write('\n');
-  process.stdout.write(`MCP SSH Manager has ${BOLD}37 tools${NC} organized into ${BOLD}6 groups${NC}:\n`);
+  process.stdout.write(
+    `MCP SSH Manager has ${BOLD}37 tools${NC} organized into ${BOLD}6 groups${NC}:\n`
+  );
   process.stdout.write('\n');
 
   for (const group of GROUPS) {
     const count = get_tool_count(group);
     const desc = get_tool_description(group);
-    process.stdout.write(`  ${CYAN}${group.padEnd(12)}${NC} (${String(count).padStart(2)} tools) - ${desc}\n`);
+    process.stdout.write(
+      `  ${CYAN}${group.padEnd(12)}${NC} (${String(count).padStart(2)} tools) - ${desc}\n`
+    );
   }
 
   process.stdout.write('\n');
@@ -427,7 +474,9 @@ export async function cmd_tools_configure(): Promise<void> {
     print_success(`Configuration saved: ${YELLOW}Minimal mode${NC} (5 tools)`);
     process.stdout.write('\n');
     process.stdout.write(`  ${GREEN}Context savings:${NC} ~40k tokens (92% reduction)\n`);
-    process.stdout.write(`  ${GREEN}Enabled tools:${NC} ssh_list_servers, ssh_execute, ssh_upload, ssh_download, ssh_sync\n`);
+    process.stdout.write(
+      `  ${GREEN}Enabled tools:${NC} ssh_list_servers, ssh_execute, ssh_upload, ssh_download, ssh_sync\n`
+    );
   } else if (modeChoice === '3') {
     process.stdout.write('\n');
     print_subheader('Group Selection');
@@ -435,12 +484,33 @@ export async function cmd_tools_configure(): Promise<void> {
     process.stdout.write(`${BOLD}Core${NC} group is always enabled. Choose additional groups:\n`);
     process.stdout.write('\n');
 
-    let sessions = false, monitoring = false, backup = false, database = false, advanced = false;
-    if (await prompt_yes_no(`${CYAN}sessions${NC} group? (4 tools - persistent SSH sessions)`, 'n')) sessions = true;
-    if (await prompt_yes_no(`${CYAN}monitoring${NC} group? (6 tools - health checks, service monitoring)`, 'n')) monitoring = true;
-    if (await prompt_yes_no(`${CYAN}backup${NC} group? (4 tools - database and file backups)`, 'n')) backup = true;
-    if (await prompt_yes_no(`${CYAN}database${NC} group? (4 tools - MySQL, PostgreSQL, MongoDB)`, 'n')) database = true;
-    if (await prompt_yes_no(`${CYAN}advanced${NC} group? (14 tools - deployment, sudo, tunnels, etc)`, 'n')) advanced = true;
+    let sessions = false,
+      monitoring = false,
+      backup = false,
+      database = false,
+      advanced = false;
+    if (await prompt_yes_no(`${CYAN}sessions${NC} group? (4 tools - persistent SSH sessions)`, 'n'))
+      sessions = true;
+    if (
+      await prompt_yes_no(
+        `${CYAN}monitoring${NC} group? (6 tools - health checks, service monitoring)`,
+        'n'
+      )
+    )
+      monitoring = true;
+    if (await prompt_yes_no(`${CYAN}backup${NC} group? (4 tools - database and file backups)`, 'n'))
+      backup = true;
+    if (
+      await prompt_yes_no(`${CYAN}database${NC} group? (4 tools - MySQL, PostgreSQL, MongoDB)`, 'n')
+    )
+      database = true;
+    if (
+      await prompt_yes_no(
+        `${CYAN}advanced${NC} group? (14 tools - deployment, sudo, tunnels, etc)`,
+        'n'
+      )
+    )
+      advanced = true;
 
     const config = {
       version: '1.0',
@@ -519,14 +589,43 @@ export function cmd_tools_export_claude(): void {
   let tools: string[] = [];
   if (mode === 'all') {
     tools = [
-      'ssh_list_servers', 'ssh_execute', 'ssh_upload', 'ssh_download', 'ssh_sync',
-      'ssh_session_start', 'ssh_session_send', 'ssh_session_list', 'ssh_session_close',
-      'ssh_health_check', 'ssh_service_status', 'ssh_process_manager', 'ssh_monitor', 'ssh_tail', 'ssh_alert_setup',
-      'ssh_backup_create', 'ssh_backup_list', 'ssh_backup_restore', 'ssh_backup_schedule',
-      'ssh_db_dump', 'ssh_db_import', 'ssh_db_list', 'ssh_db_query',
-      'ssh_deploy', 'ssh_execute_sudo', 'ssh_alias', 'ssh_command_alias', 'ssh_hooks', 'ssh_profile',
-      'ssh_connection_status', 'ssh_tunnel_create', 'ssh_tunnel_list', 'ssh_tunnel_close',
-      'ssh_key_manage', 'ssh_execute_group', 'ssh_group_manage', 'ssh_history',
+      'ssh_list_servers',
+      'ssh_execute',
+      'ssh_upload',
+      'ssh_download',
+      'ssh_sync',
+      'ssh_session_start',
+      'ssh_session_send',
+      'ssh_session_list',
+      'ssh_session_close',
+      'ssh_health_check',
+      'ssh_service_status',
+      'ssh_process_manager',
+      'ssh_monitor',
+      'ssh_tail',
+      'ssh_alert_setup',
+      'ssh_backup_create',
+      'ssh_backup_list',
+      'ssh_backup_restore',
+      'ssh_backup_schedule',
+      'ssh_db_dump',
+      'ssh_db_import',
+      'ssh_db_list',
+      'ssh_db_query',
+      'ssh_deploy',
+      'ssh_execute_sudo',
+      'ssh_alias',
+      'ssh_command_alias',
+      'ssh_hooks',
+      'ssh_profile',
+      'ssh_connection_status',
+      'ssh_tunnel_create',
+      'ssh_tunnel_list',
+      'ssh_tunnel_close',
+      'ssh_key_manage',
+      'ssh_execute_group',
+      'ssh_group_manage',
+      'ssh_history',
     ];
   } else if (mode === 'minimal') {
     tools = ['ssh_list_servers', 'ssh_execute', 'ssh_upload', 'ssh_download', 'ssh_sync'];
@@ -537,24 +636,49 @@ export function cmd_tools_export_claude(): void {
       tools.push('ssh_session_start', 'ssh_session_send', 'ssh_session_list', 'ssh_session_close');
     }
     if (groupEnabled(config, 'monitoring')) {
-      tools.push('ssh_health_check', 'ssh_service_status', 'ssh_process_manager', 'ssh_monitor', 'ssh_tail', 'ssh_alert_setup');
+      tools.push(
+        'ssh_health_check',
+        'ssh_service_status',
+        'ssh_process_manager',
+        'ssh_monitor',
+        'ssh_tail',
+        'ssh_alert_setup'
+      );
     }
     if (groupEnabled(config, 'backup')) {
-      tools.push('ssh_backup_create', 'ssh_backup_list', 'ssh_backup_restore', 'ssh_backup_schedule');
+      tools.push(
+        'ssh_backup_create',
+        'ssh_backup_list',
+        'ssh_backup_restore',
+        'ssh_backup_schedule'
+      );
     }
     if (groupEnabled(config, 'database')) {
       tools.push('ssh_db_dump', 'ssh_db_import', 'ssh_db_list', 'ssh_db_query');
     }
     if (groupEnabled(config, 'advanced')) {
       tools.push(
-        'ssh_deploy', 'ssh_execute_sudo', 'ssh_alias', 'ssh_command_alias', 'ssh_hooks', 'ssh_profile',
-        'ssh_connection_status', 'ssh_tunnel_create', 'ssh_tunnel_list', 'ssh_tunnel_close',
-        'ssh_key_manage', 'ssh_execute_group', 'ssh_group_manage', 'ssh_history',
+        'ssh_deploy',
+        'ssh_execute_sudo',
+        'ssh_alias',
+        'ssh_command_alias',
+        'ssh_hooks',
+        'ssh_profile',
+        'ssh_connection_status',
+        'ssh_tunnel_create',
+        'ssh_tunnel_list',
+        'ssh_tunnel_close',
+        'ssh_key_manage',
+        'ssh_execute_group',
+        'ssh_group_manage',
+        'ssh_history'
       );
     }
   }
 
-  process.stdout.write(`Add this to your ${CYAN}~/.config/claude-code/claude_code_config.json${NC}:\n`);
+  process.stdout.write(
+    `Add this to your ${CYAN}~/.config/claude-code/claude_code_config.json${NC}:\n`
+  );
   process.stdout.write('\n');
   process.stdout.write(`${GRAY}${'─'.repeat(60)}${NC}\n`);
   process.stdout.write('{\n');
@@ -572,7 +696,11 @@ export function cmd_tools_export_claude(): void {
   process.stdout.write('\n');
   print_info(`Copy the ${CYAN}autoApprove${NC} section above into your Claude Code config\n`);
   process.stdout.write('\n');
-  process.stdout.write(`  ${BOLD}Config location:${NC} ~/.config/claude-code/claude_code_config.json\n`);
-  process.stdout.write(`  ${BOLD}Enabled tools:${NC} ${tools.length} tools will be auto-approved\n`);
+  process.stdout.write(
+    `  ${BOLD}Config location:${NC} ~/.config/claude-code/claude_code_config.json\n`
+  );
+  process.stdout.write(
+    `  ${BOLD}Enabled tools:${NC} ${tools.length} tools will be auto-approved\n`
+  );
   process.stdout.write('\n');
 }

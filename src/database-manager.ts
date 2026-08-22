@@ -7,12 +7,12 @@
 export const DB_TYPES = {
   MYSQL: 'mysql',
   POSTGRESQL: 'postgresql',
-  MONGODB: 'mongodb'
+  MONGODB: 'mongodb',
 };
 
 // A single quote character as a constant, so shellQuote()'s escaping stays
 // readable under the repo's single-quote lint style.
-const SQ = '\'';
+const SQ = "'";
 
 /**
  * Quote a value for safe inclusion as a single POSIX shell word.
@@ -44,7 +44,7 @@ export function buildMySQLDumpCommand(options) {
     port = 3306,
     outputFile,
     compress = true,
-    tables = null
+    tables = null,
   } = options;
 
   let command = 'mysqldump';
@@ -82,7 +82,7 @@ export function buildPostgreSQLDumpCommand(options) {
     port = 5432,
     outputFile,
     compress = true,
-    tables = null
+    tables = null,
   } = options;
 
   let command = '';
@@ -125,7 +125,7 @@ export function buildMongoDBDumpCommand(options) {
     port = 27017,
     outputDir,
     compress = true,
-    collections = null
+    collections = null,
   } = options;
 
   let command = 'mongodump';
@@ -155,14 +155,7 @@ export function buildMongoDBDumpCommand(options) {
  * Build MySQL import command
  */
 export function buildMySQLImportCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 3306,
-    inputFile
-  } = options;
+  const { database, user, password, host = 'localhost', port = 3306, inputFile } = options;
 
   let command = '';
 
@@ -186,14 +179,7 @@ export function buildMySQLImportCommand(options) {
  * Build PostgreSQL import command
  */
 export function buildPostgreSQLImportCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 5432,
-    inputFile
-  } = options;
+  const { database, user, password, host = 'localhost', port = 5432, inputFile } = options;
 
   let command = '';
   if (password) {
@@ -220,14 +206,7 @@ export function buildPostgreSQLImportCommand(options) {
  * Build MongoDB restore command
  */
 export function buildMongoDBRestoreCommand(options) {
-  const {
-    user,
-    password,
-    host = 'localhost',
-    port = 27017,
-    inputPath,
-    drop = true
-  } = options;
+  const { user, password, host = 'localhost', port = 27017, inputPath, drop = true } = options;
 
   let command = '';
 
@@ -305,7 +284,8 @@ export function buildPostgreSQLListDatabasesCommand(options) {
   if (user) command += ` -U ${shellQuote(user)}`;
   if (host) command += ` -h ${shellQuote(host)}`;
   if (port) command += ` -p ${shellQuote(port)}`;
-  command += ' -t -c "SELECT datname FROM pg_database WHERE datistemplate = false;" | sed \'/^$/d\' | sed \'s/^[ \\t]*//\'';
+  command +=
+    " -t -c \"SELECT datname FROM pg_database WHERE datistemplate = false;\" | sed '/^$/d' | sed 's/^[ \\t]*//'";
 
   return command;
 }
@@ -326,7 +306,8 @@ export function buildPostgreSQLListTablesCommand(options) {
   if (host) command += ` -h ${shellQuote(host)}`;
   if (port) command += ` -p ${shellQuote(port)}`;
   command += ` -d ${shellQuote(database)}`;
-  command += ' -t -c "SELECT tablename FROM pg_tables WHERE schemaname = \'public\';" | sed \'/^$/d\' | sed \'s/^[ \\t]*//\'';
+  command +=
+    " -t -c \"SELECT tablename FROM pg_tables WHERE schemaname = 'public';\" | sed '/^$/d' | sed 's/^[ \\t]*//'";
 
   return command;
 }
@@ -342,7 +323,8 @@ export function buildMongoDBListDatabasesCommand(options) {
   if (port) command += ` --port ${shellQuote(port)}`;
   if (user) command += ` --username ${shellQuote(user)}`;
   if (password) command += ` --password ${shellQuote(password)}`;
-  command += ' --quiet --eval "db.adminCommand(\'listDatabases\').databases.forEach(function(d){print(d.name)})"';
+  command +=
+    ' --quiet --eval "db.adminCommand(\'listDatabases\').databases.forEach(function(d){print(d.name)})"';
 
   return command;
 }
@@ -393,7 +375,7 @@ export function buildMongoDBListCollectionsCommand(options) {
  */
 export function buildHeredoc(body, { delimiter = '__MCP_SQL_EOF__', pipeline = '' } = {}) {
   const text = body == null ? '' : String(body);
-  if (text.split('\n').some(line => line === delimiter)) {
+  if (text.split('\n').some((line) => line === delimiter)) {
     throw new Error(`Query contains the heredoc delimiter "${delimiter}" on its own line`);
   }
   const suffix = pipeline ? ` ${pipeline}` : '';
@@ -404,7 +386,15 @@ export function buildHeredoc(body, { delimiter = '__MCP_SQL_EOF__', pipeline = '
  * Build MySQL query command (SELECT only)
  */
 export function buildMySQLQueryCommand(options) {
-  const { database, query, user, password, host = 'localhost', port = 3306, format = 'json' } = options;
+  const {
+    database,
+    query,
+    user,
+    password,
+    host = 'localhost',
+    port = 3306,
+    format = 'json',
+  } = options;
 
   // Validate query is SELECT only
   if (!isSafeQuery(query)) {
@@ -424,7 +414,8 @@ export function buildMySQLQueryCommand(options) {
   if (format === 'json') {
     // Use JSON output if MySQL 5.7.8+. The awk pipe stays on the heredoc opening line so
     // the terminator remains alone on its own line.
-    const awk = 'awk \'BEGIN{print "["} {if(NR>1)print ","; printf "{\\"row\\":%d,\\"data\\":\\"%s\\"}", NR, $0} END{print "]"}\'';
+    const awk =
+      'awk \'BEGIN{print "["} {if(NR>1)print ","; printf "{\\"row\\":%d,\\"data\\":\\"%s\\"}", NR, $0} END{print "]"}\'';
     command += ` --batch --skip-column-names${buildHeredoc(query, { pipeline: `| ${awk}` })}`;
   } else {
     command += buildHeredoc(query);
@@ -494,8 +485,17 @@ export function isSafeQuery(query) {
 
   // Block dangerous keywords
   const dangerousKeywords = [
-    'insert', 'update', 'delete', 'drop', 'create', 'alter',
-    'truncate', 'grant', 'revoke', 'exec', 'execute'
+    'insert',
+    'update',
+    'delete',
+    'drop',
+    'create',
+    'alter',
+    'truncate',
+    'grant',
+    'revoke',
+    'exec',
+    'execute',
   ];
 
   for (const keyword of dangerousKeywords) {
@@ -535,10 +535,10 @@ export function countQueryRows(output, type, format = 'json') {
     if (format === 'json') {
       // The awk wrapper emits exactly one `{"row":N,...}` entry per result row, anchored
       // at the start of its own line, bracketed by cosmetic `[` / `]` lines.
-      return lines.filter(line => /^\{"row":\d+,/.test(line)).length;
+      return lines.filter((line) => /^\{"row":\d+,/.test(line)).length;
     }
     // Tabular `--batch` output: one row per non-empty line (column names are suppressed).
-    return lines.filter(line => line.trim() !== '').length;
+    return lines.filter((line) => line.trim() !== '').length;
   }
 
   if (type === DB_TYPES.POSTGRESQL) {
@@ -549,7 +549,7 @@ export function countQueryRows(output, type, format = 'json') {
     }
     // Otherwise fall back to the data lines, dropping the column-header line, the
     // `---+---` separator, and any `(N rows)` footer line.
-    const dataLines = lines.filter(line => {
+    const dataLines = lines.filter((line) => {
       const trimmed = line.trim();
       return trimmed !== '' && !/^[-+\s]+$/.test(trimmed) && !/^\(\d+\s+rows?\)$/.test(trimmed);
     });
@@ -558,21 +558,24 @@ export function countQueryRows(output, type, format = 'json') {
 
   if (type === DB_TYPES.MONGODB) {
     // `printjson` closes each document with a `}` at column 0 — one per document.
-    return lines.filter(line => line === '}').length;
+    return lines.filter((line) => line === '}').length;
   }
 
   // Unknown type: best-effort non-empty line count.
-  return lines.filter(line => line.trim() !== '').length;
+  return lines.filter((line) => line.trim() !== '').length;
 }
 
 /**
  * Parse database list output
  */
 export function parseDatabaseList(output, type) {
-  const lines = output.trim().split('\n').filter(l => l.trim());
+  const lines = output
+    .trim()
+    .split('\n')
+    .filter((l) => l.trim());
 
   // Filter out system databases
-  return lines.filter(db => {
+  return lines.filter((db) => {
     const dbLower = db.toLowerCase();
     if (type === DB_TYPES.MYSQL) {
       return !['information_schema', 'performance_schema', 'mysql', 'sys'].includes(dbLower);
@@ -589,7 +592,10 @@ export function parseDatabaseList(output, type) {
  * Parse table/collection list output
  */
 export function parseTableList(output) {
-  return output.trim().split('\n').filter(l => l.trim());
+  return output
+    .trim()
+    .split('\n')
+    .filter((l) => l.trim());
 }
 
 /**

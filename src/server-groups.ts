@@ -16,9 +16,9 @@ const GROUPS_FILE = path.join(__dirname, '..', '.server-groups.json');
 
 // Group execution strategies
 const EXECUTION_STRATEGIES = {
-  PARALLEL: 'parallel',      // Execute on all servers at once
-  SEQUENTIAL: 'sequential',  // Execute one by one
-  ROLLING: 'rolling'        // Execute with delay between servers
+  PARALLEL: 'parallel', // Execute on all servers at once
+  SEQUENTIAL: 'sequential', // Execute one by one
+  ROLLING: 'rolling', // Execute with delay between servers
 };
 
 export class ServerGroups {
@@ -27,16 +27,17 @@ export class ServerGroups {
   // Group shapes vary (stored vs dynamic vs config-derived); keep loose.
   groups: Record<string, any>;
 
-  constructor(options: {
-    groupsFile?: string;
-    serverConfigProvider?: (() => Record<string, any>) | null;
-  } = {}) {
+  constructor(
+    options: {
+      groupsFile?: string;
+      serverConfigProvider?: (() => Record<string, any>) | null;
+    } = {}
+  ) {
     // Both options exist so this class can be instantiated in isolation (tests,
     // embedding). The exported singleton below keeps the historical defaults.
     this.groupsFile = options.groupsFile || GROUPS_FILE;
-    this.serverConfigProvider = typeof options.serverConfigProvider === 'function'
-      ? options.serverConfigProvider
-      : null;
+    this.serverConfigProvider =
+      typeof options.serverConfigProvider === 'function' ? options.serverConfigProvider : null;
     this.groups = this.loadGroups();
   }
 
@@ -72,8 +73,8 @@ export class ServerGroups {
       all: {
         description: 'All configured servers',
         servers: [],
-        dynamic: true  // Will be populated from server config
-      }
+        dynamic: true, // Will be populated from server config
+      },
     };
   }
 
@@ -105,18 +106,18 @@ export class ServerGroups {
         description: 'Production servers',
         servers: [],
         strategy: EXECUTION_STRATEGIES.ROLLING,
-        delay: 5000  // 5 seconds between servers
+        delay: 5000, // 5 seconds between servers
       },
       staging: {
         description: 'Staging/test servers',
         servers: [],
-        strategy: EXECUTION_STRATEGIES.PARALLEL
+        strategy: EXECUTION_STRATEGIES.PARALLEL,
       },
       development: {
         description: 'Development servers',
         servers: [],
-        strategy: EXECUTION_STRATEGIES.PARALLEL
-      }
+        strategy: EXECUTION_STRATEGIES.PARALLEL,
+      },
     };
   }
 
@@ -201,7 +202,7 @@ export class ServerGroups {
         servers: derivedMembers,
         strategy: EXECUTION_STRATEGIES.PARALLEL,
         dynamic: true,
-        fromConfig: true
+        fromConfig: true,
       };
     }
 
@@ -209,7 +210,7 @@ export class ServerGroups {
     if (groupName === 'all' && group.dynamic) {
       return {
         ...group,
-        servers: this.getAllServers()
+        servers: this.getAllServers(),
       };
     }
 
@@ -220,7 +221,7 @@ export class ServerGroups {
     return {
       ...group,
       servers: this.resolveMembers(groupName, group.servers, derived),
-      fromConfig: true
+      fromConfig: true,
     };
   }
 
@@ -236,7 +237,7 @@ export class ServerGroups {
       if (this.getConfigGroups().has(groupName)) {
         throw new Error(
           `Group '${name}' comes from the 'group' field of your SSH server configuration and cannot be edited here. ` +
-          'Change the group of the servers themselves in your .env/TOML config, or use a different group name.'
+            'Change the group of the servers themselves in your .env/TOML config, or use a different group name.'
         );
       }
 
@@ -256,7 +257,7 @@ export class ServerGroups {
   getAllServers() {
     const configured = Object.keys(this.getServerConfigs());
     if (configured.length > 0) {
-      return configured.map(name => name.toLowerCase());
+      return configured.map((name) => name.toLowerCase());
     }
 
     // No provider injected: fall back to scanning the environment. This only
@@ -276,13 +277,17 @@ export class ServerGroups {
   /**
    * Create a new group
    */
-  createGroup(name, servers = [], options: {
-    overwrite?: boolean;
-    description?: string;
-    strategy?: string;
-    delay?: number;
-    stopOnError?: boolean;
-  } = {}) {
+  createGroup(
+    name,
+    servers = [],
+    options: {
+      overwrite?: boolean;
+      description?: string;
+      strategy?: string;
+      delay?: number;
+      stopOnError?: boolean;
+    } = {}
+  ) {
     const groupName = name.toLowerCase();
 
     if (this.groups[groupName] && !options.overwrite) {
@@ -295,7 +300,7 @@ export class ServerGroups {
       strategy: options.strategy || EXECUTION_STRATEGIES.PARALLEL,
       delay: options.delay || 0,
       stopOnError: options.stopOnError || false,
-      created: new Date().toISOString()
+      created: new Date().toISOString(),
     };
 
     this.saveGroups();
@@ -303,7 +308,7 @@ export class ServerGroups {
     logger.info('Server group created', {
       name: groupName,
       servers: servers.length,
-      strategy: this.groups[groupName].strategy
+      strategy: this.groups[groupName].strategy,
     });
 
     return this.groups[groupName];
@@ -339,7 +344,7 @@ export class ServerGroups {
 
     logger.info('Server group updated', {
       name: groupName,
-      updates: Object.keys(updates)
+      updates: Object.keys(updates),
     });
 
     return group;
@@ -369,7 +374,7 @@ export class ServerGroups {
 
     // Add servers (avoid duplicates)
     const currentServers = new Set(group.servers);
-    servers.forEach(server => currentServers.add(server.toLowerCase()));
+    servers.forEach((server) => currentServers.add(server.toLowerCase()));
     group.servers = Array.from(currentServers);
 
     this.saveGroups();
@@ -377,7 +382,7 @@ export class ServerGroups {
     logger.info('Servers added to group', {
       group: groupName,
       added: servers.length,
-      total: group.servers.length
+      total: group.servers.length,
     });
 
     return group;
@@ -391,15 +396,15 @@ export class ServerGroups {
     const group = this.getMutableGroup(name, 'modify');
 
     // Remove servers
-    const toRemove = new Set(servers.map(s => s.toLowerCase()));
-    group.servers = group.servers.filter(s => !toRemove.has(s));
+    const toRemove = new Set(servers.map((s) => s.toLowerCase()));
+    group.servers = group.servers.filter((s) => !toRemove.has(s));
 
     this.saveGroups();
 
     logger.info('Servers removed from group', {
       group: groupName,
       removed: servers.length,
-      remaining: group.servers.length
+      remaining: group.servers.length,
     });
 
     return group;
@@ -414,16 +419,17 @@ export class ServerGroups {
 
     for (const [name, group] of Object.entries(this.groups)) {
       // Populate dynamic groups
-      const servers = group.dynamic && name === 'all'
-        ? this.getAllServers()
-        : this.resolveMembers(name, group.servers, derived);
+      const servers =
+        group.dynamic && name === 'all'
+          ? this.getAllServers()
+          : this.resolveMembers(name, group.servers, derived);
 
       groups.push({
         name,
         ...group,
         servers,
         serverCount: servers.length,
-        ...((derived.get(name) || []).length > 0 ? { fromConfig: true } : {})
+        ...((derived.get(name) || []).length > 0 ? { fromConfig: true } : {}),
       });
     }
 
@@ -438,7 +444,7 @@ export class ServerGroups {
         serverCount: servers.length,
         strategy: EXECUTION_STRATEGIES.PARALLEL,
         dynamic: true,
-        fromConfig: true
+        fromConfig: true,
       });
     }
 
@@ -448,7 +454,11 @@ export class ServerGroups {
   /**
    * Execute command on group with strategy
    */
-  async executeOnGroup(groupName, executor, options: { strategy?: string; delay?: number; stopOnError?: boolean } = {}) {
+  async executeOnGroup(
+    groupName,
+    executor,
+    options: { strategy?: string; delay?: number; stopOnError?: boolean } = {}
+  ) {
     const group = this.getGroup(groupName);
     const results = [];
     const strategy = options.strategy || group.strategy || EXECUTION_STRATEGIES.PARALLEL;
@@ -459,66 +469,66 @@ export class ServerGroups {
       group: groupName,
       servers: group.servers.length,
       strategy,
-      delay
+      delay,
     });
 
     switch (strategy) {
-    case EXECUTION_STRATEGIES.PARALLEL: {
-      // Execute on all servers simultaneously
-      const promises = group.servers.map(async (server) => {
-        try {
-          const result = await executor(server);
-          return { server, success: true, result };
-        } catch (error) {
-          logger.error(`Execution failed on ${server}`, { error: error.message });
-          return { server, success: false, error: error.message };
-        }
-      });
-
-      const parallelResults = await Promise.all(promises);
-      results.push(...parallelResults);
-      break;
-    }
-
-    case EXECUTION_STRATEGIES.SEQUENTIAL:
-    case EXECUTION_STRATEGIES.ROLLING:
-      // Execute one by one
-      for (const server of group.servers) {
-        try {
-          const result = await executor(server);
-          results.push({ server, success: true, result });
-
-          // Add delay for rolling strategy
-          if (strategy === EXECUTION_STRATEGIES.ROLLING && delay > 0) {
-            logger.debug(`Waiting ${delay}ms before next server`);
-            await new Promise(resolve => setTimeout(resolve, delay));
+      case EXECUTION_STRATEGIES.PARALLEL: {
+        // Execute on all servers simultaneously
+        const promises = group.servers.map(async (server) => {
+          try {
+            const result = await executor(server);
+            return { server, success: true, result };
+          } catch (error) {
+            logger.error(`Execution failed on ${server}`, { error: error.message });
+            return { server, success: false, error: error.message };
           }
-        } catch (error) {
-          logger.error(`Execution failed on ${server}`, { error: error.message });
-          results.push({ server, success: false, error: error.message });
+        });
 
-          // Stop on error if configured
-          if (stopOnError) {
-            logger.warn('Stopping execution due to error', { server });
-            break;
-          }
-        }
+        const parallelResults = await Promise.all(promises);
+        results.push(...parallelResults);
+        break;
       }
-      break;
 
-    default:
-      throw new Error(`Unknown execution strategy: ${strategy}`);
+      case EXECUTION_STRATEGIES.SEQUENTIAL:
+      case EXECUTION_STRATEGIES.ROLLING:
+        // Execute one by one
+        for (const server of group.servers) {
+          try {
+            const result = await executor(server);
+            results.push({ server, success: true, result });
+
+            // Add delay for rolling strategy
+            if (strategy === EXECUTION_STRATEGIES.ROLLING && delay > 0) {
+              logger.debug(`Waiting ${delay}ms before next server`);
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+          } catch (error) {
+            logger.error(`Execution failed on ${server}`, { error: error.message });
+            results.push({ server, success: false, error: error.message });
+
+            // Stop on error if configured
+            if (stopOnError) {
+              logger.warn('Stopping execution due to error', { server });
+              break;
+            }
+          }
+        }
+        break;
+
+      default:
+        throw new Error(`Unknown execution strategy: ${strategy}`);
     }
 
     // Summary
-    const successful = results.filter(r => r.success).length;
-    const failed = results.filter(r => !r.success).length;
+    const successful = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
 
     logger.info('Group execution completed', {
       group: groupName,
       successful,
       failed,
-      total: results.length
+      total: results.length,
     });
 
     return {
@@ -528,8 +538,8 @@ export class ServerGroups {
       summary: {
         total: results.length,
         successful,
-        failed
-      }
+        failed,
+      },
     };
   }
 }
@@ -540,10 +550,12 @@ const serverGroups = new ServerGroups();
 // Export convenience functions
 export const setServerConfigProvider = (provider) => serverGroups.setServerConfigProvider(provider);
 export const getGroup = (name) => serverGroups.getGroup(name);
-export const createGroup = (name, servers, options) => serverGroups.createGroup(name, servers, options);
+export const createGroup = (name, servers, options) =>
+  serverGroups.createGroup(name, servers, options);
 export const updateGroup = (name, updates) => serverGroups.updateGroup(name, updates);
 export const deleteGroup = (name) => serverGroups.deleteGroup(name);
 export const addServersToGroup = (name, servers) => serverGroups.addServers(name, servers);
 export const removeServersFromGroup = (name, servers) => serverGroups.removeServers(name, servers);
 export const listGroups = () => serverGroups.listGroups();
-export const executeOnGroup = (name, executor, options) => serverGroups.executeOnGroup(name, executor, options);
+export const executeOnGroup = (name, executor, options) =>
+  serverGroups.executeOnGroup(name, executor, options);

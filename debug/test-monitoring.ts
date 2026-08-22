@@ -20,21 +20,22 @@ console.log('');
 const TEST_LOG = path.join(os.tmpdir(), 'test-app.log');
 console.log(`Creating test log file at ${TEST_LOG}...`);
 
-const sampleLog = [
-  '2025-09-05 10:00:00 [INFO] Application started',
-  '2025-09-05 10:00:01 [DEBUG] Loading configuration',
-  '2025-09-05 10:00:02 [INFO] Database connection established',
-  '2025-09-05 10:00:03 [ERROR] Failed to connect to cache server',
-  '2025-09-05 10:00:04 [WARN] Retrying cache connection...',
-  '2025-09-05 10:00:05 [INFO] Cache connected on retry',
-  '2025-09-05 10:00:06 [INFO] Starting web server on port 3000',
-  '2025-09-05 10:00:07 [DEBUG] Routes registered',
-  '2025-09-05 10:00:08 [INFO] Server ready',
-  '2025-09-05 10:00:09 [INFO] Received request: GET /api/status',
-  '2025-09-05 10:00:10 [ERROR] Unhandled exception in /api/users',
-  '2025-09-05 10:00:11 [WARN] High memory usage detected: 85%',
-  '2025-09-05 10:00:12 [INFO] Request completed: 200 OK',
-].join('\n') + '\n';
+const sampleLog =
+  [
+    '2025-09-05 10:00:00 [INFO] Application started',
+    '2025-09-05 10:00:01 [DEBUG] Loading configuration',
+    '2025-09-05 10:00:02 [INFO] Database connection established',
+    '2025-09-05 10:00:03 [ERROR] Failed to connect to cache server',
+    '2025-09-05 10:00:04 [WARN] Retrying cache connection...',
+    '2025-09-05 10:00:05 [INFO] Cache connected on retry',
+    '2025-09-05 10:00:06 [INFO] Starting web server on port 3000',
+    '2025-09-05 10:00:07 [DEBUG] Routes registered',
+    '2025-09-05 10:00:08 [INFO] Server ready',
+    '2025-09-05 10:00:09 [INFO] Received request: GET /api/status',
+    '2025-09-05 10:00:10 [ERROR] Unhandled exception in /api/users',
+    '2025-09-05 10:00:11 [WARN] High memory usage detected: 85%',
+    '2025-09-05 10:00:12 [INFO] Request completed: 200 OK',
+  ].join('\n') + '\n';
 fs.writeFileSync(TEST_LOG, sampleLog, 'utf8');
 
 ok('Test log created with sample data');
@@ -43,10 +44,14 @@ console.log('📋 Test Commands for ssh_tail:');
 console.log('===============================');
 console.log('');
 console.log('# Tail last 5 lines (no follow)');
-console.log(`ssh_tail server:"test-server" file:"${TEST_LOG.replace(/\\/g, '/')}" lines:5 follow:false`);
+console.log(
+  `ssh_tail server:"test-server" file:"${TEST_LOG.replace(/\\/g, '/')}" lines:5 follow:false`
+);
 console.log('');
 console.log('# Tail and filter for ERROR messages only');
-console.log(`ssh_tail server:"test-server" file:"${TEST_LOG.replace(/\\/g, '/')}" grep:"ERROR" follow:false`);
+console.log(
+  `ssh_tail server:"test-server" file:"${TEST_LOG.replace(/\\/g, '/')}" grep:"ERROR" follow:false`
+);
 console.log('');
 console.log('# Follow log in real-time (will stream to stderr)');
 console.log('ssh_tail server:"test-server" file:"/var/log/syslog" lines:10 follow:true');

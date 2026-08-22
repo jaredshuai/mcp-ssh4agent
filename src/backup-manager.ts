@@ -14,7 +14,7 @@ export const BACKUP_TYPES = {
   POSTGRESQL: 'postgresql',
   MONGODB: 'mongodb',
   FILES: 'files',
-  FULL: 'full'
+  FULL: 'full',
 };
 
 // Default backup directory
@@ -55,7 +55,7 @@ export function buildMySQLDumpCommand(options) {
     port = 3306,
     outputFile,
     singleTransaction = true,
-    compress = true
+    compress = true,
   } = options;
 
   let command = 'mysqldump';
@@ -94,7 +94,7 @@ export function buildPostgreSQLDumpCommand(options) {
     host = 'localhost',
     port = 5432,
     outputFile,
-    compress = true
+    compress = true,
   } = options;
 
   // PostgreSQL uses PGPASSWORD environment variable
@@ -137,7 +137,7 @@ export function buildMongoDBDumpCommand(options) {
     host = 'localhost',
     port = 27017,
     outputDir,
-    compress = true
+    compress = true,
   } = options;
 
   let command = 'mongodump';
@@ -168,12 +168,7 @@ export function buildMongoDBDumpCommand(options) {
  * Build files backup command (tar + gzip)
  */
 export function buildFilesBackupCommand(options) {
-  const {
-    paths,
-    outputFile,
-    exclude = [],
-    compress = true
-  } = options;
+  const { paths, outputFile, exclude = [], compress = true } = options;
 
   if (!Array.isArray(paths) || paths.length === 0) {
     throw new Error('paths must be a non-empty array');
@@ -197,7 +192,7 @@ export function buildFilesBackupCommand(options) {
   }
 
   // Paths to backup
-  command += ` ${paths.map(p => `"${p}"`).join(' ')}`;
+  command += ` ${paths.map((p) => `"${p}"`).join(' ')}`;
 
   return command;
 }
@@ -207,16 +202,16 @@ export function buildFilesBackupCommand(options) {
  */
 export function buildRestoreCommand(backupType, backupFile, options = {}) {
   switch (backupType) {
-  case BACKUP_TYPES.MYSQL:
-    return buildMySQLRestoreCommand(backupFile, options);
-  case BACKUP_TYPES.POSTGRESQL:
-    return buildPostgreSQLRestoreCommand(backupFile, options);
-  case BACKUP_TYPES.MONGODB:
-    return buildMongoDBRestoreCommand(backupFile, options);
-  case BACKUP_TYPES.FILES:
-    return buildFilesRestoreCommand(backupFile, options);
-  default:
-    throw new Error(`Unknown backup type: ${backupType}`);
+    case BACKUP_TYPES.MYSQL:
+      return buildMySQLRestoreCommand(backupFile, options);
+    case BACKUP_TYPES.POSTGRESQL:
+      return buildPostgreSQLRestoreCommand(backupFile, options);
+    case BACKUP_TYPES.MONGODB:
+      return buildMongoDBRestoreCommand(backupFile, options);
+    case BACKUP_TYPES.FILES:
+      return buildFilesRestoreCommand(backupFile, options);
+    default:
+      throw new Error(`Unknown backup type: ${backupType}`);
   }
 }
 
@@ -224,13 +219,7 @@ export function buildRestoreCommand(backupType, backupFile, options = {}) {
  * Build MySQL restore command
  */
 function buildMySQLRestoreCommand(backupFile, options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 3306
-  } = options;
+  const { database, user, password, host = 'localhost', port = 3306 } = options;
 
   let command = '';
 
@@ -257,13 +246,7 @@ function buildMySQLRestoreCommand(backupFile, options) {
  * Build PostgreSQL restore command
  */
 function buildPostgreSQLRestoreCommand(backupFile, options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 5432
-  } = options;
+  const { database, user, password, host = 'localhost', port = 5432 } = options;
 
   let command = '';
   if (password) {
@@ -295,13 +278,7 @@ function buildPostgreSQLRestoreCommand(backupFile, options) {
  * Build MongoDB restore command
  */
 function buildMongoDBRestoreCommand(backupFile, options) {
-  const {
-    user,
-    password,
-    host = 'localhost',
-    port = 27017,
-    drop = true
-  } = options;
+  const { user, password, host = 'localhost', port = 27017, drop = true } = options;
 
   let command = '';
 
@@ -356,13 +333,17 @@ function buildFilesRestoreCommand(backupFile, options) {
 /**
  * Create backup metadata object
  */
-export function createBackupMetadata(backupId, type, options: {
-  server?: string;
-  database?: string | null;
-  paths?: string[];
-  compress?: boolean;
-  retention?: number;
-} = {}) {
+export function createBackupMetadata(
+  backupId,
+  type,
+  options: {
+    server?: string;
+    database?: string | null;
+    paths?: string[];
+    compress?: boolean;
+    retention?: number;
+  } = {}
+) {
   return {
     id: backupId,
     type,
@@ -374,7 +355,7 @@ export function createBackupMetadata(backupId, type, options: {
     compressed: options.compress !== false,
     retention: options.retention || 7, // days
     status: 'pending',
-    error: null
+    error: null,
   };
 }
 
@@ -384,7 +365,7 @@ export function createBackupMetadata(backupId, type, options: {
 export function buildSaveMetadataCommand(metadata, metadataPath) {
   const jsonData = JSON.stringify(metadata, null, 2);
   // Escape single quotes in JSON for shell
-  const escapedJson = jsonData.replace(/'/g, '\'\\\'\'');
+  const escapedJson = jsonData.replace(/'/g, "'\\''");
   return `echo '${escapedJson}' > "${metadataPath}"`;
 }
 
@@ -413,7 +394,7 @@ export function parseBackupsList(output) {
   }
 
   const backups = [];
-  const metadataBlocks = output.split('---').filter(b => b.trim());
+  const metadataBlocks = output.split('---').filter((b) => b.trim());
 
   for (const block of metadataBlocks) {
     try {
@@ -425,7 +406,9 @@ export function parseBackupsList(output) {
   }
 
   // Sort by created_at descending
-  return backups.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return backups.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 }
 
 /**

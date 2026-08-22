@@ -66,14 +66,14 @@ function getRuntimeEnv(name) {
 logger.info('MCP SSH Manager starting', {
   logLevel: getRuntimeEnv('SSH_LOG_LEVEL') || 'INFO',
   verbose: getRuntimeEnv('SSH_VERBOSE') === 'true',
-  envFilePath
+  envFilePath,
 });
 
 // Load SSH server configuration
 const serverConfigManager = new ServerConfigManager({
   envPath: envFilePath,
   tomlPath: getRuntimeEnv('SSH_CONFIG_PATH'),
-  preferToml: getRuntimeEnv('PREFER_TOML_CONFIG') === 'true'
+  preferToml: getRuntimeEnv('PREFER_TOML_CONFIG') === 'true',
 });
 
 // Let the group layer read the loaded servers, so groups can be derived from
@@ -99,7 +99,9 @@ let toolConfig = null;
 try {
   toolConfig = await loadToolConfig();
   const summary = toolConfig.getSummary();
-  logger.info(`Tool configuration loaded: ${summary.mode} mode, ${summary.enabledCount}/${summary.totalTools} tools enabled`);
+  logger.info(
+    `Tool configuration loaded: ${summary.mode} mode, ${summary.enabledCount}/${summary.totalTools} tools enabled`
+  );
   if (summary.mode === 'all') {
     logger.info('💡 Tip: Run "ssh-manager tools configure" to reduce context usage in Claude Code');
   }
@@ -187,7 +189,12 @@ async function auditOk(serverName, toolName, args, executionResult) {
 async function execCommandWithTimeout(
   ssh: any,
   command: string,
-  options: { rawCommand?: boolean; platform?: string; execOptions?: Record<string, any>; [key: string]: any } = {},
+  options: {
+    rawCommand?: boolean;
+    platform?: string;
+    execOptions?: Record<string, any>;
+    [key: string]: any;
+  } = {},
   timeoutMs = 30000
 ) {
   // Pass through rawCommand and platform if specified
@@ -200,13 +207,17 @@ async function execCommandWithTimeout(
   // pipes, etc. Base64 sidesteps all escape issues entirely.
   if (platform === 'windows' && !rawCommand) {
     // Suppress progress (avoids CLIXML sentinels in stderr) + force UTF-8 stdout
-    const prelude = '$ProgressPreference=\'SilentlyContinue\'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;';
+    const prelude =
+      "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;";
     const fullPSCommand = `${prelude} ${command}`;
     const utf16le = Buffer.from(fullPSCommand, 'utf16le');
     const b64 = utf16le.toString('base64');
     // -OutputFormat Text prevents stderr/info streams from being CLIXML-encoded
     const wrappedCommand = `powershell -NoProfile -OutputFormat Text -EncodedCommand ${b64}`;
-    return ssh.execCommand(wrappedCommand, { ...otherOptions, execOptions: { ...(otherOptions.execOptions || {}) } });
+    return ssh.execCommand(wrappedCommand, {
+      ...otherOptions,
+      execOptions: { ...(otherOptions.execOptions || {}) },
+    });
   }
 
   // For commands that might hang, use the system's timeout command if available.
@@ -220,12 +231,12 @@ async function execCommandWithTimeout(
   if (useSystemTimeout) {
     // Wrap command with timeout command (works on Linux/Mac)
     const timeoutSeconds = Math.ceil(timeoutMs / 1000);
-    const wrappedCommand = `timeout ${timeoutSeconds} sh -c '${command.replace(/'/g, '\'\\\'\'')}'`;
+    const wrappedCommand = `timeout ${timeoutSeconds} sh -c '${command.replace(/'/g, "'\\''")}'`;
 
     try {
       const result = await ssh.execCommand(wrappedCommand, {
         ...otherOptions,
-        timeout: timeoutMs + WRAPPED_COMMAND_TIMEOUT_GRACE_MS
+        timeout: timeoutMs + WRAPPED_COMMAND_TIMEOUT_GRACE_MS,
       });
 
       // Check if timeout occurred (exit code 124 on Linux, 124 or 143 on Mac)
@@ -335,7 +346,9 @@ function cleanupOldConnections() {
   const now = Date.now();
   for (const [serverName, timestamp] of connectionTimestamps.entries()) {
     if (now - timestamp > CONNECTION_TIMEOUT) {
-      logger.info(`Connection to ${serverName} timed out, closing`, { timeout: CONNECTION_TIMEOUT });
+      logger.info(`Connection to ${serverName} timed out, closing`, {
+        timeout: CONNECTION_TIMEOUT,
+      });
       closeConnection(serverName);
     }
   }
@@ -353,7 +366,7 @@ async function createProxyCommandSocket(proxyCommand, host, port) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, {
       shell: true,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     // Cast: Node accepts a {readable, writable} pair here, but the bundled
@@ -361,7 +374,7 @@ async function createProxyCommandSocket(proxyCommand, host, port) {
     const socket = Duplex.from({
       readable: child.stdout,
       writable: child.stdin,
-      allowHalfOpen: false
+      allowHalfOpen: false,
     } as any);
 
     // Forward proxy stderr to the MCP server's stderr for debugging
@@ -385,7 +398,10 @@ async function createProxyCommandSocket(proxyCommand, host, port) {
     child.on('exit', (code, signal) => {
       // Only surface unexpected exits — a kill() after a successful connection is normal.
       if (!settled && code !== 0) {
-        settle(reject, new Error(`Proxy command exited with code ${code}${signal ? ` (${signal})` : ''}`));
+        settle(
+          reject,
+          new Error(`Proxy command exited with code ${code}${signal ? ` (${signal})` : ''}`)
+        );
       } else if (settled && code !== 0 && !signal && !socket.destroyed) {
         socket.destroy(new Error(`Proxy command exited with code ${code}`));
       }
@@ -406,8 +422,10 @@ async function getConnection(serverName) {
   if (!resolvedName) {
     const availableServers = Object.keys(servers);
     const aliases = listAliases();
-    const aliasInfo = aliases.length > 0 ?
-      ` Aliases: ${aliases.map(a => `${a.alias}->${a.target}`).join(', ')}` : '';
+    const aliasInfo =
+      aliases.length > 0
+        ? ` Aliases: ${aliases.map((a) => `${a.alias}->${a.target}`).join(', ')}`
+        : '';
     throw new Error(
       `Server "${serverName}" not found. Available servers: ${availableServers.join(', ') || 'none'}.${aliasInfo}`
     );
@@ -445,7 +463,7 @@ async function getConnection(serverName) {
       if (!servers[jumpServerName]) {
         throw new Error(
           `Proxy jump server "${serverConfig.proxyJump}" not found. ` +
-          `Available servers: ${Object.keys(servers).join(', ')}`
+            `Available servers: ${Object.keys(servers).join(', ')}`
         );
       }
 
@@ -465,8 +483,10 @@ async function getConnection(serverName) {
 
       // Create forwarded stream through the jump server
       const stream = await jumpSSH.forwardOut(
-        '127.0.0.1', 0,
-        serverConfig.host, serverConfig.port || 22
+        '127.0.0.1',
+        0,
+        serverConfig.host,
+        serverConfig.port || 22
       );
 
       // Connect target through the forwarded stream
@@ -496,7 +516,7 @@ async function getConnection(serverName) {
       port: serverConfig.port,
       method: serverConfig.password ? 'password' : 'key',
       proxyJump: serverConfig.proxyJump || null,
-      proxyCommand: serverConfig.proxyCommand ? '<set>' : null
+      proxyCommand: serverConfig.proxyCommand ? '<set>' : null,
     });
 
     // Execute post-connect hook
@@ -536,7 +556,11 @@ const server = new McpServer({
 
 logger.info('MCP Server initialized', { version: serverVersion });
 
-function registerToolConditional(toolName: string, schema: any, handler: (args: any, extra?: any) => any) {
+function registerToolConditional(
+  toolName: string,
+  schema: any,
+  handler: (args: any, extra?: any) => any
+) {
   if (isToolEnabled(toolName)) {
     // Cast: registerTool infers its handler signature from the zod schema, which
     // this generic wrapper cannot express while staying one helper for 37 tools.
@@ -621,16 +645,23 @@ async function main() {
 
   console.error('🚀 MCP SSH Manager Server started');
   console.error(`📦 Profile: ${activeProfile}`);
-  console.error(`🖥️  Available servers: ${serverList.length > 0 ? serverList.join(', ') : 'none configured'}`);
-  console.error('💡 Use "ssh-manager server add" (or edit ~/.ssh-manager/.env) to configure servers');
+  console.error(
+    `🖥️  Available servers: ${serverList.length > 0 ? serverList.join(', ') : 'none configured'}`
+  );
+  console.error(
+    '💡 Use "ssh-manager server add" (or edit ~/.ssh-manager/.env) to configure servers'
+  );
   console.error('🔄 Connection management: Auto-reconnect enabled, 30min timeout');
 
   // Set up periodic cleanup of old connections (every 10 minutes).
   // unref() so this timer alone never keeps the process alive after the
   // stdio transport has closed.
-  const cleanupTimer = setInterval(() => {
-    cleanupOldConnections();
-  }, 10 * 60 * 1000);
+  const cleanupTimer = setInterval(
+    () => {
+      cleanupOldConnections();
+    },
+    10 * 60 * 1000
+  );
   if (typeof cleanupTimer.unref === 'function') cleanupTimer.unref();
 }
 

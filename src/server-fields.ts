@@ -37,31 +37,45 @@ interface ServerFieldSpec {
 export const SERVER_FIELDS: ServerFieldSpec[] = [
   // identity — always present in practice; host is the anchor key both loaders
   // key off (`SSH_SERVER_<NAME>_HOST` / `[ssh_servers.name]` + `host`).
-  { camel: 'host',         env: 'HOST',           toml: ['host'] },
-  { camel: 'user',         env: 'USER',           toml: ['user', 'username'] },
-  { camel: 'password',     env: 'PASSWORD',       toml: ['password'],                  quoteEnv: true },
-  { camel: 'keyPath',      env: 'KEYPATH',        toml: ['key_path', 'keypath', 'ssh_key'] },
-  { camel: 'passphrase',   env: 'PASSPHRASE',     toml: ['passphrase'],                quoteEnv: true },
-  { camel: 'port',         env: 'PORT',           toml: ['port'],                      type: 'int' },
-  { camel: 'defaultDir',   env: 'DEFAULT_DIR',    toml: ['default_dir', 'default_directory', 'cwd'] },
-  { camel: 'sudoPassword', env: 'SUDO_PASSWORD',  toml: ['sudo_password'],             quoteEnv: true },
-  { camel: 'description',  env: 'DESCRIPTION',    toml: ['description'],               quoteEnv: true },
-  { camel: 'group',        env: 'GROUP',          toml: ['group'],                     quoteEnv: true },
-  { camel: 'platform',     env: 'PLATFORM',       toml: ['platform'],                  lowercase: true },
-  { camel: 'proxyJump',    env: 'PROXYJUMP',      toml: ['proxy_jump'] },
-  { camel: 'proxyCommand', env: 'PROXYCOMMAND',   toml: ['proxy_command', 'proxycommand'] },
-  { camel: 'forwardAgent', env: 'FORWARD_AGENT',  toml: ['forward_agent'],             type: 'bool' },
+  { camel: 'host', env: 'HOST', toml: ['host'] },
+  { camel: 'user', env: 'USER', toml: ['user', 'username'] },
+  { camel: 'password', env: 'PASSWORD', toml: ['password'], quoteEnv: true },
+  { camel: 'keyPath', env: 'KEYPATH', toml: ['key_path', 'keypath', 'ssh_key'] },
+  { camel: 'passphrase', env: 'PASSPHRASE', toml: ['passphrase'], quoteEnv: true },
+  { camel: 'port', env: 'PORT', toml: ['port'], type: 'int' },
+  { camel: 'defaultDir', env: 'DEFAULT_DIR', toml: ['default_dir', 'default_directory', 'cwd'] },
+  { camel: 'sudoPassword', env: 'SUDO_PASSWORD', toml: ['sudo_password'], quoteEnv: true },
+  { camel: 'description', env: 'DESCRIPTION', toml: ['description'], quoteEnv: true },
+  { camel: 'group', env: 'GROUP', toml: ['group'], quoteEnv: true },
+  { camel: 'platform', env: 'PLATFORM', toml: ['platform'], lowercase: true },
+  { camel: 'proxyJump', env: 'PROXYJUMP', toml: ['proxy_jump'] },
+  { camel: 'proxyCommand', env: 'PROXYCOMMAND', toml: ['proxy_command', 'proxycommand'] },
+  { camel: 'forwardAgent', env: 'FORWARD_AGENT', toml: ['forward_agent'], type: 'bool' },
   // security policy fields — value validation (mode normalization, pattern
   // compilation) stays in policy.js / config-loader.js; this table only maps
   // the keys and coercion.
-  { camel: 'mode',          env: 'MODE',           toml: ['mode'] },
-  { camel: 'allowPatterns', env: 'ALLOW_PATTERNS', toml: ['allow_patterns'],           type: 'patternList', quoteEnv: true },
-  { camel: 'denyPatterns',  env: 'DENY_PATTERNS',  toml: ['deny_patterns'],            type: 'patternList', quoteEnv: true },
-  { camel: 'auditLog',      env: 'AUDIT_LOG',      toml: ['audit_log'] },
+  { camel: 'mode', env: 'MODE', toml: ['mode'] },
+  {
+    camel: 'allowPatterns',
+    env: 'ALLOW_PATTERNS',
+    toml: ['allow_patterns'],
+    type: 'patternList',
+    quoteEnv: true,
+  },
+  {
+    camel: 'denyPatterns',
+    env: 'DENY_PATTERNS',
+    toml: ['deny_patterns'],
+    type: 'patternList',
+    quoteEnv: true,
+  },
+  { camel: 'auditLog', env: 'AUDIT_LOG', toml: ['audit_log'] },
 ];
 
 /** Lookup by resolved-config field name. */
-export const FIELD_BY_CAMEL = new Map<string, ServerFieldSpec>(SERVER_FIELDS.map((f) => [f.camel, f]));
+export const FIELD_BY_CAMEL = new Map<string, ServerFieldSpec>(
+  SERVER_FIELDS.map((f) => [f.camel, f])
+);
 
 // Parse a boolean-ish config value. Native booleans (TOML) pass through; the
 // strings "true"/"1"/"yes"/"on" (case-insensitive) from .env are true.
@@ -91,20 +105,23 @@ function parsePatternList(raw: unknown): string[] {
 // form according to the field spec. Returns `undefined` for absent values so
 // callers keep their own defaults (e.g. port 22). (Internal: exercised
 // through the serverFrom*Record builders.)
-function coerceServerField(raw: unknown, spec: ServerFieldSpec): string | number | boolean | string[] | undefined {
+function coerceServerField(
+  raw: unknown,
+  spec: ServerFieldSpec
+): string | number | boolean | string[] | undefined {
   if (raw === undefined || raw === null || raw === '') return undefined;
   switch (spec.type) {
-  case 'int':
-    return parseInt(String(raw), 10);
-  case 'bool':
-    return parseBool(raw);
-  case 'patternList':
-    return parsePatternList(raw);
-  default: {
-    let text = String(raw);
-    if (spec.lowercase) text = text.toLowerCase();
-    return text;
-  }
+    case 'int':
+      return parseInt(String(raw), 10);
+    case 'bool':
+      return parseBool(raw);
+    case 'patternList':
+      return parsePatternList(raw);
+    default: {
+      let text = String(raw);
+      if (spec.lowercase) text = text.toLowerCase();
+      return text;
+    }
   }
 }
 
@@ -122,7 +139,10 @@ function accumulate(out: Record<string, any>, raw: unknown, spec: ServerFieldSpe
  * Build a camelCase partial config from one server's `.env` entries.
  * `nameUpper` is the upper-case server name as written in the file.
  */
-export function serverFromEnvRecord(env: Record<string, string | undefined>, nameUpper: string): Record<string, any> {
+export function serverFromEnvRecord(
+  env: Record<string, string | undefined>,
+  nameUpper: string
+): Record<string, any> {
   const out: Record<string, any> = {};
   for (const spec of SERVER_FIELDS) {
     const value = coerceServerField(env[`SSH_SERVER_${nameUpper}_${spec.env}`], spec);
@@ -155,7 +175,11 @@ export function serverFromTomlRecord(tomlServer: Record<string, unknown>): Recor
  * rule: free-form / whitespace-sensitive values are double-quoted so a ` #`
  * inside the value cannot truncate it on read-back. Pattern lists join with `;`.
  */
-export function serverEnvLine(nameUpper: string, spec: ServerFieldSpec, value: string | number | boolean | string[]): string {
+export function serverEnvLine(
+  nameUpper: string,
+  spec: ServerFieldSpec,
+  value: string | number | boolean | string[]
+): string {
   const rendered = Array.isArray(value) ? value.join(';') : String(value);
   const rhs = spec.quoteEnv ? `"${rendered}"` : rendered;
   return `SSH_SERVER_${nameUpper}_${spec.env}=${rhs}`;

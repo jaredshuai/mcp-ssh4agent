@@ -20,39 +20,44 @@ export function getTempFilename(originalName) {
 /**
  * Build deployment strategy based on target path and permissions
  */
-export function buildDeploymentStrategy(remotePath, options: {
-  sudoPassword?: string | null;
-  owner?: string | null;
-  permissions?: string | null;
-  backup?: boolean;
-  restart?: string | null;
-} = {}) {
+export function buildDeploymentStrategy(
+  remotePath,
+  options: {
+    sudoPassword?: string | null;
+    owner?: string | null;
+    permissions?: string | null;
+    backup?: boolean;
+    restart?: string | null;
+  } = {}
+) {
   const {
     sudoPassword = null,
     owner = null,
     permissions = null,
     backup = true,
-    restart = null
+    restart = null,
   } = options;
 
   const strategy = {
     steps: [],
-    requiresSudo: false
+    requiresSudo: false,
   };
 
   // Step 1: Backup existing file if requested
   if (backup) {
     strategy.steps.push({
       type: 'backup',
-      command: `if [ -f "${remotePath}" ]; then cp "${remotePath}" "${remotePath}.bak.$(date +%Y%m%d_%H%M%S)"; fi`
+      command: `if [ -f "${remotePath}" ]; then cp "${remotePath}" "${remotePath}.bak.$(date +%Y%m%d_%H%M%S)"; fi`,
     });
   }
 
   // Step 2: Determine if we need sudo
-  const needsSudo = remotePath.startsWith('/etc/') ||
-                    remotePath.startsWith('/var/') ||
-                    remotePath.startsWith('/usr/') ||
-                    owner || permissions;
+  const needsSudo =
+    remotePath.startsWith('/etc/') ||
+    remotePath.startsWith('/var/') ||
+    remotePath.startsWith('/usr/') ||
+    owner ||
+    permissions;
 
   if (needsSudo) {
     strategy.requiresSudo = true;
@@ -60,38 +65,39 @@ export function buildDeploymentStrategy(remotePath, options: {
 
   // Step 3: Copy from temp to final location
   const quotedRemotePath = shSingleQuote(remotePath);
-  const copyCmd = needsSudo && sudoPassword ?
-    buildSudoPipeline(sudoPassword, `cp {{tempFile}} ${quotedRemotePath}`).command :
-    needsSudo ?
-      `sudo cp {{tempFile}} ${quotedRemotePath}` :
-      `cp {{tempFile}} ${quotedRemotePath}`;
+  const copyCmd =
+    needsSudo && sudoPassword
+      ? buildSudoPipeline(sudoPassword, `cp {{tempFile}} ${quotedRemotePath}`).command
+      : needsSudo
+        ? `sudo cp {{tempFile}} ${quotedRemotePath}`
+        : `cp {{tempFile}} ${quotedRemotePath}`;
 
   strategy.steps.push({
     type: 'copy',
-    command: copyCmd
+    command: copyCmd,
   });
 
   // Step 4: Set ownership if specified
   if (owner) {
-    const chownCmd = sudoPassword ?
-      buildSudoPipeline(sudoPassword, `chown ${owner} ${quotedRemotePath}`).command :
-      `sudo chown ${owner} ${quotedRemotePath}`;
+    const chownCmd = sudoPassword
+      ? buildSudoPipeline(sudoPassword, `chown ${owner} ${quotedRemotePath}`).command
+      : `sudo chown ${owner} ${quotedRemotePath}`;
 
     strategy.steps.push({
       type: 'chown',
-      command: chownCmd
+      command: chownCmd,
     });
   }
 
   // Step 5: Set permissions if specified
   if (permissions) {
-    const chmodCmd = sudoPassword ?
-      buildSudoPipeline(sudoPassword, `chmod ${permissions} ${quotedRemotePath}`).command :
-      `sudo chmod ${permissions} ${quotedRemotePath}`;
+    const chmodCmd = sudoPassword
+      ? buildSudoPipeline(sudoPassword, `chmod ${permissions} ${quotedRemotePath}`).command
+      : `sudo chmod ${permissions} ${quotedRemotePath}`;
 
     strategy.steps.push({
       type: 'chmod',
-      command: chmodCmd
+      command: chmodCmd,
     });
   }
 
@@ -99,14 +105,14 @@ export function buildDeploymentStrategy(remotePath, options: {
   if (restart) {
     strategy.steps.push({
       type: 'restart',
-      command: restart
+      command: restart,
     });
   }
 
   // Step 7: Cleanup temp file
   strategy.steps.push({
     type: 'cleanup',
-    command: 'rm -f {{tempFile}}'
+    command: 'rm -f {{tempFile}}',
   });
 
   return strategy;
@@ -123,7 +129,7 @@ export function detectDeploymentNeeds(remotePath) {
   const needs = {
     sudo: false,
     suggestedOwner: null,
-    suggestedPerms: null
+    suggestedPerms: null,
   };
 
   // System directories that typically need sudo

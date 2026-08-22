@@ -146,7 +146,11 @@ function sharedInterface(): readline.Interface {
 
 function closeInterface(): void {
   if (_rl && !(_rl as any).closed) {
-    try { _rl.close(); } catch { /* ignore */ }
+    try {
+      _rl.close();
+    } catch {
+      /* ignore */
+    }
   }
   _rl = null;
 }
@@ -198,7 +202,11 @@ export async function prompt_password(prompt: string): Promise<string> {
     process.stdout.write('\n'); // bash `read -s` echoes a newline after input
     return ans;
   } finally {
-    try { pwIface.close(); } catch { /* ignore */ }
+    try {
+      pwIface.close();
+    } catch {
+      /* ignore */
+    }
   }
 }
 

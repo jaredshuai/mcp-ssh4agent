@@ -46,9 +46,7 @@ const envPath = path.join(PROJECT_ROOT, '.env');
 if (fs.existsSync(envPath)) {
   ok('.env file found');
   const envText = fs.readFileSync(envPath, 'utf8');
-  const serverCount = envText.split(/\r?\n/).filter((l) =>
-    /^SSH_SERVER_.*_HOST=/.test(l),
-  ).length;
+  const serverCount = envText.split(/\r?\n/).filter((l) => /^SSH_SERVER_.*_HOST=/.test(l)).length;
   ok(`${serverCount} servers configured`);
 } else {
   fail('.env file not found');
@@ -58,12 +56,7 @@ if (fs.existsSync(envPath)) {
 // 3. Claude Code config.
 console.log('');
 console.log('⚙️  Checking Claude Code configuration...');
-const claudeConfig = path.join(
-  os.homedir(),
-  '.config',
-  'claude-code',
-  'claude_code_config.json',
-);
+const claudeConfig = path.join(os.homedir(), '.config', 'claude-code', 'claude_code_config.json');
 if (fs.existsSync(claudeConfig)) {
   ok('Claude Code config found');
   const cfgText = fs.readFileSync(claudeConfig, 'utf8');
@@ -72,8 +65,10 @@ if (fs.existsSync(claudeConfig)) {
   } else {
     fail('SSH Manager not found in Claude Code config');
     console.log('   Register it with:');
-    console.log('   claude mcp add ssh-manager node ' +
-      path.join(PROJECT_ROOT, 'src', 'index.ts').replace(/\\/g, '/'));
+    console.log(
+      '   claude mcp add ssh-manager node ' +
+        path.join(PROJECT_ROOT, 'src', 'index.ts').replace(/\\/g, '/')
+    );
   }
 } else {
   fail(`Claude Code config not found at ${claudeConfig}`);
@@ -83,15 +78,9 @@ if (fs.existsSync(claudeConfig)) {
 console.log('');
 console.log('🎯 Configuration Summary:');
 console.log('========================');
-console.log(
-  `MCP Server Path: ${path.join(PROJECT_ROOT, 'src', 'index.ts').replace(/\\/g, '/')}`,
-);
-const envText2 = fs.existsSync(envPath)
-  ? fs.readFileSync(envPath, 'utf8')
-  : '';
-const count = envText2.split(/\r?\n/).filter((l) =>
-  /^SSH_SERVER_.*_HOST=/.test(l),
-).length;
+console.log(`MCP Server Path: ${path.join(PROJECT_ROOT, 'src', 'index.ts').replace(/\\/g, '/')}`);
+const envText2 = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+const count = envText2.split(/\r?\n/).filter((l) => /^SSH_SERVER_.*_HOST=/.test(l)).length;
 console.log(`Servers configured: ${count}`);
 console.log('');
 console.log('✅ Ready to use in Claude Code!');

@@ -2,7 +2,7 @@ import {
   buildHeredoc,
   buildMySQLQueryCommand,
   buildPostgreSQLQueryCommand,
-  buildMongoDBQueryCommand
+  buildMongoDBQueryCommand,
 } from '../src/database-manager.ts';
 
 /**
@@ -34,7 +34,9 @@ function test(name, fn) {
 
 function assertEqual(actual, expected, message) {
   if (actual !== expected) {
-    throw new Error(`${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`);
+    throw new Error(
+      `${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`
+    );
   }
 }
 
@@ -50,10 +52,10 @@ const DELIM = '__MCP_SQL_EOF__';
  */
 function extractHeredocBody(command) {
   const lines = command.split('\n');
-  const start = lines.findIndex(l => l.includes(`<<'${DELIM}'`));
+  const start = lines.findIndex((l) => l.includes(`<<'${DELIM}'`));
   assertTrue(start !== -1, `command has no heredoc opening: ${command}`);
   const rest = lines.slice(start + 1);
-  const end = rest.findIndex(l => l === DELIM);
+  const end = rest.findIndex((l) => l === DELIM);
   assertTrue(end !== -1, `command has no heredoc terminator on its own line: ${command}`);
   return rest.slice(0, end).join('\n');
 }
@@ -74,15 +76,19 @@ test('MySQL: awk JSON pipe stays on the heredoc opening line, terminator stays a
   const query = 'SELECT 1';
   const cmd = buildMySQLQueryCommand({ database: 'app', query });
   const lines = cmd.split('\n');
-  const openLine = lines.find(l => l.includes(`<<'${DELIM}'`));
+  const openLine = lines.find((l) => l.includes(`<<'${DELIM}'`));
   assertTrue(/\| awk /.test(openLine), 'awk pipe must be on the heredoc opening line');
   assertEqual(lines[lines.length - 1], DELIM, 'last line must be the bare terminator');
 });
 
 test('MySQL: shell-substitution payload is inert inside the heredoc body', () => {
-  const query = 'SELECT \'$(id)\', `whoami`';
+  const query = "SELECT '$(id)', `whoami`";
   const cmd = buildMySQLQueryCommand({ database: 'app', query });
-  assertEqual(extractHeredocBody(cmd), query, 'payload must be passed verbatim, never shell-evaluated');
+  assertEqual(
+    extractHeredocBody(cmd),
+    query,
+    'payload must be passed verbatim, never shell-evaluated'
+  );
 });
 
 test('MySQL: non-JSON format also uses the heredoc', () => {
@@ -108,13 +114,21 @@ test('MongoDB: find script carried via heredoc, not --eval "..."', () => {
   const query = '{name: "a`b`c"}';
   const cmd = buildMongoDBQueryCommand({ database: 'app', collection: 'users', query });
   const body = extractHeredocBody(cmd);
-  assertEqual(body, `db.users.find(${query}).forEach(printjson)`, 'mongo body must embed query verbatim');
+  assertEqual(
+    body,
+    `db.users.find(${query}).forEach(printjson)`,
+    'mongo body must embed query verbatim'
+  );
   assertTrue(!cmd.includes('--eval "'), 'must not interpolate query into --eval "..."');
 });
 
 test('MongoDB: empty query defaults to find({})', () => {
   const cmd = buildMongoDBQueryCommand({ database: 'app', collection: 'users' });
-  assertEqual(extractHeredocBody(cmd), 'db.users.find({}).forEach(printjson)', 'default find must be {}');
+  assertEqual(
+    extractHeredocBody(cmd),
+    'db.users.find({}).forEach(printjson)',
+    'default find must be {}'
+  );
 });
 
 // --- buildHeredoc defensive guard ---
@@ -131,7 +145,10 @@ test('buildHeredoc throws when the body contains a delimiter-only line', () => {
 
 test('buildHeredoc emits the pipeline on the opening line', () => {
   const frag = buildHeredoc('SELECT 1', { pipeline: '| awk "{print}"' });
-  assertTrue(frag.startsWith(` <<'${DELIM}' | awk "{print}"\n`), 'pipeline must follow the marker on line one');
+  assertTrue(
+    frag.startsWith(` <<'${DELIM}' | awk "{print}"\n`),
+    'pipeline must follow the marker on line one'
+  );
   assertTrue(frag.endsWith(`\n${DELIM}`), 'fragment must end with the bare terminator');
 });
 
@@ -154,7 +171,11 @@ test('stochastic: random shell-metacharacter queries round-trip verbatim through
     const cmd = buildMySQLQueryCommand({ database: 'db', query });
     assertEqual(extractHeredocBody(cmd), query, `iteration ${i}: body must equal query verbatim`);
     // The terminator must remain alone on the final line (never broken by the payload).
-    assertEqual(cmd.split('\n').pop(), DELIM, `iteration ${i}: terminator must stay on its own line`);
+    assertEqual(
+      cmd.split('\n').pop(),
+      DELIM,
+      `iteration ${i}: terminator must stay on its own line`
+    );
   }
 });
 

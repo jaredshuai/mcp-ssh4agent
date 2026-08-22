@@ -31,14 +31,30 @@ import { ConfigLoader } from '../src/config-loader.ts';
 
 let passed = 0;
 let failed = 0;
-function ok(label: string) { console.log(`\x1b[32m✓\x1b[0m ${passed + 1}. ${label}`); passed++; }
-function bad(label: string, e: Error) { console.log(`\x1b[31m✗\x1b[0m ${passed + 1}. ${label}\n  ${e.message}`); failed++; }
+function ok(label: string) {
+  console.log(`\x1b[32m✓\x1b[0m ${passed + 1}. ${label}`);
+  passed++;
+}
+function bad(label: string, e: Error) {
+  console.log(`\x1b[31m✗\x1b[0m ${passed + 1}. ${label}\n  ${e.message}`);
+  failed++;
+}
 function test(label: string, fn: () => void) {
-  try { fn(); ok(label); } catch (e) { bad(label, e as Error); }
+  try {
+    fn();
+    ok(label);
+  } catch (e) {
+    bad(label, e as Error);
+  }
 }
 
 async function asyncTest(label: string, fn: () => Promise<void>) {
-  try { await fn(); ok(label); } catch (e) { bad(label, e as Error); }
+  try {
+    await fn();
+    ok(label);
+  } catch (e) {
+    bad(label, e as Error);
+  }
 }
 
 const spec = (camel: string) => {
@@ -69,9 +85,24 @@ test('TOML aliases never clash across fields', () => {
 
 test('the expected fields are all present (superset check)', () => {
   for (const camel of [
-    'host', 'user', 'password', 'keyPath', 'passphrase', 'port', 'defaultDir',
-    'sudoPassword', 'description', 'group', 'platform', 'proxyJump',
-    'proxyCommand', 'forwardAgent', 'mode', 'allowPatterns', 'denyPatterns', 'auditLog',
+    'host',
+    'user',
+    'password',
+    'keyPath',
+    'passphrase',
+    'port',
+    'defaultDir',
+    'sudoPassword',
+    'description',
+    'group',
+    'platform',
+    'proxyJump',
+    'proxyCommand',
+    'forwardAgent',
+    'mode',
+    'allowPatterns',
+    'denyPatterns',
+    'auditLog',
   ]) {
     assert.ok(FIELD_BY_CAMEL.has(camel), camel);
   }
@@ -93,7 +124,7 @@ test('free-form values are double-quoted, machine values are not', () => {
 test('pattern lists join with ; inside quotes', () => {
   assert.equal(
     serverEnvLine('S', spec('allowPatterns'), ['^ls', '^cat']),
-    'SSH_SERVER_S_ALLOW_PATTERNS="^ls;^cat"',
+    'SSH_SERVER_S_ALLOW_PATTERNS="^ls;^cat"'
   );
 });
 
@@ -107,7 +138,10 @@ test('bool coercion: absent → explicit false, truthy strings → true', () => 
   assert.equal(serverFromEnvRecord({}, 'S').forwardAgent, false);
   assert.equal(serverFromEnvRecord({ SSH_SERVER_S_FORWARD_AGENT: 'true' }, 'S').forwardAgent, true);
   assert.equal(serverFromEnvRecord({ SSH_SERVER_S_FORWARD_AGENT: 'yes' }, 'S').forwardAgent, true);
-  assert.equal(serverFromEnvRecord({ SSH_SERVER_S_FORWARD_AGENT: 'false' }, 'S').forwardAgent, false);
+  assert.equal(
+    serverFromEnvRecord({ SSH_SERVER_S_FORWARD_AGENT: 'false' }, 'S').forwardAgent,
+    false
+  );
   assert.equal(serverFromTomlRecord({ forward_agent: true }).forwardAgent, true);
   assert.equal(serverFromTomlRecord({}).forwardAgent, false);
 });
@@ -118,12 +152,18 @@ test('lowercase coercion: platform normalizes', () => {
 });
 
 test('patternList coercion: TOML arrays and ;-strings both become string[]', () => {
-  assert.deepEqual(serverFromTomlRecord({ allow_patterns: ['^a', '^b'] }).allowPatterns, ['^a', '^b']);
+  assert.deepEqual(serverFromTomlRecord({ allow_patterns: ['^a', '^b'] }).allowPatterns, [
+    '^a',
+    '^b',
+  ]);
   assert.deepEqual(serverFromTomlRecord({ allow_patterns: '^a; ^b' }).allowPatterns, ['^a', '^b']);
 });
 
 test('TOML alias chains resolve first-wins', () => {
-  assert.equal(serverFromTomlRecord({ key_path: '/a', keypath: '/b', ssh_key: '/c' }).keyPath, '/a');
+  assert.equal(
+    serverFromTomlRecord({ key_path: '/a', keypath: '/b', ssh_key: '/c' }).keyPath,
+    '/a'
+  );
   assert.equal(serverFromTomlRecord({ keypath: '/b', ssh_key: '/c' }).keyPath, '/b');
   assert.equal(serverFromTomlRecord({ ssh_key: '/c' }).keyPath, '/c');
   assert.equal(serverFromTomlRecord({ user: 'u', username: 'v' }).user, 'u');
@@ -155,8 +195,16 @@ async function roundTrip(): Promise<void> {
   for (const pw of NASTY_PASSWORDS) {
     const name = 'rt_' + Buffer.from(pw).toString('hex').slice(0, 10);
     const added = cli.add_server_to_env(
-      name, '203.0.113.10', 'demo', 'password', pw, '2222',
-      'desc with spaces', 'readonly', '^ls;^df', '',
+      name,
+      '203.0.113.10',
+      'demo',
+      'password',
+      pw,
+      '2222',
+      'desc with spaces',
+      'readonly',
+      '^ls;^df',
+      ''
     );
     assert.ok(added, `add_server_to_env(${name}) must succeed`);
 
@@ -176,11 +224,29 @@ async function roundTrip(): Promise<void> {
   // update path: add a plain server, then rewrite it with a defaultDir
   assert.ok(cli.add_server_to_env('rt_plain', '198.51.100.1', 'op', 'password', 'first-pw'));
   const cli2 = cli as unknown as {
-    update_server_in_env: (n: string, h: string, u: string, a: string, v: string, p?: string, d?: string, dd?: string) => boolean;
+    update_server_in_env: (
+      n: string,
+      h: string,
+      u: string,
+      a: string,
+      v: string,
+      p?: string,
+      d?: string,
+      dd?: string
+    ) => boolean;
   };
-  assert.ok(cli2.update_server_in_env(
-    'rt_plain', '198.51.100.1', 'op', 'password', 'up-pw', '22', '', '/opt/app',
-  ));
+  assert.ok(
+    cli2.update_server_in_env(
+      'rt_plain',
+      '198.51.100.1',
+      'op',
+      'password',
+      'up-pw',
+      '22',
+      '',
+      '/opt/app'
+    )
+  );
   const loader2 = new ConfigLoader();
   loader2.loadEnvConfig(envPath);
   const updated = loader2.getServer('rt_plain');
@@ -189,7 +255,10 @@ async function roundTrip(): Promise<void> {
   assert.equal(updated.password, 'up-pw');
 }
 
-await asyncTest('CLI add/update writes load back through ConfigLoader (incl. hostile passwords)', roundTrip);
+await asyncTest(
+  'CLI add/update writes load back through ConfigLoader (incl. hostile passwords)',
+  roundTrip
+);
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 

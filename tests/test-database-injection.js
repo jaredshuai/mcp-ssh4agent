@@ -19,12 +19,21 @@ import os from 'os';
 import path from 'path';
 import {
   shellQuote,
-  buildMySQLListDatabasesCommand, buildMySQLListTablesCommand,
-  buildPostgreSQLListDatabasesCommand, buildPostgreSQLListTablesCommand,
-  buildMongoDBListDatabasesCommand, buildMongoDBListCollectionsCommand,
-  buildMySQLDumpCommand, buildPostgreSQLDumpCommand, buildMongoDBDumpCommand,
-  buildMySQLImportCommand, buildPostgreSQLImportCommand, buildMongoDBRestoreCommand,
-  buildMySQLQueryCommand, buildPostgreSQLQueryCommand, buildMongoDBQueryCommand
+  buildMySQLListDatabasesCommand,
+  buildMySQLListTablesCommand,
+  buildPostgreSQLListDatabasesCommand,
+  buildPostgreSQLListTablesCommand,
+  buildMongoDBListDatabasesCommand,
+  buildMongoDBListCollectionsCommand,
+  buildMySQLDumpCommand,
+  buildPostgreSQLDumpCommand,
+  buildMongoDBDumpCommand,
+  buildMySQLImportCommand,
+  buildPostgreSQLImportCommand,
+  buildMongoDBRestoreCommand,
+  buildMySQLQueryCommand,
+  buildPostgreSQLQueryCommand,
+  buildMongoDBQueryCommand,
 } from '../src/database-manager.ts';
 
 // The whole point of this suite is driving payloads through a real POSIX shell
@@ -37,7 +46,10 @@ if (process.platform === 'win32') {
 }
 
 let passed = 0;
-function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }
+function ok(label) {
+  console.log(`\x1b[32m✓\x1b[0m ${label}`);
+  passed++;
+}
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-injection-'));
 const FAKEBIN = path.join(TMP, 'bin');
@@ -49,7 +61,16 @@ fs.mkdirSync(WORK, { recursive: true });
 // Fake, no-op DB client binaries. They must NOT read stdin (heredoc/pipe input
 // is discarded) and always succeed, so the only way a canary appears is the
 // shell interpreting an unescaped payload.
-for (const bin of ['mysql', 'psql', 'mongo', 'mysqldump', 'pg_dump', 'pg_restore', 'mongodump', 'mongorestore']) {
+for (const bin of [
+  'mysql',
+  'psql',
+  'mongo',
+  'mysqldump',
+  'pg_dump',
+  'pg_restore',
+  'mongodump',
+  'mongorestore',
+]) {
   const p = path.join(FAKEBIN, bin);
   fs.writeFileSync(p, '#!/bin/sh\nexit 0\n');
   fs.chmodSync(p, 0o755);
@@ -67,14 +88,14 @@ fs.mkdirSync(BENIGN_DIR, { recursive: true });
 // create. If a builder leaves any value shell-interpreted, one of these writes
 // the canary; a correct builder passes them as inert literal arguments.
 const PAYLOADS = [
-  c => `$(echo PWNED > ${c})`,        // command substitution
-  c => '`echo PWNED > ' + c + '`',    // backtick substitution
-  c => `; echo PWNED > ${c}`,         // command separator
-  c => `&& echo PWNED > ${c}`,        // AND-chain
-  c => `| tee ${c}`,                  // pipe into a real binary
-  c => `x > ${c}`,                    // bare redirect
-  c => `$(echo PWNED > ${c}).tar.gz`, // substitution that also drives .tar.gz branches
-  c => `\ntouch ${c}\n`,              // embedded newline
+  (c) => `$(echo PWNED > ${c})`, // command substitution
+  (c) => '`echo PWNED > ' + c + '`', // backtick substitution
+  (c) => `; echo PWNED > ${c}`, // command separator
+  (c) => `&& echo PWNED > ${c}`, // AND-chain
+  (c) => `| tee ${c}`, // pipe into a real binary
+  (c) => `x > ${c}`, // bare redirect
+  (c) => `$(echo PWNED > ${c}).tar.gz`, // substitution that also drives .tar.gz branches
+  (c) => `\ntouch ${c}\n`, // embedded newline
 ];
 
 // A fresh benign options object per builder; the fuzzed key is overwritten by
@@ -93,26 +114,86 @@ function benignOptions() {
     outputFile: path.join(WORK, 'out.sql'),
     outputDir: BENIGN_DIR,
     inputFile: BENIGN_SQL,
-    inputPath: BENIGN_DIR
+    inputPath: BENIGN_DIR,
   };
 }
 
 const BUILDERS = [
-  { name: 'MySQLListDatabases', fn: buildMySQLListDatabasesCommand, params: ['user', 'password', 'host', 'port'] },
-  { name: 'MySQLListTables', fn: buildMySQLListTablesCommand, params: ['database', 'user', 'password', 'host', 'port'] },
-  { name: 'PostgreSQLListDatabases', fn: buildPostgreSQLListDatabasesCommand, params: ['user', 'password', 'host', 'port'] },
-  { name: 'PostgreSQLListTables', fn: buildPostgreSQLListTablesCommand, params: ['database', 'user', 'password', 'host', 'port'] },
-  { name: 'MongoDBListDatabases', fn: buildMongoDBListDatabasesCommand, params: ['user', 'password', 'host', 'port'] },
-  { name: 'MongoDBListCollections', fn: buildMongoDBListCollectionsCommand, params: ['database', 'user', 'password', 'host', 'port'] },
-  { name: 'MySQLDump', fn: buildMySQLDumpCommand, params: ['database', 'user', 'password', 'host', 'port', 'outputFile', 'tables'] },
-  { name: 'PostgreSQLDump', fn: buildPostgreSQLDumpCommand, params: ['database', 'user', 'password', 'host', 'port', 'outputFile', 'tables'] },
-  { name: 'MongoDBDump', fn: buildMongoDBDumpCommand, params: ['database', 'user', 'password', 'host', 'port', 'outputDir', 'collections'] },
-  { name: 'MySQLImport', fn: buildMySQLImportCommand, params: ['database', 'user', 'password', 'host', 'port', 'inputFile'] },
-  { name: 'PostgreSQLImport', fn: buildPostgreSQLImportCommand, params: ['database', 'user', 'password', 'host', 'port', 'inputFile'] },
-  { name: 'MongoDBRestore', fn: buildMongoDBRestoreCommand, params: ['user', 'password', 'host', 'port', 'inputPath'] },
-  { name: 'MySQLQuery', fn: buildMySQLQueryCommand, params: ['database', 'user', 'password', 'host', 'port'] },
-  { name: 'PostgreSQLQuery', fn: buildPostgreSQLQueryCommand, params: ['database', 'user', 'password', 'host', 'port'] },
-  { name: 'MongoDBQuery', fn: buildMongoDBQueryCommand, params: ['database', 'collection', 'user', 'password', 'host', 'port'] },
+  {
+    name: 'MySQLListDatabases',
+    fn: buildMySQLListDatabasesCommand,
+    params: ['user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'MySQLListTables',
+    fn: buildMySQLListTablesCommand,
+    params: ['database', 'user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'PostgreSQLListDatabases',
+    fn: buildPostgreSQLListDatabasesCommand,
+    params: ['user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'PostgreSQLListTables',
+    fn: buildPostgreSQLListTablesCommand,
+    params: ['database', 'user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'MongoDBListDatabases',
+    fn: buildMongoDBListDatabasesCommand,
+    params: ['user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'MongoDBListCollections',
+    fn: buildMongoDBListCollectionsCommand,
+    params: ['database', 'user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'MySQLDump',
+    fn: buildMySQLDumpCommand,
+    params: ['database', 'user', 'password', 'host', 'port', 'outputFile', 'tables'],
+  },
+  {
+    name: 'PostgreSQLDump',
+    fn: buildPostgreSQLDumpCommand,
+    params: ['database', 'user', 'password', 'host', 'port', 'outputFile', 'tables'],
+  },
+  {
+    name: 'MongoDBDump',
+    fn: buildMongoDBDumpCommand,
+    params: ['database', 'user', 'password', 'host', 'port', 'outputDir', 'collections'],
+  },
+  {
+    name: 'MySQLImport',
+    fn: buildMySQLImportCommand,
+    params: ['database', 'user', 'password', 'host', 'port', 'inputFile'],
+  },
+  {
+    name: 'PostgreSQLImport',
+    fn: buildPostgreSQLImportCommand,
+    params: ['database', 'user', 'password', 'host', 'port', 'inputFile'],
+  },
+  {
+    name: 'MongoDBRestore',
+    fn: buildMongoDBRestoreCommand,
+    params: ['user', 'password', 'host', 'port', 'inputPath'],
+  },
+  {
+    name: 'MySQLQuery',
+    fn: buildMySQLQueryCommand,
+    params: ['database', 'user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'PostgreSQLQuery',
+    fn: buildPostgreSQLQueryCommand,
+    params: ['database', 'user', 'password', 'host', 'port'],
+  },
+  {
+    name: 'MongoDBQuery',
+    fn: buildMongoDBQueryCommand,
+    params: ['database', 'collection', 'user', 'password', 'host', 'port'],
+  },
 ];
 
 const ARRAY_PARAMS = new Set(['tables', 'collections']);
@@ -124,7 +205,7 @@ function runIsolated(command) {
       env: { ...process.env, PATH: `${FAKEBIN}:${process.env.PATH}` },
       stdio: 'ignore',
       timeout: 10000,
-      shell: '/bin/sh'
+      shell: '/bin/sh',
     });
   } catch {
     // A non-zero exit is fine — we only care whether the canary was written.
@@ -164,7 +245,11 @@ function testInjectionResistance() {
           continue;
         }
 
-        try { fs.rmSync(CANARY); } catch { /* absent */ }
+        try {
+          fs.rmSync(CANARY);
+        } catch {
+          /* absent */
+        }
         runIsolated(command);
         combos++;
         assert.ok(
@@ -191,8 +276,10 @@ function testBenignStillQuoted() {
     assert.ok(cmd.includes("'appdb'"), `benign database name not shell-quoted in: ${cmd}`);
   }
   // The mysql list-tables database must be a positional arg, never an SQL USE clause.
-  assert.ok(!buildMySQLListTablesCommand(benignOptions()).includes('USE '),
-    'MySQL list-tables must not interpolate the database into a USE clause');
+  assert.ok(
+    !buildMySQLListTablesCommand(benignOptions()).includes('USE '),
+    'MySQL list-tables must not interpolate the database into a USE clause'
+  );
   ok('benign values remain correctly shell-quoted and functional');
 }
 

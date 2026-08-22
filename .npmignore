@@ -40,8 +40,7 @@ npm-debug.log*
 
 # Development tools
 .editorconfig
-.eslintrc*
-.prettierrc*
+biome.json
 .husky/
 knip.json
 

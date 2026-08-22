@@ -11,7 +11,7 @@ import {
   addHook,
   removeHook,
   toggleHook,
-  listHooks
+  listHooks,
 } from '../src/hooks-system.ts';
 import assert from 'assert';
 import fs from 'fs';
@@ -36,8 +36,7 @@ if (fs.existsSync(HOOKS_CONFIG_FILE)) {
 console.log('Test 1: Initialize hooks system');
 try {
   await initializeHooks();
-  assert(fs.existsSync(path.join(__dirname, '..', 'hooks')), 
-    'Hooks directory should be created');
+  assert(fs.existsSync(path.join(__dirname, '..', 'hooks')), 'Hooks directory should be created');
   console.log('✅ Hooks system initialized\n');
 } catch (error) {
   console.error(`❌ Failed to initialize hooks: ${error.message}\n`);
@@ -49,10 +48,10 @@ console.log('Test 2: Load hooks configuration');
 try {
   const hooks = loadHooksConfig();
   assert(typeof hooks === 'object', 'loadHooksConfig should return an object');
-  
+
   // Should have at least on-error hook from default
   assert(hooks['on-error'], 'Should have on-error hook');
-  
+
   console.log(`✅ Loaded ${Object.keys(hooks).length} hooks`);
   console.log(`   Hooks: ${Object.keys(hooks).join(', ')}\n`);
 } catch (error) {
@@ -65,7 +64,7 @@ console.log('Test 3: List hooks');
 try {
   const hooksList = listHooks();
   assert(Array.isArray(hooksList), 'listHooks should return an array');
-  
+
   if (hooksList.length > 0) {
     const firstHook = hooksList[0];
     assert(firstHook.name, 'Each hook should have a name');
@@ -73,9 +72,9 @@ try {
     assert(firstHook.description, 'Each hook should have a description');
     assert(typeof firstHook.actionCount === 'number', 'Each hook should have actionCount');
   }
-  
+
   console.log(`✅ Listed ${hooksList.length} hooks`);
-  hooksList.forEach(h => {
+  hooksList.forEach((h) => {
     console.log(`   ${h.enabled ? '✓' : '✗'} ${h.name}: ${h.actionCount} actions`);
   });
   console.log();
@@ -94,20 +93,22 @@ try {
       {
         type: 'notification',
         name: 'test-action',
-        command: 'echo "Test hook executed"'
-      }
-    ]
+        command: 'echo "Test hook executed"',
+      },
+    ],
   };
-  
+
   addHook('test-hook', testHook);
-  
+
   const hooks = loadHooksConfig();
   assert(hooks['test-hook'], 'Test hook should be added');
-  assert(hooks['test-hook'].description === testHook.description, 
-    'Test hook should have correct description');
-  
+  assert(
+    hooks['test-hook'].description === testHook.description,
+    'Test hook should have correct description'
+  );
+
   console.log('✅ Successfully added custom hook\n');
-  
+
   // Cleanup
   removeHook('test-hook');
 } catch (error) {
@@ -122,21 +123,21 @@ try {
   addHook('toggle-test', {
     enabled: true,
     description: 'Hook for toggle testing',
-    actions: []
+    actions: [],
   });
-  
+
   // Disable it
   toggleHook('toggle-test', false);
   let hooks = loadHooksConfig();
   assert(hooks['toggle-test'].enabled === false, 'Hook should be disabled');
-  
+
   // Enable it
   toggleHook('toggle-test', true);
   hooks = loadHooksConfig();
   assert(hooks['toggle-test'].enabled === true, 'Hook should be enabled');
-  
+
   console.log('✅ Successfully toggled hook state\n');
-  
+
   // Cleanup
   removeHook('toggle-test');
 } catch (error) {
@@ -149,7 +150,7 @@ console.log('Test 6: Execute hook');
 try {
   // Create a test file to verify hook execution
   const testFile = path.join(__dirname, '..', 'test-hook-output.txt');
-  
+
   // Add a test hook that creates a file
   addHook('execution-test', {
     enabled: true,
@@ -158,20 +159,20 @@ try {
       {
         type: 'notification',
         name: 'create-test-file',
-        command: `echo "Hook executed at $(date)" > ${testFile}`
-      }
-    ]
+        command: `echo "Hook executed at $(date)" > ${testFile}`,
+      },
+    ],
   });
-  
+
   // Execute the hook
   const result = await executeHook('execution-test', { server: 'test-server' });
   assert(result.success === true, 'Hook execution should succeed');
-  
+
   // Verify file was created
   assert(fs.existsSync(testFile), 'Hook should have created test file');
-  
+
   console.log('✅ Hook executed successfully');
-  
+
   // Cleanup
   if (fs.existsSync(testFile)) {
     fs.unlinkSync(testFile);
@@ -198,18 +199,18 @@ try {
       {
         type: 'notification',
         name: 'should-not-run',
-        command: 'echo "This should not execute"'
-      }
-    ]
+        command: 'echo "This should not execute"',
+      },
+    ],
   });
-  
+
   // Try to execute it
   const result = await executeHook('disabled-test', {});
   assert(result.success === true, 'Should return success');
   assert(result.skipped === true, 'Should indicate hook was skipped');
-  
+
   console.log('✅ Disabled hook was correctly skipped\n');
-  
+
   // Cleanup
   removeHook('disabled-test');
 } catch (error) {
@@ -221,7 +222,7 @@ try {
 console.log('Test 8: Hook with context replacement');
 try {
   const testFile = path.join(__dirname, '..', 'context-test.txt');
-  
+
   addHook('context-test', {
     enabled: true,
     description: 'Context replacement test',
@@ -229,16 +230,16 @@ try {
       {
         type: 'notification',
         name: 'use-context',
-        command: `echo "Server: {server}, Error: {error}" > ${testFile}`
-      }
-    ]
+        command: `echo "Server: {server}, Error: {error}" > ${testFile}`,
+      },
+    ],
   });
-  
-  await executeHook('context-test', { 
-    server: 'production', 
-    error: 'test-error' 
+
+  await executeHook('context-test', {
+    server: 'production',
+    error: 'test-error',
   });
-  
+
   if (fs.existsSync(testFile)) {
     const content = fs.readFileSync(testFile, 'utf8');
     assert(content.includes('production'), 'Should replace {server} with context value');
@@ -246,7 +247,7 @@ try {
     console.log('✅ Context replacement works correctly');
     fs.unlinkSync(testFile);
   }
-  
+
   // Cleanup
   removeHook('context-test');
   console.log();

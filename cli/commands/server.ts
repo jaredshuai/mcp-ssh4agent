@@ -7,16 +7,31 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
 import {
-  print_header, print_subheader, print_info, print_warning, print_error,
-  print_success, print_table_header, print_table_row,
-  prompt_input, prompt_password, prompt_yes_no, question,
+  print_header,
+  print_subheader,
+  print_info,
+  print_warning,
+  print_error,
+  print_success,
+  print_table_header,
+  print_table_row,
+  prompt_input,
+  prompt_password,
+  prompt_yes_no,
+  question,
 } from '../lib/colors.ts';
 
 import {
   SSH_MANAGER_ENV,
-  get_server_config, add_server_to_env, remove_server_from_env,
-  test_ssh_connection, validate_server_name, list_invalid_server_names,
-  load_servers, get_config, expandHome,
+  get_server_config,
+  add_server_to_env,
+  remove_server_from_env,
+  test_ssh_connection,
+  validate_server_name,
+  list_invalid_server_names,
+  load_servers,
+  get_config,
+  expandHome,
 } from '../lib/config.ts';
 
 import { wizard_edit_server, select_server_menu } from '../lib/menu.ts';
@@ -27,7 +42,10 @@ export async function cmd_server_add(): Promise<void> {
 
   let serverName = '';
   while (true) {
-    serverName = await prompt_input('Server name (e.g., prod1, web_server) — letters, digits, underscore only', '');
+    serverName = await prompt_input(
+      'Server name (e.g., prod1, web_server) — letters, digits, underscore only',
+      ''
+    );
     if (validate_server_name(serverName)) break;
   }
 
@@ -66,7 +84,9 @@ export async function cmd_server_add(): Promise<void> {
   if (mode === '') mode = 'unrestricted';
 
   if (mode === 'restricted') {
-    print_info("Allow patterns: ';'-separated list of regex (e.g. '^docker (ps|logs);^kubectl get ')");
+    print_info(
+      "Allow patterns: ';'-separated list of regex (e.g. '^docker (ps|logs);^kubectl get ')"
+    );
     allowPatterns = await prompt_input('ALLOW_PATTERNS (required for restricted)', '');
   }
 
@@ -88,7 +108,18 @@ export async function cmd_server_add(): Promise<void> {
 
   process.stdout.write('\n');
   if (await prompt_yes_no('Save this configuration?', 'y')) {
-    add_server_to_env(serverName, host, user, authType, authValue, port, description, mode, allowPatterns, auditLog);
+    add_server_to_env(
+      serverName,
+      host,
+      user,
+      authType,
+      authValue,
+      port,
+      description,
+      mode,
+      allowPatterns,
+      auditLog
+    );
     process.stdout.write('\n');
     if (await prompt_yes_no('Test connection now?', 'y')) {
       test_ssh_connection(serverName);
@@ -137,10 +168,16 @@ export function cmd_server_list(): void {
 
   if (invalidNames.length > 0) {
     process.stdout.write('\n');
-    print_warning(`${invalidNames.length} server(s) have names that are invisible to MCP clients (Claude Code, etc.)`);
-    print_info('Names with characters other than letters/digits/underscore produce invalid env vars');
+    print_warning(
+      `${invalidNames.length} server(s) have names that are invisible to MCP clients (Claude Code, etc.)`
+    );
+    print_info(
+      'Names with characters other than letters/digits/underscore produce invalid env vars'
+    );
     print_info(`Affected: ${invalidNames.join(' ')}`);
-    print_info("Fix: 'ssh-manager server remove <name>' then re-add with a valid name (e.g. replace '-' with '_')");
+    print_info(
+      "Fix: 'ssh-manager server remove <name>' then re-add with a valid name (e.g. replace '-' with '_')"
+    );
   }
 }
 
@@ -215,7 +252,8 @@ export async function cmd_server_remove(server?: string): Promise<void> {
 // default_editor → notepad (win32) / nano (otherwise).
 export function cmd_server_edit_file(): void {
   const configured = get_config('default_editor', '');
-  const editor = process.env.EDITOR || configured || (process.platform === 'win32' ? 'notepad' : 'nano');
+  const editor =
+    process.env.EDITOR || configured || (process.platform === 'win32' ? 'notepad' : 'nano');
 
   if (!existsSync(SSH_MANAGER_ENV)) {
     print_error(`Configuration file not found: ${SSH_MANAGER_ENV}`);
@@ -223,7 +261,10 @@ export function cmd_server_edit_file(): void {
   }
 
   print_info(`Opening configuration in ${editor}...`);
-  const result = spawnSync(editor, [SSH_MANAGER_ENV], { stdio: 'inherit', shell: process.platform === 'win32' });
+  const result = spawnSync(editor, [SSH_MANAGER_ENV], {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
   if (result.error) {
     print_error(`Failed to launch editor: ${result.error.message}`);
     return;

@@ -85,7 +85,7 @@ const READONLY_DENY_REGEX: RegExp[] = [
   /(^|[\s;&|])npm\s+(install|uninstall|publish)/,
   /(^|[\s;&|])git\s+(reset\s+--hard|push\s+.*--force|clean\s+-fd?)/,
   />\s*\/(?!dev\/null|dev\/stdout|dev\/stderr|tmp)/, // redirect to non-tmp/non-devnull file
-  />>\s*\/(?!dev\/null|tmp)/,                          // append-redirect to non-tmp file
+  />>\s*\/(?!dev\/null|tmp)/, // append-redirect to non-tmp file
   /\|\s*sh(\s|$)/,
   /\|\s*bash(\s|$)/,
   /curl\s+[^|]*\|\s*(sh|bash)/,

@@ -16,25 +16,58 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import {
-  BOLD, CYAN, GRAY, NC,
-  print_header, print_subheader, print_info, print_warning, print_error,
+  BOLD,
+  CYAN,
+  GRAY,
+  NC,
+  print_header,
+  print_subheader,
+  print_info,
+  print_warning,
+  print_error,
   print_success,
-  clear_screen, pause, question, cleanupPrompts,
+  clear_screen,
+  pause,
+  question,
+  cleanupPrompts,
   prompt_input,
-  MONITOR, SESSION, SYNC, TUNNEL, ROCKET, GEAR, INFO, SERVER,
+  MONITOR,
+  SESSION,
+  SYNC,
+  TUNNEL,
+  ROCKET,
+  GEAR,
+  INFO,
+  SERVER,
 } from './lib/colors.ts';
 
 import {
-  PROJECT_ROOT, SSH_MANAGER_CONFIG, SSH_MANAGER_ENV, SSH_MANAGER_HOME,
-  init_config, check_dependencies, get_server_config, get_config,
+  PROJECT_ROOT,
+  SSH_MANAGER_CONFIG,
+  SSH_MANAGER_ENV,
+  SSH_MANAGER_HOME,
+  init_config,
+  check_dependencies,
+  get_server_config,
+  get_config,
 } from './lib/config.ts';
 
 import {
-  show_main_menu, show_server_menu, wizard_add_server, wizard_edit_server,
-  select_server_menu, show_sync_menu, wizard_create_tunnel,
+  show_main_menu,
+  show_server_menu,
+  wizard_add_server,
+  wizard_edit_server,
+  select_server_menu,
+  show_sync_menu,
+  wizard_create_tunnel,
 } from './lib/menu.ts';
 
-import { cmd_server, cmd_server_list, cmd_server_show, cmd_server_edit_file } from './commands/server.ts';
+import {
+  cmd_server,
+  cmd_server_list,
+  cmd_server_show,
+  cmd_server_edit_file,
+} from './commands/server.ts';
 import { cmd_tools } from './commands/tools.ts';
 
 // ── VERSION (derived from package.json, never hardcoded) ─────────────────────
@@ -44,15 +77,17 @@ import { cmd_tools } from './commands/tools.ts';
 // alongside the script.
 function read_version(): string {
   const candidates = [
-    path.join(PROJECT_ROOT, 'package.json'),            // cli/../package.json
-    path.join(PROJECT_ROOT, 'cli', 'package.json'),     // cli/package.json
+    path.join(PROJECT_ROOT, 'package.json'), // cli/../package.json
+    path.join(PROJECT_ROOT, 'cli', 'package.json'), // cli/package.json
   ];
   for (const pkg of candidates) {
     if (fs.existsSync(pkg)) {
       try {
         const data = JSON.parse(fs.readFileSync(pkg, 'utf8'));
         if (data.version) return String(data.version);
-      } catch { /* try next candidate */ }
+      } catch {
+        /* try next candidate */
+      }
     }
   }
   return 'unknown';
@@ -199,7 +234,13 @@ export function cmd_exec(server: string, ...commandParts: string[]): void {
 // ── cmd_sync: rsync push/pull (rsync is checked lazily here) ───────────────────
 // Note: matches bash cmd_sync exactly — only direction/server/source/dest are
 // used; any extra args (e.g. the `--dry-run` the menu passes) are dropped.
-export function cmd_sync(direction: string, server: string, source: string, dest: string, _extra?: string): void {
+export function cmd_sync(
+  direction: string,
+  server: string,
+  source: string,
+  dest: string,
+  _extra?: string
+): void {
   if (!direction || !server || !source || !dest) {
     print_error('Usage: ssh-manager sync <push|pull> <server> <source> <destination>');
     process.exitCode = 1;
@@ -230,11 +271,15 @@ export function cmd_sync(direction: string, server: string, source: string, dest
 
   if (direction === 'push') {
     print_info(`Pushing ${source} to ${server}:${dest}`);
-    const r = spawnSync('rsync', [...rsyncArgs, source, `${user}@${host}:${dest}`], { stdio: 'inherit' });
+    const r = spawnSync('rsync', [...rsyncArgs, source, `${user}@${host}:${dest}`], {
+      stdio: 'inherit',
+    });
     if (r.status !== 0) process.exitCode = 1;
   } else if (direction === 'pull') {
     print_info(`Pulling ${server}:${source} to ${dest}`);
-    const r = spawnSync('rsync', [...rsyncArgs, `${user}@${host}:${source}`, dest], { stdio: 'inherit' });
+    const r = spawnSync('rsync', [...rsyncArgs, `${user}@${host}:${source}`, dest], {
+      stdio: 'inherit',
+    });
     if (r.status !== 0) process.exitCode = 1;
   } else {
     print_error(`Invalid direction: ${direction} (use push or pull)`);
@@ -304,15 +349,21 @@ export function cmd_tunnel(action: string, ...rest: string[]): void {
     let ok = false;
     if (type === 'local') {
       print_info(`Creating local tunnel: ${ports}`);
-      const r = spawnSync('ssh', [...sshArgs, '-L', ports, `${user}@${host}`], { stdio: 'inherit' });
+      const r = spawnSync('ssh', [...sshArgs, '-L', ports, `${user}@${host}`], {
+        stdio: 'inherit',
+      });
       ok = r.status === 0;
     } else if (type === 'remote') {
       print_info(`Creating remote tunnel: ${ports}`);
-      const r = spawnSync('ssh', [...sshArgs, '-R', ports, `${user}@${host}`], { stdio: 'inherit' });
+      const r = spawnSync('ssh', [...sshArgs, '-R', ports, `${user}@${host}`], {
+        stdio: 'inherit',
+      });
       ok = r.status === 0;
     } else if (type === 'dynamic') {
       print_info(`Creating SOCKS proxy on port ${ports}`);
-      const r = spawnSync('ssh', [...sshArgs, '-D', ports, `${user}@${host}`], { stdio: 'inherit' });
+      const r = spawnSync('ssh', [...sshArgs, '-D', ports, `${user}@${host}`], {
+        stdio: 'inherit',
+      });
       ok = r.status === 0;
     } else {
       print_error(`Invalid tunnel type: ${type}`);
@@ -389,19 +440,31 @@ function requireCommand(cmd: string, feature: string): boolean {
   const pathEnv = process.env.PATH ?? '';
   const dirs = pathEnv.split(path.delimiter);
   const isWin = process.platform === 'win32';
-  const exists = (p: string) => { try { return fs.existsSync(p); } catch { return false; } };
+  const exists = (p: string) => {
+    try {
+      return fs.existsSync(p);
+    } catch {
+      return false;
+    }
+  };
   let found = false;
   if (isWin) {
     const exts = (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';');
     outer: for (const d of dirs) {
       if (!d) continue;
       for (const ext of exts) {
-        if (exists(path.join(d, cmd + ext))) { found = true; break outer; }
+        if (exists(path.join(d, cmd + ext))) {
+          found = true;
+          break outer;
+        }
       }
     }
   } else {
     for (const d of dirs) {
-      if (d && exists(path.join(d, cmd))) { found = true; break; }
+      if (d && exists(path.join(d, cmd))) {
+        found = true;
+        break;
+      }
     }
   }
   if (!found) {
@@ -422,14 +485,12 @@ export async function interactive_mode(): Promise<void> {
   init_config();
   if (!check_dependencies()) process.exit(1);
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     show_main_menu();
     const choice = await question('');
 
     if (choice === '1') {
       // Server Management submenu
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         show_server_menu();
         const sc = await question('');
@@ -572,7 +633,8 @@ async function confirmYesNo(prompt: string, def: string): Promise<boolean> {
 // Spawn `$EDITOR <file>` (or a platform default editor) with inherit stdio.
 async function editFileWithEditor(file: string): Promise<void> {
   const configured = get_config('default_editor', '');
-  const editor = process.env.EDITOR || configured || (process.platform === 'win32' ? 'notepad' : 'nano');
+  const editor =
+    process.env.EDITOR || configured || (process.platform === 'win32' ? 'notepad' : 'nano');
   const r = spawnSync(editor, [file], { stdio: 'inherit', shell: process.platform === 'win32' });
   if (r.error) print_error(`Failed to launch editor: ${r.error.message}`);
 }

@@ -15,16 +15,16 @@ const LOG_LEVELS = {
   DEBUG: 0,
   INFO: 1,
   WARN: 2,
-  ERROR: 3
+  ERROR: 3,
 };
 
 // Colors for terminal output — keyed by level name looked up at runtime.
 const COLORS: Record<string, string> = {
   DEBUG: '\x1b[36m', // Cyan
-  INFO: '\x1b[32m',  // Green
-  WARN: '\x1b[33m',  // Yellow
+  INFO: '\x1b[32m', // Green
+  WARN: '\x1b[33m', // Yellow
   ERROR: '\x1b[31m', // Red
-  RESET: '\x1b[0m'
+  RESET: '\x1b[0m',
 };
 
 // Icons for each level — keyed by level name looked up at runtime.
@@ -32,7 +32,7 @@ const ICONS: Record<string, string> = {
   DEBUG: '🔍',
   INFO: '✅',
   WARN: '⚠️',
-  ERROR: '❌'
+  ERROR: '❌',
 };
 
 // One recorded command execution; fields mirror what saveCommandToHistory writes.
@@ -90,14 +90,18 @@ class Logger {
   /**
    * Save command to history
    */
-  saveCommandToHistory(command: string, server: string, result: { success: boolean; duration: string; error?: string }) {
+  saveCommandToHistory(
+    command: string,
+    server: string,
+    result: { success: boolean; duration: string; error?: string }
+  ) {
     const entry = {
       timestamp: new Date().toISOString(),
       server,
       command,
       success: result.success,
       duration: result.duration,
-      error: result.error
+      error: result.error,
     };
 
     this.commandHistory.push(entry);
@@ -119,7 +123,10 @@ class Logger {
    */
   formatMessage(level: number, message: string, data: Record<string, unknown> = {}) {
     const timestamp = new Date().toISOString();
-    const levelName = Object.keys(LOG_LEVELS).find(key => (LOG_LEVELS as Record<string, number>)[key] === level) || 'INFO';
+    const levelName =
+      Object.keys(LOG_LEVELS).find(
+        (key) => (LOG_LEVELS as Record<string, number>)[key] === level
+      ) || 'INFO';
 
     // Console format with colors
     const consoleFormat = `${COLORS[levelName]}${ICONS[levelName]} [${timestamp}] [${levelName}]${COLORS.RESET} ${message}`;
@@ -135,7 +142,7 @@ class Logger {
 
     return {
       console: consoleFormat + (this.verbose && dataStr ? dataStr : ''),
-      file: fileFormat + dataStr
+      file: fileFormat + dataStr,
     };
   }
 
@@ -184,8 +191,10 @@ class Logger {
   logCommand(server: string, command: string, cwd: string | null = null) {
     const logData = {
       server,
-      command: this.verbose ? command : command.substring(0, 100) + (command.length > 100 ? '...' : ''),
-      cwd
+      command: this.verbose
+        ? command
+        : command.substring(0, 100) + (command.length > 100 ? '...' : ''),
+      cwd,
     };
 
     if (this.verbose) {
@@ -200,13 +209,18 @@ class Logger {
   /**
    * Log SSH command result
    */
-  logCommandResult(server: string, command: string, startTime: number, result: { code: number; stderr?: string }) {
+  logCommandResult(
+    server: string,
+    command: string,
+    startTime: number,
+    result: { code: number; stderr?: string }
+  ) {
     const duration = Date.now() - startTime;
 
     const resultData = {
       success: !result.code,
       duration: `${duration}ms`,
-      error: result.code ? result.stderr : undefined
+      error: result.code ? result.stderr : undefined,
     };
 
     // Save to history
@@ -226,20 +240,20 @@ class Logger {
     const message = `SSH connection ${event}: ${server}`;
 
     switch (event) {
-    case 'established':
-      this.info(message, data);
-      break;
-    case 'reused':
-      this.debug(message, data);
-      break;
-    case 'closed':
-      this.info(message, data);
-      break;
-    case 'failed':
-      this.error(message, data);
-      break;
-    default:
-      this.debug(message, data);
+      case 'established':
+        this.info(message, data);
+        break;
+      case 'reused':
+        this.debug(message, data);
+        break;
+      case 'closed':
+        this.info(message, data);
+        break;
+      case 'failed':
+        this.error(message, data);
+        break;
+      default:
+        this.debug(message, data);
     }
   }
 

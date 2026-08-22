@@ -20,7 +20,10 @@
 // Counts and sizes are integers (raw bytes); speed carries an optional
 // fractional part, so `allowDecimal` says whether the last separator may be a
 // decimal point rather than a thousands group.
-export function parseGroupedNumber(raw: string, { allowDecimal = false }: { allowDecimal?: boolean } = {}): number {
+export function parseGroupedNumber(
+  raw: string,
+  { allowDecimal = false }: { allowDecimal?: boolean } = {}
+): number {
   const separators = raw.match(/[.,]/g) || [];
   if (separators.length === 0) return Number(raw);
 

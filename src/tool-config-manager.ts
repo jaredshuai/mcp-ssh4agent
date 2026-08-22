@@ -47,7 +47,9 @@ class ToolConfigManager {
           this.config = this.getDefaultConfig();
         } else {
           logger.info(`Tool configuration loaded from ${this.configPath}`);
-          logger.info(`Mode: ${this.config.mode}, Enabled tools: ${this.getEnabledTools().length}/37`);
+          logger.info(
+            `Mode: ${this.config.mode}, Enabled tools: ${this.getEnabledTools().length}/37`
+          );
         }
       } else {
         // No config file - default to all tools enabled
@@ -78,10 +80,11 @@ class ToolConfigManager {
         monitoring: { enabled: true },
         backup: { enabled: true },
         database: { enabled: true },
-        advanced: { enabled: true }
+        advanced: { enabled: true },
       },
       tools: {},
-      _comment: 'Tool configuration for MCP SSH Manager. Run "ssh-manager tools configure" to customize.'
+      _comment:
+        'Tool configuration for MCP SSH Manager. Run "ssh-manager tools configure" to customize.',
     };
   }
 
@@ -157,7 +160,7 @@ class ToolConfigManager {
    */
   getEnabledTools() {
     const allTools = getAllTools();
-    return allTools.filter(tool => this.isToolEnabled(tool));
+    return allTools.filter((tool) => this.isToolEnabled(tool));
   }
 
   /**
@@ -166,7 +169,7 @@ class ToolConfigManager {
    */
   getDisabledTools() {
     const allTools = getAllTools();
-    return allTools.filter(tool => !this.isToolEnabled(tool));
+    return allTools.filter((tool) => !this.isToolEnabled(tool));
   }
 
   /**
@@ -371,11 +374,11 @@ class ToolConfigManager {
       totalTools: 37,
       enabledCount: enabledTools.length,
       disabledCount: disabledTools.length,
-      groups: Object.keys(TOOL_GROUPS).map(groupName => ({
+      groups: Object.keys(TOOL_GROUPS).map((groupName) => ({
         name: groupName,
         enabled: this.isGroupEnabled(groupName),
-        toolCount: TOOL_GROUPS[groupName].length
-      }))
+        toolCount: TOOL_GROUPS[groupName].length,
+      })),
     };
   }
 
@@ -386,16 +389,16 @@ class ToolConfigManager {
   exportClaudeCodeConfig() {
     const enabledTools = this.getEnabledTools();
 
-    const autoApprovalPatterns = enabledTools.map(tool => `mcp__ssh-manager__${tool}`);
+    const autoApprovalPatterns = enabledTools.map((tool) => `mcp__ssh-manager__${tool}`);
 
     return {
       comment: 'Add these patterns to autoApprove.tools in claude_code_config.json',
       patterns: autoApprovalPatterns,
       exampleConfig: {
         autoApprove: {
-          tools: autoApprovalPatterns
-        }
-      }
+          tools: autoApprovalPatterns,
+        },
+      },
     };
   }
 }

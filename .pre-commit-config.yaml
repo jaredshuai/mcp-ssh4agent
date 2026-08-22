@@ -8,18 +8,18 @@ repos:
         language: system
         files: '\.js$'
         
-      - id: eslint
-        name: ESLint
-        entry: npx eslint --fix
+      - id: biome
+        name: Biome (lint + format)
+        entry: npx @biomejs/biome check --write
         language: system
-        files: '\.js$'
+        files: '\.(js|ts)$'
         require_serial: false
         
-      - id: prettier-js
-        name: Prettier JavaScript
-        entry: npx prettier --write
+      - id: biome-format-json
+        name: Biome JSON format
+        entry: npx @biomejs/biome format --write
         language: system
-        files: '\.(js|json)$'
+        files: '\.json$'
         exclude: 'package-lock\.json'
 
   # Python checks

@@ -62,11 +62,7 @@ export function truncateOutput(text: string, maxLength = OUTPUT_LIMITS.MAX_OUTPU
 
 // Helper function to format JSON response — accepts any serializable payload.
 export function formatJSONResponse(data: unknown): string {
-  return JSON.stringify(
-    data,
-    null,
-    RESPONSE_FORMAT.COMPACT_JSON ? 0 : 2
-  );
+  return JSON.stringify(data, null, RESPONSE_FORMAT.COMPACT_JSON ? 0 : 2);
 }
 
 // Helper function to format a duration in seconds as a human-readable string.

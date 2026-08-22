@@ -18,7 +18,7 @@
  * the standard close-quote/escape/reopen sequence '\''.
  */
 export function shSingleQuote(value: unknown): string {
-  return `'${String(value).replace(/'/g, '\'\\\'\'')}'`;
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -31,7 +31,7 @@ export function shSingleQuote(value: unknown): string {
  */
 export function buildCdPrefix(dir: string, platform = 'linux'): string {
   if (platform === 'windows') {
-    const escapedDir = String(dir).replace(/'/g, '\'\'');
+    const escapedDir = String(dir).replace(/'/g, "''");
     return `Set-Location '${escapedDir}'; `;
   }
   return `cd ${shSingleQuote(dir)} && `;
@@ -46,7 +46,10 @@ export function buildCdPrefix(dir: string, platform = 'linux'): string {
  *
  * `command` must NOT carry a leading `sudo ` prefix (this function adds it).
  */
-export function buildSudoPipeline(password: string, command: string): { command: string; masked: string } {
+export function buildSudoPipeline(
+  password: string,
+  command: string
+): { command: string; masked: string } {
   const bare = String(command).replace(/^sudo\s+/, '');
   const quoted = shSingleQuote(password);
   return {

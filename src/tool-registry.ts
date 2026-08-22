@@ -41,21 +41,10 @@ export interface ToolContext {
  */
 export const TOOL_GROUPS = {
   // Core group (5 tools) - Essential SSH operations
-  core: [
-    'ssh_list_servers',
-    'ssh_execute',
-    'ssh_upload',
-    'ssh_download',
-    'ssh_sync'
-  ],
+  core: ['ssh_list_servers', 'ssh_execute', 'ssh_upload', 'ssh_download', 'ssh_sync'],
 
   // Sessions group (4 tools) - Persistent SSH session management
-  sessions: [
-    'ssh_session_start',
-    'ssh_session_send',
-    'ssh_session_list',
-    'ssh_session_close'
-  ],
+  sessions: ['ssh_session_start', 'ssh_session_send', 'ssh_session_list', 'ssh_session_close'],
 
   // Monitoring group (6 tools) - System health and monitoring
   monitoring: [
@@ -64,24 +53,14 @@ export const TOOL_GROUPS = {
     'ssh_process_manager',
     'ssh_monitor',
     'ssh_tail',
-    'ssh_alert_setup'
+    'ssh_alert_setup',
   ],
 
   // Backup group (4 tools) - Backup and restore operations
-  backup: [
-    'ssh_backup_create',
-    'ssh_backup_list',
-    'ssh_backup_restore',
-    'ssh_backup_schedule'
-  ],
+  backup: ['ssh_backup_create', 'ssh_backup_list', 'ssh_backup_restore', 'ssh_backup_schedule'],
 
   // Database group (4 tools) - Database operations
-  database: [
-    'ssh_db_dump',
-    'ssh_db_import',
-    'ssh_db_list',
-    'ssh_db_query'
-  ],
+  database: ['ssh_db_dump', 'ssh_db_import', 'ssh_db_list', 'ssh_db_query'],
 
   // Advanced group (14 tools) - Advanced features
   advanced: [
@@ -98,8 +77,8 @@ export const TOOL_GROUPS = {
     'ssh_key_manage',
     'ssh_execute_group',
     'ssh_group_manage',
-    'ssh_history'
-  ]
+    'ssh_history',
+  ],
 };
 
 /**
@@ -111,7 +90,7 @@ export const TOOL_GROUP_DESCRIPTIONS = {
   monitoring: 'System health checks, service monitoring, process management, and alerts',
   backup: 'Automated backup and restore for databases and files',
   database: 'Database operations (MySQL, PostgreSQL, MongoDB)',
-  advanced: 'Advanced features (deployment, sudo, tunnels, groups, aliases, hooks, profiles)'
+  advanced: 'Advanced features (deployment, sudo, tunnels, groups, aliases, hooks, profiles)',
 };
 
 /**
@@ -123,7 +102,7 @@ export const TOOL_GROUP_COUNTS = {
   monitoring: 6,
   backup: 4,
   database: 4,
-  advanced: 14
+  advanced: 14,
 };
 
 /**
@@ -167,15 +146,15 @@ export function validateToolRegistry(registeredTools) {
   const registeredSet = new Set(registeredTools);
   const expectedSet = new Set(allExpectedTools);
 
-  const missing = allExpectedTools.filter(tool => !registeredSet.has(tool));
-  const unexpected = registeredTools.filter(tool => !expectedSet.has(tool));
+  const missing = allExpectedTools.filter((tool) => !registeredSet.has(tool));
+  const unexpected = registeredTools.filter((tool) => !expectedSet.has(tool));
 
   return {
     valid: missing.length === 0 && unexpected.length === 0,
     total: allExpectedTools.length,
     registered: registeredTools.length,
     missing,
-    unexpected
+    unexpected,
   };
 }
 
@@ -190,12 +169,12 @@ export function getToolStats() {
   return {
     totalGroups: groups.length,
     totalTools,
-    groups: groups.map(groupName => ({
+    groups: groups.map((groupName) => ({
       name: groupName,
       count: TOOL_GROUP_COUNTS[groupName],
       description: TOOL_GROUP_DESCRIPTIONS[groupName],
-      tools: TOOL_GROUPS[groupName]
-    }))
+      tools: TOOL_GROUPS[groupName],
+    })),
   };
 }
 
@@ -207,9 +186,7 @@ export function verifyIntegrity() {
   const allTools = getAllTools();
   const uniqueTools = new Set(allTools);
 
-  const duplicates = allTools.filter((tool, index) =>
-    allTools.indexOf(tool) !== index
-  );
+  const duplicates = allTools.filter((tool, index) => allTools.indexOf(tool) !== index);
 
   const expectedTotal = Object.values(TOOL_GROUP_COUNTS).reduce((a, b) => a + b, 0);
 
@@ -221,6 +198,10 @@ export function verifyIntegrity() {
     duplicates,
     issues: []
       .concat(duplicates.length > 0 ? [`Found ${duplicates.length} duplicate tools`] : [])
-      .concat(allTools.length !== expectedTotal ? [`Expected ${expectedTotal} tools but found ${allTools.length}`] : [])
+      .concat(
+        allTools.length !== expectedTotal
+          ? [`Expected ${expectedTotal} tools but found ${allTools.length}`]
+          : []
+      ),
   };
 }

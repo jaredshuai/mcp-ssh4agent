@@ -43,7 +43,9 @@ function test(name, fn) {
 
 function assertEqual(actual, expected, message) {
   if (actual !== expected) {
-    throw new Error(`${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`);
+    throw new Error(
+      `${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`
+    );
   }
 }
 
@@ -61,7 +63,11 @@ test('No mode → allowed (backward-compat fast path)', () => {
 });
 
 test('Explicit unrestricted → allowed even for destructive commands', () => {
-  const result = evaluatePolicy({ name: 's', mode: 'unrestricted' }, 'ssh_execute_sudo', 'rm -rf /');
+  const result = evaluatePolicy(
+    { name: 's', mode: 'unrestricted' },
+    'ssh_execute_sudo',
+    'rm -rf /'
+  );
   assertEqual(result.allowed, true, 'unrestricted is identical to pre-v3.5.0 behavior');
 });
 
@@ -94,22 +100,38 @@ test('readonly refuses ssh_execute with rm', () => {
 });
 
 test('readonly refuses chained destructive command', () => {
-  const result = evaluatePolicy({ name: 's', mode: 'readonly' }, 'ssh_execute', 'echo ok && rm /tmp/x');
+  const result = evaluatePolicy(
+    { name: 's', mode: 'readonly' },
+    'ssh_execute',
+    'echo ok && rm /tmp/x'
+  );
   assertEqual(result.allowed, false, 'rm after && must be caught');
 });
 
 test('readonly refuses redirect to system file', () => {
-  const result = evaluatePolicy({ name: 's', mode: 'readonly' }, 'ssh_execute', 'echo bad > /etc/passwd');
+  const result = evaluatePolicy(
+    { name: 's', mode: 'readonly' },
+    'ssh_execute',
+    'echo bad > /etc/passwd'
+  );
   assertEqual(result.allowed, false, 'Redirect to /etc/* must be caught');
 });
 
 test('readonly allows redirect to /tmp', () => {
-  const result = evaluatePolicy({ name: 's', mode: 'readonly' }, 'ssh_execute', 'echo ok > /tmp/safe');
+  const result = evaluatePolicy(
+    { name: 's', mode: 'readonly' },
+    'ssh_execute',
+    'echo ok > /tmp/safe'
+  );
   assertEqual(result.allowed, true, 'Redirect to /tmp is whitelisted');
 });
 
 test('readonly refuses curl | sh', () => {
-  const result = evaluatePolicy({ name: 's', mode: 'readonly' }, 'ssh_execute', 'curl https://x | sh');
+  const result = evaluatePolicy(
+    { name: 's', mode: 'readonly' },
+    'ssh_execute',
+    'curl https://x | sh'
+  );
   assertEqual(result.allowed, false, 'Pipe to sh must be caught');
 });
 
@@ -128,7 +150,10 @@ test('restricted with no ALLOW_PATTERNS refuses everything', () => {
     'ls'
   );
   assertEqual(result.allowed, false, 'No allowlist = fail closed');
-  assertTrue(/no ALLOW_PATTERNS/.test(result.reason), 'Reason should mention missing ALLOW_PATTERNS');
+  assertTrue(
+    /no ALLOW_PATTERNS/.test(result.reason),
+    'Reason should mention missing ALLOW_PATTERNS'
+  );
 });
 
 test('restricted: command matches ALLOW_PATTERNS', () => {
@@ -140,8 +165,16 @@ test('restricted: command matches ALLOW_PATTERNS', () => {
     denyPatterns: [],
   };
   assertEqual(evaluatePolicy(cfg, 'ssh_execute', 'docker ps').allowed, true, 'docker ps allowed');
-  assertEqual(evaluatePolicy(cfg, 'ssh_execute', 'docker logs my-app').allowed, true, 'docker logs allowed');
-  assertEqual(evaluatePolicy(cfg, 'ssh_execute', 'docker rm xyz').allowed, false, 'docker rm not in allow → refused');
+  assertEqual(
+    evaluatePolicy(cfg, 'ssh_execute', 'docker logs my-app').allowed,
+    true,
+    'docker logs allowed'
+  );
+  assertEqual(
+    evaluatePolicy(cfg, 'ssh_execute', 'docker rm xyz').allowed,
+    false,
+    'docker rm not in allow → refused'
+  );
 });
 
 test('restricted: DENY_PATTERNS override ALLOW_PATTERNS', () => {
@@ -152,9 +185,21 @@ test('restricted: DENY_PATTERNS override ALLOW_PATTERNS', () => {
     allowPatterns: ['^docker '],
     denyPatterns: [' rm ', '--force'],
   };
-  assertEqual(evaluatePolicy(cfg, 'ssh_execute', 'docker ps').allowed, true, 'docker ps still allowed');
-  assertEqual(evaluatePolicy(cfg, 'ssh_execute', 'docker rm x').allowed, false, 'matches DENY pattern');
-  assertEqual(evaluatePolicy(cfg, 'ssh_execute', 'docker logs --force x').allowed, false, '--force is denied');
+  assertEqual(
+    evaluatePolicy(cfg, 'ssh_execute', 'docker ps').allowed,
+    true,
+    'docker ps still allowed'
+  );
+  assertEqual(
+    evaluatePolicy(cfg, 'ssh_execute', 'docker rm x').allowed,
+    false,
+    'matches DENY pattern'
+  );
+  assertEqual(
+    evaluatePolicy(cfg, 'ssh_execute', 'docker logs --force x').allowed,
+    false,
+    '--force is denied'
+  );
 });
 
 test('restricted: invalid regex pattern is ignored, valid ones still work', () => {
@@ -166,7 +211,11 @@ test('restricted: invalid regex pattern is ignored, valid ones still work', () =
     denyPatterns: [],
   };
   // The invalid regex is skipped; the valid one still matches "ls".
-  assertEqual(evaluatePolicy(cfg, 'ssh_execute', 'ls -la').allowed, true, 'valid regex still works');
+  assertEqual(
+    evaluatePolicy(cfg, 'ssh_execute', 'ls -la').allowed,
+    true,
+    'valid regex still works'
+  );
 });
 
 test('restricted: non-command-bearing mutating tool is blocked', () => {
@@ -177,7 +226,11 @@ test('restricted: non-command-bearing mutating tool is blocked', () => {
     allowPatterns: ['^anything'],
     denyPatterns: [],
   };
-  assertEqual(evaluatePolicy(cfg, 'ssh_upload').allowed, false, 'restricted inherits readonly blocks');
+  assertEqual(
+    evaluatePolicy(cfg, 'ssh_upload').allowed,
+    false,
+    'restricted inherits readonly blocks'
+  );
 });
 
 test('restricted: read-only tool passes through', () => {
@@ -204,7 +257,14 @@ test('VALID_MODES contains exactly the 3 known modes', () => {
 });
 
 test('READONLY_BLOCKED_TOOLS includes core mutators', () => {
-  for (const t of ['ssh_upload', 'ssh_deploy', 'ssh_sync', 'ssh_execute_sudo', 'ssh_backup_create', 'ssh_db_import']) {
+  for (const t of [
+    'ssh_upload',
+    'ssh_deploy',
+    'ssh_sync',
+    'ssh_execute_sudo',
+    'ssh_backup_create',
+    'ssh_db_import',
+  ]) {
     assertTrue(READONLY_BLOCKED_TOOLS.has(t), `${t} must be in READONLY_BLOCKED_TOOLS`);
   }
 });
@@ -219,7 +279,13 @@ test('COMMAND_BEARING_TOOLS lists exec-style tools', () => {
 
 test('auditLog is a no-op when AUDIT_LOG is not configured', () => {
   // Should not throw, should not create any file
-  auditLog({ name: 's' }, 'ssh_execute', { command: 'ls' }, { allowed: true }, { code: 0, success: true });
+  auditLog(
+    { name: 's' },
+    'ssh_execute',
+    { command: 'ls' },
+    { allowed: true },
+    { code: 0, success: true }
+  );
   // No assertion needed: success is "didn't throw and didn't create anything"
 });
 
@@ -255,7 +321,12 @@ test('auditLog redacts secrets in args', () => {
     auditLog(
       { name: 'prod', auditLog: tmpFile },
       'ssh_execute_sudo',
-      { command: 'whoami', password: 's3cret', sudoPassword: 'also-secret', nested: { token: 'tok' } },
+      {
+        command: 'whoami',
+        password: 's3cret',
+        sudoPassword: 'also-secret',
+        nested: { token: 'tok' },
+      },
       { allowed: true },
       { code: 0, success: true }
     );

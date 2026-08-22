@@ -34,16 +34,16 @@ jobs:
     - name: Install Node dependencies
       run: |
         npm install
-        npm install --save-dev eslint prettier
     
     - name: Run JavaScript syntax check
       run: |
         node --check src/index.ts
         node --check src/ssh-manager.ts
     
-    - name: Run ESLint
-      run: npx eslint src/
-      continue-on-error: true
+    # Biome lint gate (replaced the old ESLint step, which carried
+    # continue-on-error and a parser that could not read TypeScript).
+    - name: Run Biome lint
+      run: npx @biomejs/biome lint .
 
     # Type-checks the JSDoc annotations over plain JS (no build, nothing emitted).
     # Not continue-on-error: this gate is only useful if it can fail the build.

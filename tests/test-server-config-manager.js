@@ -5,33 +5,44 @@ import path from 'path';
 import { ServerConfigManager } from '../src/server-config-manager.ts';
 
 let passed = 0;
-function ok(label) { console.log(`[32m✓[0m ${label}`); passed++; }
+function ok(label) {
+  console.log(`[32m✓[0m ${label}`);
+  passed++;
+}
 
 function writeToml(filePath, servers) {
-  const content = Object.entries(servers).map(([name, server]) => `
+  const content = Object.entries(servers)
+    .map(
+      ([name, server]) => `
 [ssh_servers.${name}]
 host = "${server.host}"
 user = "${server.user}"
 password = "${server.password}"
 port = ${server.port}
 description = "${server.description}"
-`).join('\n');
+`
+    )
+    .join('\n');
 
   fs.writeFileSync(filePath, content, 'utf8');
 }
 
 function writeEnv(filePath, host) {
-  fs.writeFileSync(filePath, [
-    `SSH_SERVER_LAN_51_HOST=${host}`,
-    'SSH_SERVER_LAN_51_USER=root',
-    'SSH_SERVER_LAN_51_PASSWORD=123456',
-    'SSH_SERVER_LAN_51_PORT=22',
-    'SSH_SERVER_LAN_51_DESCRIPTION="LAN server from env"',
-    ''
-  ].join('\n'), 'utf8');
+  fs.writeFileSync(
+    filePath,
+    [
+      `SSH_SERVER_LAN_51_HOST=${host}`,
+      'SSH_SERVER_LAN_51_USER=root',
+      'SSH_SERVER_LAN_51_PASSWORD=123456',
+      'SSH_SERVER_LAN_51_PORT=22',
+      'SSH_SERVER_LAN_51_DESCRIPTION="LAN server from env"',
+      '',
+    ].join('\n'),
+    'utf8'
+  );
 }
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const tmpdir = (tag) => fs.mkdtempSync(path.join(os.tmpdir(), `mcp-ssh-${tag}-`));
 
 // Spy loader: deterministic, counts loads and lets each test program the result.
@@ -55,7 +66,13 @@ async function testInitialLoadAndHotReload() {
   const envPath = path.join(dir, '.env');
 
   writeToml(tomlPath, {
-    lan_51: { host: '10.0.0.51', user: 'root', password: '123456', port: 22, description: 'LAN server 10.0.0.51' }
+    lan_51: {
+      host: '10.0.0.51',
+      user: 'root',
+      password: '123456',
+      port: 22,
+      description: 'LAN server 10.0.0.51',
+    },
   });
 
   const manager = new ServerConfigManager({ envPath, tomlPath, preferToml: false });
@@ -66,8 +83,20 @@ async function testInitialLoadAndHotReload() {
 
   await sleep(1100);
   writeToml(tomlPath, {
-    lan_51: { host: '10.0.0.51', user: 'root', password: '123456', port: 22, description: 'LAN server 10.0.0.51' },
-    lan_52: { host: '10.0.0.52', user: 'root', password: '123456', port: 22, description: 'LAN server 10.0.0.52' }
+    lan_51: {
+      host: '10.0.0.51',
+      user: 'root',
+      password: '123456',
+      port: 22,
+      description: 'LAN server 10.0.0.51',
+    },
+    lan_52: {
+      host: '10.0.0.52',
+      user: 'root',
+      password: '123456',
+      port: 22,
+      description: 'LAN server 10.0.0.52',
+    },
   });
 
   servers = await manager.getServers();
@@ -97,7 +126,11 @@ async function testLazyReload() {
 
   const loader = new SpyLoader();
   loader.behavior = () => new Map([['alpha', { host: '10.0.0.1' }]]);
-  const manager = new ServerConfigManager({ envPath, tomlPath, configLoader: /** @type {any} */ (loader) /* SpyLoader duck-types only the load() surface */ });
+  const manager = new ServerConfigManager({
+    envPath,
+    tomlPath,
+    configLoader: /** @type {any} */ (loader) /* SpyLoader duck-types only the load() surface */,
+  });
 
   await manager.loadInitial();
   assert.strictEqual(loader.loadCount, 1);
@@ -123,13 +156,19 @@ async function testReloadFailureKeepsPrevious() {
 
   const loader = new SpyLoader();
   loader.behavior = () => new Map([['alpha', { host: '1.1.1.1' }]]);
-  const manager = new ServerConfigManager({ envPath, tomlPath, configLoader: /** @type {any} */ (loader) /* SpyLoader duck-types only the load() surface */ });
+  const manager = new ServerConfigManager({
+    envPath,
+    tomlPath,
+    configLoader: /** @type {any} */ (loader) /* SpyLoader duck-types only the load() surface */,
+  });
 
   let servers = await manager.loadInitial();
   assert.deepStrictEqual(Object.keys(servers), ['alpha']);
 
   // Next reload throws (e.g. malformed config written mid-edit).
-  loader.behavior = () => { throw new Error('boom: malformed config'); };
+  loader.behavior = () => {
+    throw new Error('boom: malformed config');
+  };
   fs.appendFileSync(tomlPath, '\n# broken edit\n');
 
   servers = await manager.getServers(); // must catch internally
@@ -138,7 +177,11 @@ async function testReloadFailureKeepsPrevious() {
   ok('reload failure keeps the last valid config (no throw, no wipe)');
 
   // Recovery: once the config is valid again, a further change reloads it.
-  loader.behavior = () => new Map([['alpha', { host: '1.1.1.1' }], ['gamma', { host: '3.3.3.3' }]]);
+  loader.behavior = () =>
+    new Map([
+      ['alpha', { host: '1.1.1.1' }],
+      ['gamma', { host: '3.3.3.3' }],
+    ]);
   fs.appendFileSync(tomlPath, '\n# fixed\n');
   servers = await manager.getServers();
   assert.deepStrictEqual(Object.keys(servers), ['alpha', 'gamma']);
@@ -151,7 +194,7 @@ async function testDeletedFileIsSafe() {
   const tomlPath = path.join(dir, 'ssh-config.toml');
   const envPath = path.join(dir, '.env');
   writeToml(tomlPath, {
-    alpha: { host: '10.0.0.1', user: 'root', password: 'x', port: 22, description: 'a' }
+    alpha: { host: '10.0.0.1', user: 'root', password: 'x', port: 22, description: 'a' },
   });
 
   const manager = new ServerConfigManager({ envPath, tomlPath, preferToml: true });
@@ -164,8 +207,13 @@ async function testDeletedFileIsSafe() {
   // signature flips to "missing" → reload attempt; whatever the loader does,
   // getServers() must stay defined and never throw.
   servers = await manager.getServers();
-  assert.ok(servers && typeof servers === 'object', 'getServers() returns an object after file deletion');
-  ok(`file deleted: getServers() stays robust (no crash, ${Object.keys(servers).length} server(s))`);
+  assert.ok(
+    servers && typeof servers === 'object',
+    'getServers() returns an object after file deletion'
+  );
+  ok(
+    `file deleted: getServers() stays robust (no crash, ${Object.keys(servers).length} server(s))`
+  );
 }
 
 async function main() {
@@ -176,7 +224,7 @@ async function main() {
   console.log(`\n✅ server config manager tests passed (${passed} checks)`);
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error(error);
   process.exit(1);
 });

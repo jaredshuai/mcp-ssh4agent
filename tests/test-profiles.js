@@ -4,11 +4,11 @@
  * Test suite for Profile Loader
  */
 
-import { 
-  loadProfile, 
-  listProfiles, 
-  setActiveProfile, 
-  getActiveProfileName 
+import {
+  loadProfile,
+  listProfiles,
+  setActiveProfile,
+  getActiveProfileName,
 } from '../src/profile-loader.ts';
 import assert from 'assert';
 import fs from 'fs';
@@ -39,12 +39,12 @@ try {
   const profiles = listProfiles();
   assert(Array.isArray(profiles), 'listProfiles should return an array');
   assert(profiles.length > 0, 'Should have at least one profile');
-  
-  const defaultProfile = profiles.find(p => p.name === 'default');
+
+  const defaultProfile = profiles.find((p) => p.name === 'default');
   assert(defaultProfile, 'Default profile should be in the list');
-  
+
   console.log(`✅ Found ${profiles.length} profiles:`);
-  profiles.forEach(p => {
+  profiles.forEach((p) => {
     console.log(`   - ${p.name}: ${p.aliasCount} aliases, ${p.hookCount} hooks`);
   });
   console.log();
@@ -82,19 +82,20 @@ try {
 // Test 5: Switch profiles
 console.log('Test 5: Switch profiles');
 const testProfileFile = path.join(__dirname, '..', '.ssh-manager-profile');
-const originalProfile = fs.existsSync(testProfileFile) ? 
-  fs.readFileSync(testProfileFile, 'utf8').trim() : null;
+const originalProfile = fs.existsSync(testProfileFile)
+  ? fs.readFileSync(testProfileFile, 'utf8').trim()
+  : null;
 
 try {
   // Switch to docker profile
   const switchResult = setActiveProfile('docker');
   assert(switchResult === true, 'Should successfully switch to docker profile');
-  
+
   const newProfile = getActiveProfileName();
   assert(newProfile === 'docker', 'Active profile should be docker after switch');
-  
+
   console.log('✅ Successfully switched to docker profile');
-  
+
   // Restore original profile
   if (originalProfile) {
     fs.writeFileSync(testProfileFile, originalProfile);
@@ -118,8 +119,10 @@ console.log('Test 6: Load non-existent profile');
 try {
   const profile = loadProfile('non-existent-profile');
   assert(profile, 'Should return a profile even for non-existent name');
-  assert(profile.name === 'default' || profile.name === 'minimal', 
-    'Should fallback to default or minimal profile');
+  assert(
+    profile.name === 'default' || profile.name === 'minimal',
+    'Should fallback to default or minimal profile'
+  );
   console.log(`✅ Correctly fell back to ${profile.name} profile\n`);
 } catch (error) {
   console.error(`❌ Failed to handle non-existent profile: ${error.message}\n`);
@@ -130,20 +133,21 @@ try {
 console.log('Test 7: Validate all profile JSON files');
 try {
   const profilesDir = path.join(__dirname, '..', 'profiles');
-  const files = fs.readdirSync(profilesDir).filter(f => f.endsWith('.json'));
-  
+  const files = fs.readdirSync(profilesDir).filter((f) => f.endsWith('.json'));
+
   for (const file of files) {
     const filePath = path.join(profilesDir, file);
     const content = fs.readFileSync(filePath, 'utf8');
     const profile = JSON.parse(content);
-    
+
     assert(profile.name, `Profile ${file} should have a name`);
     assert(profile.description, `Profile ${file} should have a description`);
-    assert(typeof profile.commandAliases === 'object', 
-      `Profile ${file} should have commandAliases object`);
-    assert(typeof profile.hooks === 'object', 
-      `Profile ${file} should have hooks object`);
-    
+    assert(
+      typeof profile.commandAliases === 'object',
+      `Profile ${file} should have commandAliases object`
+    );
+    assert(typeof profile.hooks === 'object', `Profile ${file} should have hooks object`);
+
     console.log(`   ✓ ${file} is valid`);
   }
   console.log(`✅ All ${files.length} profile files are valid\n`);

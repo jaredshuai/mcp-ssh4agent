@@ -4,13 +4,13 @@
 // Pure Node.js, no shell-isms, no Python. Installs a `.git/hooks/pre-commit`
 // file (POSIX `sh` — git runs hooks via sh.exe on Windows, so this works
 // cross-platform without any bash requirement). The hook runs the project's
-// `npm run typecheck` and `npm run validate` gates before each commit.
+// `biome check` (lint + format), `npm run typecheck` and `npm run validate`
+// gates before each commit.
 //
 // Unlike the old setup-hooks.sh, this does NOT install the Python pre-commit
 // framework, black/flake8/isort, or detect-secrets (the project has dropped
-// Python). Linting/formatting stays opt-in via the existing eslint/prettier
-// devDependencies — add `npm run lint` / `npm run format` to the hook below
-// if you want them in the gate.
+// Python). Linting/formatting is Biome (`npm run lint` / `npm run format`)
+// and is part of the gate.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
@@ -52,11 +52,10 @@ ok('Node.js available');
 // 2. Ensure node_modules present (hook calls npm scripts).
 if (!existsSync(join(PROJECT_ROOT, 'node_modules'))) {
   console.log('📦 Installing dependencies (npm install)...');
-  const npmInstall = spawnSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['install'],
-    { cwd: PROJECT_ROOT, stdio: 'inherit' },
-  );
+  const npmInstall = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install'], {
+    cwd: PROJECT_ROOT,
+    stdio: 'inherit',
+  });
   if (npmInstall.status !== 0) {
     fail('npm install failed');
     process.exit(1);
@@ -74,7 +73,8 @@ const hook = `#!/bin/sh
 #   git commit --no-verify
 
 set -e
-echo "🔍 Running pre-commit checks (typecheck + validate)..."
+echo "🔍 Running pre-commit checks (biome + typecheck + validate)..."
+npx @biomejs/biome check .
 npm run typecheck
 npm run validate
 echo "✅ Pre-commit checks passed."
@@ -110,6 +110,7 @@ console.log('');
 console.log(`${GREEN}✅ Git hooks setup complete!${RESET}`);
 console.log('');
 console.log('The following checks will run before each commit:');
+console.log('  ✓ Biome (lint + format check)');
 console.log('  ✓ TypeScript typecheck (tsc, no emit)');
 console.log('  ✓ Validation (node --check + .env tracking + server startup)');
 console.log('');

@@ -98,11 +98,14 @@ export class ConfigLoader {
    * 2. .env file
    * 3. TOML config file (lowest priority)
    */
-  async load(options: { envPath?: string; tomlPath?: string; preferToml?: boolean } = {}): Promise<Map<string, ServerConfig>> {
+  async load(
+    options: { envPath?: string; tomlPath?: string; preferToml?: boolean } = {}
+  ): Promise<Map<string, ServerConfig>> {
     const {
       envPath = path.join(process.cwd(), '.env'),
-      tomlPath = process.env.SSH_CONFIG_PATH || path.join(os.homedir(), '.codex', 'ssh-config.toml'),
-      preferToml = false
+      tomlPath = process.env.SSH_CONFIG_PATH ||
+        path.join(os.homedir(), '.codex', 'ssh-config.toml'),
+      preferToml = false,
     } = options;
 
     // Clear existing servers
@@ -184,7 +187,7 @@ export class ConfigLoader {
           mode,
           allowPatterns: allow,
           denyPatterns: deny,
-          source: 'toml'
+          source: 'toml',
         });
       }
     }
@@ -201,7 +204,7 @@ export class ConfigLoader {
 
     this.parseEnvVariables({
       ...process.env,
-      ...(result.parsed || {})
+      ...(result.parsed || {}),
     });
   }
 
@@ -252,7 +255,7 @@ export class ConfigLoader {
         mode,
         allowPatterns: allow,
         denyPatterns: raw.denyPatterns || [],
-        source: 'env'
+        source: 'env',
       };
 
       this.servers.set(serverName, server);
@@ -293,7 +296,7 @@ export class ConfigLoader {
    */
   exportToToml() {
     const config = {
-      ssh_servers: {} as Record<string, any>
+      ssh_servers: {} as Record<string, any>,
     };
 
     for (const [name, server] of this.servers) {
@@ -301,7 +304,7 @@ export class ConfigLoader {
       const serverConfig = {
         host: server.host,
         user: server.user,
-        port: server.port
+        port: server.port,
       };
 
       for (const spec of SERVER_FIELDS) {
@@ -319,7 +322,8 @@ export class ConfigLoader {
           continue;
         }
         if (spec.camel === 'allowPatterns' || spec.camel === 'denyPatterns') {
-          if (Array.isArray(value) && value.length > 0) serverConfig[canonicalTomlKey(spec)] = value;
+          if (Array.isArray(value) && value.length > 0)
+            serverConfig[canonicalTomlKey(spec)] = value;
           continue;
         }
         if (value) serverConfig[canonicalTomlKey(spec)] = value;
@@ -349,31 +353,31 @@ export class ConfigLoader {
       for (const spec of SERVER_FIELDS) {
         const value = server[spec.camel];
         switch (spec.camel) {
-        case 'host':
-        case 'user':
-          // Always emitted; unquoted (machine-shaped values).
-          lines.push(serverEnvLine(upperName, spec, value));
-          break;
-        case 'port':
-          lines.push(serverEnvLine(upperName, spec, value || 22));
-          break;
-        case 'forwardAgent':
-          // Only emit when opted in, matching the TOML export rule.
-          if (value === true) lines.push(serverEnvLine(upperName, spec, 'true'));
-          break;
-        case 'mode':
-          if (value && value !== 'unrestricted') {
+          case 'host':
+          case 'user':
+            // Always emitted; unquoted (machine-shaped values).
             lines.push(serverEnvLine(upperName, spec, value));
-          }
-          break;
-        case 'allowPatterns':
-        case 'denyPatterns':
-          if (Array.isArray(value) && value.length > 0) {
-            lines.push(serverEnvLine(upperName, spec, value));
-          }
-          break;
-        default:
-          if (value) lines.push(serverEnvLine(upperName, spec, value));
+            break;
+          case 'port':
+            lines.push(serverEnvLine(upperName, spec, value || 22));
+            break;
+          case 'forwardAgent':
+            // Only emit when opted in, matching the TOML export rule.
+            if (value === true) lines.push(serverEnvLine(upperName, spec, 'true'));
+            break;
+          case 'mode':
+            if (value && value !== 'unrestricted') {
+              lines.push(serverEnvLine(upperName, spec, value));
+            }
+            break;
+          case 'allowPatterns':
+          case 'denyPatterns':
+            if (Array.isArray(value) && value.length > 0) {
+              lines.push(serverEnvLine(upperName, spec, value));
+            }
+            break;
+          default:
+            if (value) lines.push(serverEnvLine(upperName, spec, value));
         }
       }
 
@@ -405,9 +409,9 @@ export class ConfigLoader {
       command: 'node',
       args: [path.join(process.cwd(), 'src', 'index.ts')],
       env: {
-        SSH_CONFIG_PATH: path.join(os.homedir(), '.codex', 'ssh-config.toml')
+        SSH_CONFIG_PATH: path.join(os.homedir(), '.codex', 'ssh-config.toml'),
       },
-      startup_timeout_ms: 20000
+      startup_timeout_ms: 20000,
     };
 
     // Write back to config file

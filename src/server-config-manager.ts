@@ -14,7 +14,12 @@ export class ServerConfigManager {
   servers: Record<string, ServerConfig>;
   fileSignature: string | null;
 
-  constructor({ envPath, tomlPath, preferToml = false, configLoader = new ConfigLoader() }: {
+  constructor({
+    envPath,
+    tomlPath,
+    preferToml = false,
+    configLoader = new ConfigLoader(),
+  }: {
     envPath?: string;
     tomlPath?: string;
     preferToml?: boolean;
@@ -54,7 +59,7 @@ export class ServerConfigManager {
       const loadedServers = await this.configLoader.load({
         envPath: this.envPath,
         tomlPath: this.tomlPath,
-        preferToml: this.preferToml
+        preferToml: this.preferToml,
       });
 
       const nextServers: Record<string, ServerConfig> = {};
@@ -76,7 +81,7 @@ export class ServerConfigManager {
   getFileSignature() {
     return [
       this.getSingleFileSignature(this.tomlPath),
-      this.getSingleFileSignature(this.envPath)
+      this.getSingleFileSignature(this.envPath),
     ].join('|');
   }
 

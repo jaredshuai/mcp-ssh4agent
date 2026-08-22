@@ -14,7 +14,7 @@ import {
   getGroupTools,
   validateToolRegistry,
   getToolStats,
-  verifyIntegrity
+  verifyIntegrity,
 } from '../src/tool-registry.ts';
 
 // Test colors
@@ -68,21 +68,14 @@ test('No duplicate tools across groups', () => {
 // Test 3: Tool group counts are correct
 test('Tool group counts match TOOL_GROUP_COUNTS', () => {
   for (const [groupName, tools] of Object.entries(TOOL_GROUPS)) {
-    assertEqual(
-      tools.length,
-      TOOL_GROUP_COUNTS[groupName],
-      `Group ${groupName} count mismatch`
-    );
+    assertEqual(tools.length, TOOL_GROUP_COUNTS[groupName], `Group ${groupName} count mismatch`);
   }
 });
 
 // Test 4: All groups have descriptions
 test('All groups have descriptions', () => {
   for (const groupName of Object.keys(TOOL_GROUPS)) {
-    assertTrue(
-      groupName in TOOL_GROUP_DESCRIPTIONS,
-      `Group ${groupName} missing description`
-    );
+    assertTrue(groupName in TOOL_GROUP_DESCRIPTIONS, `Group ${groupName} missing description`);
     assertTrue(
       TOOL_GROUP_DESCRIPTIONS[groupName].length > 0,
       `Group ${groupName} has empty description`
@@ -93,8 +86,16 @@ test('All groups have descriptions', () => {
 // Test 5: findToolGroup works correctly
 test('findToolGroup returns correct group', () => {
   assertEqual(findToolGroup('ssh_execute'), 'core', 'ssh_execute should be in core group');
-  assertEqual(findToolGroup('ssh_session_start'), 'sessions', 'ssh_session_start should be in sessions group');
-  assertEqual(findToolGroup('ssh_backup_create'), 'backup', 'ssh_backup_create should be in backup group');
+  assertEqual(
+    findToolGroup('ssh_session_start'),
+    'sessions',
+    'ssh_session_start should be in sessions group'
+  );
+  assertEqual(
+    findToolGroup('ssh_backup_create'),
+    'backup',
+    'ssh_backup_create should be in backup group'
+  );
   assertEqual(findToolGroup('nonexistent_tool'), null, 'Should return null for unknown tool');
 });
 
@@ -111,7 +112,13 @@ test('getGroupTools returns correct tools', () => {
 // Test 7: Core tools are correct
 test('Core group contains expected tools', () => {
   const coreTools = getGroupTools('core');
-  const expectedCore = ['ssh_list_servers', 'ssh_execute', 'ssh_upload', 'ssh_download', 'ssh_sync'];
+  const expectedCore = [
+    'ssh_list_servers',
+    'ssh_execute',
+    'ssh_upload',
+    'ssh_download',
+    'ssh_sync',
+  ];
 
   for (const tool of expectedCore) {
     assertTrue(coreTools.includes(tool), `Core should include ${tool}`);
@@ -138,10 +145,7 @@ test('getToolStats returns correct statistics', () => {
 test('All tools follow ssh_* naming convention', () => {
   const allTools = getAllTools();
   for (const tool of allTools) {
-    assertTrue(
-      tool.startsWith('ssh_'),
-      `Tool ${tool} should start with 'ssh_'`
-    );
+    assertTrue(tool.startsWith('ssh_'), `Tool ${tool} should start with 'ssh_'`);
   }
 });
 

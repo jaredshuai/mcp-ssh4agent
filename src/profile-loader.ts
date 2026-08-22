@@ -82,7 +82,7 @@ function loadDefaultProfile() {
     name: 'minimal',
     description: 'Minimal profile',
     commandAliases: {},
-    hooks: {}
+    hooks: {},
   };
 }
 
@@ -105,7 +105,7 @@ export function listProfiles() {
             description: profile.description || 'No description',
             file: file,
             aliasCount: Object.keys(profile.commandAliases || {}).length,
-            hookCount: Object.keys(profile.hooks || {}).length
+            hookCount: Object.keys(profile.hooks || {}).length,
           });
         } catch (error) {
           console.error(`Error reading profile ${file}: ${error.message}`);

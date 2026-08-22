@@ -13,20 +13,54 @@
 import * as fs from 'node:fs';
 
 import {
-  BOLD, CYAN, GRAY, NC,
-  print_header, print_subheader, print_info, print_warning, print_error,
-  print_success, print_table_row,
-  clear_screen, pause, question,
-  prompt_input, prompt_password, prompt_yes_no,
-  SERVER, SESSION, SYNC, TUNNEL, MONITOR, ROCKET, GEAR, INFO,
-  CHECK, CLIPBOARD, WRENCH, CROSS, NOTE, PENCIL, KEY, LOCK, ARROW,
+  BOLD,
+  CYAN,
+  GRAY,
+  NC,
+  print_header,
+  print_subheader,
+  print_info,
+  print_warning,
+  print_error,
+  print_success,
+  print_table_row,
+  clear_screen,
+  pause,
+  question,
+  prompt_input,
+  prompt_password,
+  prompt_yes_no,
+  SERVER,
+  SESSION,
+  SYNC,
+  TUNNEL,
+  MONITOR,
+  ROCKET,
+  GEAR,
+  INFO,
+  CHECK,
+  CLIPBOARD,
+  WRENCH,
+  CROSS,
+  NOTE,
+  PENCIL,
+  KEY,
+  LOCK,
+  ARROW,
 } from './colors.ts';
 
 import {
-  SSH_MANAGER_ENV, SSH_MANAGER_CONFIG, PROJECT_ROOT,
-  get_server_config, add_server_to_env, update_server_in_env,
-  test_ssh_connection, validate_server_name, load_servers,
-  get_config, expandHome,
+  SSH_MANAGER_ENV,
+  SSH_MANAGER_CONFIG,
+  PROJECT_ROOT,
+  get_server_config,
+  add_server_to_env,
+  update_server_in_env,
+  test_ssh_connection,
+  validate_server_name,
+  load_servers,
+  get_config,
+  expandHome,
 } from './config.ts';
 
 // Cross-module bindings from the main entry (../ssh-manager.ts). These form a
@@ -35,9 +69,7 @@ import {
 // binding) or a `const` that is only *read* inside functions at call time — by
 // which point the main entry has finished evaluating. None are read at module
 // evaluation time.
-import {
-  cmd_exec, cmd_sync, cmd_tunnel, cmd_ssh, get_version,
-} from '../ssh-manager.ts';
+import { cmd_exec, cmd_sync, cmd_tunnel, cmd_ssh, get_version } from '../ssh-manager.ts';
 
 // The CLI version lives in the main entry; read lazily so menu.ts never
 // touches the `const VERSION` binding during its own evaluation.
@@ -97,7 +129,9 @@ export function show_server_menu(): void {
 
 // ── Server selection menu ─────────────────────────────────────────────────────
 // Returns the chosen server name, or null if cancelled / no servers.
-export async function select_server_menu(promptText: string = 'Select a server'): Promise<string | null> {
+export async function select_server_menu(
+  promptText: string = 'Select a server'
+): Promise<string | null> {
   const servers = load_servers();
   if (servers.length === 0) {
     print_warning('No servers configured');
@@ -230,7 +264,9 @@ export async function wizard_add_server(): Promise<void> {
 
   process.stdout.write('\n');
   process.stdout.write('Assign this server to a group (optional).\n');
-  process.stdout.write('Servers sharing a group can be targeted together with ssh_execute_group.\n');
+  process.stdout.write(
+    'Servers sharing a group can be targeted together with ssh_execute_group.\n'
+  );
   process.stdout.write('Example: production, staging, customer-acme\n');
   const group = await prompt_input('Group', '');
 
@@ -356,7 +392,10 @@ export async function wizard_edit_server(): Promise<void> {
     authValue = await prompt_password('Password');
   } else {
     authType = 'key';
-    authValue = await prompt_input('SSH key path', currentKeypath || `${expandHome('~')}/.ssh/id_rsa`);
+    authValue = await prompt_input(
+      'SSH key path',
+      currentKeypath || `${expandHome('~')}/.ssh/id_rsa`
+    );
     authValue = expandHome(authValue);
   }
 
@@ -379,7 +418,16 @@ export async function wizard_edit_server(): Promise<void> {
 
   process.stdout.write('\n');
   if (await prompt_yes_no('Save changes?', 'y')) {
-    update_server_in_env(serverName, host, user, authType, authValue, port, description, defaultDir);
+    update_server_in_env(
+      serverName,
+      host,
+      user,
+      authType,
+      authValue,
+      port,
+      description,
+      defaultDir
+    );
     process.stdout.write('\n');
     if (await prompt_yes_no('Test connection now?', 'y')) {
       test_ssh_connection(serverName);

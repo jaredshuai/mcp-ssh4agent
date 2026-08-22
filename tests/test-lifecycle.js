@@ -22,8 +22,14 @@ fs.writeFileSync(tmpEnv, '');
 
 let passed = 0;
 let failed = 0;
-function ok(label) { console.log(`[32m✓[0m ${label}`); passed++; }
-function ko(label) { console.log(`[31m✗[0m ${label}`); failed++; }
+function ok(label) {
+  console.log(`[32m✓[0m ${label}`);
+  passed++;
+}
+function ko(label) {
+  console.log(`[31m✗[0m ${label}`);
+  failed++;
+}
 
 // Boot the server, wait for it to come up, then run `teardown(child)` and measure
 // time-to-exit. If the process is still alive after `killAfter` ms it is the
@@ -32,14 +38,23 @@ function bootAndTeardown(teardown, { bootMs = 800, killAfter = 4000 } = {}) {
   return new Promise((resolve) => {
     const child = spawn('node', [SERVER], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, SSH_ENV_PATH: tmpEnv, SSH_CONFIG_PATH: tmpToml, SSH_LOG_LEVEL: 'ERROR' },
+      env: {
+        ...process.env,
+        SSH_ENV_PATH: tmpEnv,
+        SSH_CONFIG_PATH: tmpToml,
+        SSH_LOG_LEVEL: 'ERROR',
+      },
     });
-    child.stderr.on('data', () => {}); // swallow boot/shutdown logs
+    child.stderr.on('data', () => {
+      /* swallow boot/shutdown logs */
+    });
     let exited = false;
 
     setTimeout(() => {
       const t0 = process.hrtime.bigint();
-      const killTimer = setTimeout(() => { if (!exited) child.kill('SIGKILL'); }, killAfter);
+      const killTimer = setTimeout(() => {
+        if (!exited) child.kill('SIGKILL');
+      }, killAfter);
       child.once('exit', (code, signal) => {
         exited = true;
         clearTimeout(killTimer);
@@ -64,10 +79,14 @@ async function main() {
   let r = await bootAndTeardown((c) => c.stdin.end());
   clean(r)
     ? ok(`exits cleanly on stdin EOF (${r.ms.toFixed(0)}ms, code 0)`)
-    : ko(`stdin EOF did not exit cleanly: code=${r.code} signal=${r.signal} (${r.ms.toFixed(0)}ms) — orphaned?`);
+    : ko(
+        `stdin EOF did not exit cleanly: code=${r.code} signal=${r.signal} (${r.ms.toFixed(0)}ms) — orphaned?`
+      );
 
   if (SKIP_SIGNALS) {
-    console.log('⏭ skip: POSIX signals not deliverable on Windows; graceful shutdown covered by stdin-EOF test');
+    console.log(
+      '⏭ skip: POSIX signals not deliverable on Windows; graceful shutdown covered by stdin-EOF test'
+    );
   } else {
     // 2. SIGTERM — the other standard teardown signal (e.g. process supervisors).
     r = await bootAndTeardown((c) => c.kill('SIGTERM'));
@@ -83,7 +102,10 @@ async function main() {
 
     // 4. Idempotent shutdown: overlapping signals (SIGTERM + stdin EOF) must not
     //    double-dispose or crash — a single clean exit is expected.
-    r = await bootAndTeardown((c) => { c.kill('SIGTERM'); c.stdin.end(); });
+    r = await bootAndTeardown((c) => {
+      c.kill('SIGTERM');
+      c.stdin.end();
+    });
     clean(r)
       ? ok(`idempotent on overlapping SIGTERM + stdin EOF (${r.ms.toFixed(0)}ms, code 0)`)
       : ko(`overlapping signals did not exit cleanly: code=${r.code} signal=${r.signal}`);
@@ -92,7 +114,9 @@ async function main() {
   fs.rmSync(tmpEnv, { force: true });
   fs.rmSync(tmpToml, { force: true });
 
-  console.log(`\n${failed === 0 ? '✅' : '❌'} lifecycle tests: ${passed} passed, ${failed} failed`);
+  console.log(
+    `\n${failed === 0 ? '✅' : '❌'} lifecycle tests: ${passed} passed, ${failed} failed`
+  );
   process.exit(failed === 0 ? 0 : 1);
 }
 

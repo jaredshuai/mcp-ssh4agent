@@ -59,24 +59,23 @@ export function resolveServerName(nameOrAlias, servers) {
 
   // Try to find partial match
   const serverNames = Object.keys(servers);
-  const matches = serverNames.filter(name => name.includes(normalizedName));
+  const matches = serverNames.filter((name) => name.includes(normalizedName));
 
   if (matches.length === 1) {
     return matches[0];
   } else if (matches.length > 1) {
-    throw new Error(
-      `Ambiguous server name "${nameOrAlias}". Matches: ${matches.join(', ')}`
-    );
+    throw new Error(`Ambiguous server name "${nameOrAlias}". Matches: ${matches.join(', ')}`);
   }
 
   // Check if nameOrAlias contains a domain that matches a server
   if (nameOrAlias.includes('.')) {
-    const matchingServer = serverNames.find(name => {
+    const matchingServer = serverNames.find((name) => {
       const serverHost = servers[name].host;
-      return serverHost && (
-        serverHost === nameOrAlias ||
-        serverHost.includes(nameOrAlias) ||
-        nameOrAlias.includes(serverHost)
+      return (
+        serverHost &&
+        (serverHost === nameOrAlias ||
+          serverHost.includes(nameOrAlias) ||
+          nameOrAlias.includes(serverHost))
       );
     });
 
@@ -113,6 +112,6 @@ export function listAliases() {
   const aliases = loadAliases();
   return Object.entries(aliases).map(([alias, target]) => ({
     alias,
-    target
+    target,
   }));
 }

@@ -16,7 +16,10 @@ import path from 'path';
 import { ServerGroups } from '../src/server-groups.ts';
 
 let passed = 0;
-function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }
+function ok(label) {
+  console.log(`\x1b[32m✓\x1b[0m ${label}`);
+  passed++;
+}
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-groups-'));
 let fileCounter = 0;
@@ -31,8 +34,8 @@ function makeGroups(serverConfigs, storedGroups) {
     groupsFile,
     groups: new ServerGroups({
       groupsFile,
-      serverConfigProvider: serverConfigs === undefined ? undefined : () => serverConfigs
-    })
+      serverConfigProvider: serverConfigs === undefined ? undefined : () => serverConfigs,
+    }),
   };
 }
 
@@ -41,7 +44,7 @@ const configs = {
   web2: { name: 'web2', host: '10.0.0.2', group: 'production' },
   db1: { name: 'db1', host: '10.0.0.3', group: 'edge' },
   scratch: { name: 'scratch', host: '10.0.0.4' },
-  blank: { name: 'blank', host: '10.0.0.5', group: '   ' }
+  blank: { name: 'blank', host: '10.0.0.5', group: '   ' },
 };
 
 // A group name absent from .server-groups.json still resolves when servers
@@ -52,7 +55,11 @@ function testGroupFromConfigOnly() {
 
   assert.deepStrictEqual(group.servers, ['db1']);
   assert.strictEqual(group.dynamic, true, 'a config-only group is dynamic');
-  assert.strictEqual(group.fromConfig, true, 'a config-only group is flagged as coming from the config');
+  assert.strictEqual(
+    group.fromConfig,
+    true,
+    'a config-only group is flagged as coming from the config'
+  );
   ok('a group that exists only in the server config resolves to its tagged servers');
 }
 
@@ -69,11 +76,15 @@ function testDefaultGroupGetsConfigMembers() {
 // Explicit membership and config membership add up; group settings survive.
 function testUnionWithExplicitGroup() {
   const { groups } = makeGroups(configs, {
-    production: { description: 'Prod', servers: ['legacy1'], strategy: 'sequential', delay: 1500 }
+    production: { description: 'Prod', servers: ['legacy1'], strategy: 'sequential', delay: 1500 },
   });
   const group = groups.getGroup('production');
 
-  assert.deepStrictEqual(group.servers, ['legacy1', 'web1', 'web2'], 'stored members first, then config ones');
+  assert.deepStrictEqual(
+    group.servers,
+    ['legacy1', 'web1', 'web2'],
+    'stored members first, then config ones'
+  );
   assert.strictEqual(group.strategy, 'sequential', 'stored strategy is preserved');
   assert.strictEqual(group.delay, 1500, 'stored delay is preserved');
   ok('stored members and config-tagged members are merged, group settings preserved');
@@ -81,14 +92,18 @@ function testUnionWithExplicitGroup() {
 
 function testNoDuplicateMembers() {
   const { groups } = makeGroups(configs, { edge: { description: 'Edge', servers: ['DB1'] } });
-  assert.deepStrictEqual(groups.getGroup('edge').servers, ['db1'], 'same server listed twice appears once');
+  assert.deepStrictEqual(
+    groups.getGroup('edge').servers,
+    ['db1'],
+    'same server listed twice appears once'
+  );
   ok('a server both stored and tagged is listed once (case-insensitive)');
 }
 
 function testGroupNameCaseInsensitive() {
   const { groups } = makeGroups({
     a: { name: 'a', host: '10.0.0.1', group: 'Staging' },
-    b: { name: 'b', host: '10.0.0.2', group: 'STAGING' }
+    b: { name: 'b', host: '10.0.0.2', group: 'STAGING' },
   });
 
   assert.deepStrictEqual(groups.getGroup('staging').servers, ['a', 'b']);
@@ -98,11 +113,15 @@ function testGroupNameCaseInsensitive() {
 
 function testUntaggedServersIgnored() {
   const { groups } = makeGroups(configs);
-  const names = groups.listGroups().flatMap(g => (g.name === 'all' ? [] : g.servers));
+  const names = groups.listGroups().flatMap((g) => (g.name === 'all' ? [] : g.servers));
 
   assert.ok(!names.includes('scratch'), 'a server without group joins no group');
   assert.ok(!names.includes('blank'), 'a whitespace-only group is not a group');
-  assert.throws(() => groups.getGroup('   '), /not found/, 'a blank group name resolves to nothing');
+  assert.throws(
+    () => groups.getGroup('   '),
+    /not found/,
+    'a blank group name resolves to nothing'
+  );
   ok('servers with no group (or a blank one) join no group');
 }
 
@@ -116,10 +135,14 @@ function testUnknownGroupStillThrows() {
 // group silently skipped every TOML-defined server.
 function testAllGroupSeesConfiguredServers() {
   const { groups } = makeGroups({
-    tomlonly: { name: 'tomlonly', host: '10.0.0.9' }
+    tomlonly: { name: 'tomlonly', host: '10.0.0.9' },
   });
 
-  assert.deepStrictEqual(groups.getGroup('all').servers, ['tomlonly'], 'all must include non-env servers');
+  assert.deepStrictEqual(
+    groups.getGroup('all').servers,
+    ['tomlonly'],
+    'all must include non-env servers'
+  );
   ok('the "all" group covers servers that exist only in the TOML config');
 }
 
@@ -141,7 +164,7 @@ function testEnvFallbackWithoutProvider() {
 function testListGroupsIncludesConfigGroups() {
   const { groups } = makeGroups(configs);
   const listed = groups.listGroups();
-  const byName = Object.fromEntries(listed.map(g => [g.name, g]));
+  const byName = Object.fromEntries(listed.map((g) => [g.name, g]));
 
   assert.ok(byName.edge, 'config-only group is listed');
   assert.strictEqual(byName.edge.serverCount, 1);
@@ -150,7 +173,7 @@ function testListGroupsIncludesConfigGroups() {
   assert.strictEqual(byName.production.fromConfig, true);
   assert.strictEqual(byName.staging.serverCount, 0, 'untagged default groups stay empty');
   assert.strictEqual(byName.staging.fromConfig, undefined);
-  assert.strictEqual(listed.filter(g => g.name === 'edge').length, 1, 'no duplicate entry');
+  assert.strictEqual(listed.filter((g) => g.name === 'edge').length, 1, 'no duplicate entry');
   ok('listGroups reports config-derived groups once, flagged, with correct counts');
 }
 
@@ -164,9 +187,13 @@ function testConfigGroupIsReadOnly() {
     ['add-servers', () => groups.addServers('edge', ['web1'])],
     ['remove-servers', () => groups.removeServers('edge', ['db1'])],
     ['update', () => groups.updateGroup('edge', { description: 'x' })],
-    ['delete', () => groups.deleteGroup('edge')]
+    ['delete', () => groups.deleteGroup('edge')],
   ])) {
-    assert.throws(run, /SSH server configuration/, `${label} must explain the group comes from the config`);
+    assert.throws(
+      run,
+      /SSH server configuration/,
+      `${label} must explain the group comes from the config`
+    );
   }
 
   ok('a config-derived group cannot be edited via group management, with a helpful error');
@@ -176,13 +203,17 @@ function testConfigGroupIsReadOnly() {
 // stale the moment a server is retagged.
 function testConfigMembersAreNotPersisted() {
   const { groups, groupsFile } = makeGroups(configs, {
-    production: { description: 'Prod', servers: ['legacy1'], strategy: 'parallel' }
+    production: { description: 'Prod', servers: ['legacy1'], strategy: 'parallel' },
   });
 
   groups.addServers('production', ['legacy2']);
   const saved = JSON.parse(fs.readFileSync(groupsFile, 'utf8'));
 
-  assert.deepStrictEqual(saved.production.servers, ['legacy1', 'legacy2'], 'only explicit members are stored');
+  assert.deepStrictEqual(
+    saved.production.servers,
+    ['legacy1', 'legacy2'],
+    'only explicit members are stored'
+  );
   assert.deepStrictEqual(
     groups.getGroup('production').servers,
     ['legacy1', 'legacy2', 'web1', 'web2'],
@@ -218,10 +249,14 @@ async function testExecuteOnConfigGroup() {
 
   // Forced parallel: the shipped "production" default is rolling with a 5s
   // delay between servers, which would make this test sleep for no reason.
-  const result = await groups.executeOnGroup('production', async (server) => {
-    visited.push(server);
-    return { code: 0 };
-  }, { strategy: 'parallel' });
+  const result = await groups.executeOnGroup(
+    'production',
+    async (server) => {
+      visited.push(server);
+      return { code: 0 };
+    },
+    { strategy: 'parallel' }
+  );
 
   assert.deepStrictEqual(visited.sort(), ['web1', 'web2'], 'command ran on both tagged servers');
   assert.strictEqual(result.summary.successful, 2);

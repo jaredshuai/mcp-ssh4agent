@@ -15,7 +15,10 @@ import net from 'net';
 import { listenOrReject } from '../src/tunnel-manager.ts';
 
 let passed = 0;
-function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }
+function ok(label) {
+  console.log(`\x1b[32m✓\x1b[0m ${label}`);
+  passed++;
+}
 
 const HOST = '127.0.0.1';
 
@@ -42,7 +45,11 @@ async function testResolvesOnSuccessfulBind() {
 
   await listenOrReject(server, port, HOST);
   assert.strictEqual(server.listening, true, 'server must be listening after resolve');
-  assert.strictEqual(/** @type {import('node:net').AddressInfo} */ (server.address()).port, port, 'bound to the requested port');
+  assert.strictEqual(
+    /** @type {import('node:net').AddressInfo} */ (server.address()).port,
+    port,
+    'bound to the requested port'
+  );
 
   await closeServer(server);
   ok('resolves once the port is actually bound');
@@ -76,7 +83,11 @@ async function testNoListenerLeak() {
 
   await listenOrReject(server, port, HOST);
   assert.strictEqual(server.listenerCount('error'), 0, 'error listener removed after success');
-  assert.strictEqual(server.listenerCount('listening'), 0, 'listening listener removed after success');
+  assert.strictEqual(
+    server.listenerCount('listening'),
+    0,
+    'listening listener removed after success'
+  );
 
   await closeServer(server);
 
@@ -85,7 +96,11 @@ async function testNoListenerLeak() {
   await listenOrReject(taken, blockedPort, HOST);
   const failing = net.createServer();
   await assert.rejects(() => listenOrReject(failing, blockedPort, HOST));
-  assert.strictEqual(failing.listenerCount('listening'), 0, 'listening listener removed after failure');
+  assert.strictEqual(
+    failing.listenerCount('listening'),
+    0,
+    'listening listener removed after failure'
+  );
   await closeServer(taken);
 
   ok('leaves no dangling listeners on either outcome');

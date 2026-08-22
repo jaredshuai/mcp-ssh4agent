@@ -12,12 +12,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import {
-  print_info,
-  print_error,
-  print_success,
-  print_warning,
-} from './colors.ts';
+import { print_info, print_error, print_success, print_warning } from './colors.ts';
 import { FIELD_BY_CAMEL, serverEnvLine } from '../../src/server-fields.ts';
 
 // Render one `SSH_SERVER_<NAME>_<KEY>=value` line for a camelCase field,
@@ -25,7 +20,7 @@ import { FIELD_BY_CAMEL, serverEnvLine } from '../../src/server-fields.ts';
 function envLineFor(
   nameUpper: string,
   camel: string,
-  value: string | number | boolean | string[],
+  value: string | number | boolean | string[]
 ): string {
   const spec = FIELD_BY_CAMEL.get(camel);
   if (!spec) throw new Error(`Unknown server field: ${camel}`);
@@ -181,7 +176,7 @@ export function add_server_to_env(
   description: string = '',
   mode: string = '',
   allowPatterns: string = '',
-  auditLog: string = '',
+  auditLog: string = ''
 ): boolean {
   const nameUpper = name.toUpperCase();
 
@@ -202,7 +197,9 @@ export function add_server_to_env(
   // Backup .env file
   try {
     fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`);
-  } catch { /* ignore backup failures */ }
+  } catch {
+    /* ignore backup failures */
+  }
 
   const lines: string[] = [];
   lines.push('');
@@ -246,7 +243,7 @@ export function update_server_in_env(
   authValue: string,
   port: string = '22',
   description: string = '',
-  defaultDir: string = '',
+  defaultDir: string = ''
 ): boolean {
   const nameUpper = name.toUpperCase();
   const marker = `SSH_SERVER_${nameUpper}_HOST=`;
@@ -257,7 +254,11 @@ export function update_server_in_env(
   }
 
   // Backup
-  try { fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`); } catch { /* ignore */ }
+  try {
+    fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`);
+  } catch {
+    /* ignore */
+  }
 
   // Remove old server config lines + the `# Server: name` comment line.
   // bash: sed "/^# Server: $name$/d; /^SSH_SERVER_${name_upper}_/d"
@@ -298,7 +299,11 @@ export function remove_server_from_env(name: string): boolean {
     print_error(`Server '${name}' not found`);
     return false;
   }
-  try { fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`); } catch { /* ignore */ }
+  try {
+    fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`);
+  } catch {
+    /* ignore */
+  }
   const lineRe = new RegExp(`^SSH_SERVER_${nameUpper}_`);
   const kept = readEnvLines().filter((l) => !lineRe.test(l));
   fs.writeFileSync(SSH_MANAGER_ENV, kept.join('\n') + '\n', 'utf8');
@@ -351,7 +356,9 @@ export function test_ssh_connection(server: string): boolean {
   print_error('Connection failed');
   if (process.env.SSH_MANAGER_DEBUG) {
     print_warning('Debug output:');
-    const out = (result.stdout ? result.stdout.toString() : '') + (result.stderr ? result.stderr.toString() : '');
+    const out =
+      (result.stdout ? result.stdout.toString() : '') +
+      (result.stderr ? result.stderr.toString() : '');
     process.stdout.write(out.replace(/^/gm, '  '));
     if (!out.endsWith('\n')) process.stdout.write('\n');
   } else {
@@ -373,7 +380,9 @@ export function validate_server_name(name: string): boolean {
   // Reject hyphens with a targeted message + suggestion.
   if (name.includes('-')) {
     const suggested = name.replace(/-/g, '_');
-    print_error("Server name cannot contain '-' (POSIX env var names allow only letters, digits, underscore)");
+    print_error(
+      "Server name cannot contain '-' (POSIX env var names allow only letters, digits, underscore)"
+    );
     print_info(`Try '${suggested}' instead`);
     return false;
   }

@@ -36,9 +36,9 @@ const DEFAULT_HOOKS = {
       {
         type: 'notification',
         name: 'log-error',
-        command: 'echo "[$(date)] Error on {server}: {error}" >> errors.log'
-      }
-    ]
+        command: 'echo "[$(date)] Error on {server}: {error}" >> errors.log',
+      },
+    ],
   },
   // SSH key change hooks
   'pre-connect-key-change': {
@@ -48,9 +48,10 @@ const DEFAULT_HOOKS = {
       {
         type: 'notification',
         name: 'log-key-change',
-        command: 'echo "[$(date)] SSH key change detected for {server} ({host}:{port})" >> ssh-key-changes.log'
-      }
-    ]
+        command:
+          'echo "[$(date)] SSH key change detected for {server} ({host}:{port})" >> ssh-key-changes.log',
+      },
+    ],
   },
   'post-key-update': {
     enabled: false,
@@ -59,10 +60,11 @@ const DEFAULT_HOOKS = {
       {
         type: 'notification',
         name: 'log-key-updated',
-        command: 'echo "[$(date)] SSH key {action} for {server} ({host}:{port})" >> ssh-key-changes.log'
-      }
-    ]
-  }
+        command:
+          'echo "[$(date)] SSH key {action} for {server} ({host}:{port})" >> ssh-key-changes.log',
+      },
+    ],
+  },
 };
 
 /**
@@ -105,7 +107,7 @@ export function loadHooksConfig() {
           // Merge existing hook
           hooks[hookName] = {
             ...hooks[hookName],
-            ...hookConfig
+            ...hookConfig,
           };
         } else {
           // Add new hook
@@ -152,7 +154,7 @@ export async function executeHook(hookName, context: Record<string, any> = {}) {
     try {
       // Check environment variables if required
       if (action.requiresEnv) {
-        const missingEnv = action.requiresEnv.filter(env => !process.env[env]);
+        const missingEnv = action.requiresEnv.filter((env) => !process.env[env]);
         if (missingEnv.length > 0) {
           if (!action.optional) {
             throw new Error(`Missing required environment variables: ${missingEnv.join(', ')}`);
@@ -179,7 +181,6 @@ export async function executeHook(hookName, context: Record<string, any> = {}) {
       }
 
       console.error(`  ✅ ${action.name}: completed`);
-
     } catch (error) {
       if (!action.optional) {
         console.error(`  ❌ ${action.name}: ${error.message}`);
@@ -188,7 +189,7 @@ export async function executeHook(hookName, context: Record<string, any> = {}) {
           hook: hookName,
           action: action.name,
           error: error.message,
-          results
+          results,
         };
       }
       console.error(`  ⚠️  ${action.name}: ${error.message} (optional, continuing)`);
@@ -198,7 +199,7 @@ export async function executeHook(hookName, context: Record<string, any> = {}) {
   return {
     success: true,
     hook: hookName,
-    results
+    results,
   };
 }
 
@@ -223,14 +224,14 @@ async function executeAction(action, command, context: Record<string, any>): Pro
   const result: ActionResult = {
     action: action.name,
     type: action.type,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
   try {
     if (action.remoteCommand && context.sshConnection) {
       // Execute on remote server
       const output = await context.sshConnection.execCommand(command, {
-        cwd: context.cwd || context.defaultDir
+        cwd: context.cwd || context.defaultDir,
       });
 
       result.output = output.stdout;
@@ -255,26 +256,25 @@ async function executeAction(action, command, context: Record<string, any>): Pro
 
     // Handle specific action types
     switch (action.type) {
-    case 'backup':
-      result.backupInfo = {
-        timestamp: new Date().toISOString(),
-        command: command
-      };
-      break;
+      case 'backup':
+        result.backupInfo = {
+          timestamp: new Date().toISOString(),
+          command: command,
+        };
+        break;
 
-    case 'notification':
-      result.notified = true;
-      break;
+      case 'notification':
+        result.notified = true;
+        break;
 
-    case 'validation':
-      result.validated = result.success;
-      break;
+      case 'validation':
+        result.validated = result.success;
+        break;
 
-    case 'verification':
-      result.verified = result.success;
-      break;
+      case 'verification':
+        result.verified = result.success;
+        break;
     }
-
   } catch (error) {
     result.success = false;
     result.error = error.message;
@@ -322,6 +322,6 @@ export function listHooks() {
     name,
     enabled: hook.enabled,
     description: hook.description,
-    actionCount: hook.actions ? hook.actions.length : 0
+    actionCount: hook.actions ? hook.actions.length : 0,
   }));
 }

@@ -44,9 +44,9 @@ export function listenOrReject(server: net.Server, port: number, host: string): 
 
 // Tunnel types
 const TUNNEL_TYPES = {
-  LOCAL: 'local',        // Local port forwarding (access remote service locally)
-  REMOTE: 'remote',      // Remote port forwarding (expose local service remotely)
-  DYNAMIC: 'dynamic'     // SOCKS proxy
+  LOCAL: 'local', // Local port forwarding (access remote service locally)
+  REMOTE: 'remote', // Remote port forwarding (expose local service remotely)
+  DYNAMIC: 'dynamic', // SOCKS proxy
 };
 
 // Tunnel states
@@ -55,7 +55,7 @@ const TUNNEL_STATES = {
   ACTIVE: 'active',
   RECONNECTING: 'reconnecting',
   FAILED: 'failed',
-  CLOSED: 'closed'
+  CLOSED: 'closed',
 };
 
 class SSHTunnel {
@@ -97,7 +97,7 @@ class SSHTunnel {
       bytesTransferred: 0,
       connectionsTotal: 0,
       connectionsActive: 0,
-      errors: 0
+      errors: 0,
     };
   }
 
@@ -107,20 +107,20 @@ class SSHTunnel {
   async start() {
     try {
       switch (this.type) {
-      case TUNNEL_TYPES.LOCAL:
-        await this.startLocalForwarding();
-        break;
+        case TUNNEL_TYPES.LOCAL:
+          await this.startLocalForwarding();
+          break;
 
-      case TUNNEL_TYPES.REMOTE:
-        await this.startRemoteForwarding();
-        break;
+        case TUNNEL_TYPES.REMOTE:
+          await this.startRemoteForwarding();
+          break;
 
-      case TUNNEL_TYPES.DYNAMIC:
-        await this.startDynamicForwarding();
-        break;
+        case TUNNEL_TYPES.DYNAMIC:
+          await this.startDynamicForwarding();
+          break;
 
-      default:
-        throw new Error(`Unknown tunnel type: ${this.type}`);
+        default:
+          throw new Error(`Unknown tunnel type: ${this.type}`);
       }
 
       this.state = TUNNEL_STATES.ACTIVE;
@@ -130,14 +130,15 @@ class SSHTunnel {
         type: this.type,
         server: this.serverName,
         local: `${this.config.localHost}:${this.config.localPort}`,
-        remote: this.type !== TUNNEL_TYPES.DYNAMIC ?
-          `${this.config.remoteHost}:${this.config.remotePort}` : 'SOCKS'
+        remote:
+          this.type !== TUNNEL_TYPES.DYNAMIC
+            ? `${this.config.remoteHost}:${this.config.remotePort}`
+            : 'SOCKS',
       });
-
     } catch (error) {
       this.state = TUNNEL_STATES.FAILED;
       logger.error(`Failed to start tunnel ${this.id}`, {
-        error: error.message
+        error: error.message,
       });
       throw error;
     }
@@ -157,7 +158,7 @@ class SSHTunnel {
       this.lastActivity = new Date();
 
       logger.debug(`New connection to tunnel ${this.id}`, {
-        from: localSocket.remoteAddress
+        from: localSocket.remoteAddress,
       });
 
       try {
@@ -195,12 +196,11 @@ class SSHTunnel {
         localSocket.on('error', cleanup);
         stream.on('close', cleanup);
         stream.on('error', cleanup);
-
       } catch (error) {
         this.stats.errors++;
         logger.error('Tunnel forwarding error', {
           tunnel: this.id,
-          error: error.message
+          error: error.message,
         });
         localSocket.destroy();
       }
@@ -211,7 +211,7 @@ class SSHTunnel {
 
     logger.info('Local forwarding established', {
       local: `${localHost}:${localPort}`,
-      remote: `${remoteHost}:${remotePort}`
+      remote: `${remoteHost}:${remotePort}`,
     });
   }
 
@@ -268,7 +268,7 @@ class SSHTunnel {
         this.stats.errors++;
         logger.error('Remote forwarding error', {
           tunnel: this.id,
-          error: err.message
+          error: err.message,
         });
         cleanup();
       });
@@ -279,7 +279,7 @@ class SSHTunnel {
 
     logger.info('Remote forwarding established', {
       local: `${localHost}:${localPort}`,
-      remote: `${remoteHost}:${remotePort}`
+      remote: `${remoteHost}:${remotePort}`,
     });
   }
 
@@ -303,20 +303,24 @@ class SSHTunnel {
       // Simple SOCKS5 implementation (basic)
       localSocket.once('data', async (chunk) => {
         // Parse SOCKS request (simplified)
-        if (chunk[0] === 0x05) { // SOCKS5
+        if (chunk[0] === 0x05) {
+          // SOCKS5
           // Send auth method response
           localSocket.write(Buffer.from([0x05, 0x00]));
 
           localSocket.once('data', async (chunk2: Buffer) => {
             // Parse connection request
-            if (chunk2[0] === 0x05 && chunk2[1] === 0x01) { // CONNECT
+            if (chunk2[0] === 0x05 && chunk2[1] === 0x01) {
+              // CONNECT
               const addrType = chunk2[3];
               let offset = 4;
 
-              if (addrType === 0x01) { // IPv4
+              if (addrType === 0x01) {
+                // IPv4
                 targetHost = `${chunk2[4]}.${chunk2[5]}.${chunk2[6]}.${chunk2[7]}`;
                 offset = 8;
-              } else if (addrType === 0x03) { // Domain
+              } else if (addrType === 0x03) {
+                // Domain
                 const domainLen = chunk2[4];
                 targetHost = chunk2.slice(5, 5 + domainLen).toString();
                 offset = 5 + domainLen;
@@ -326,16 +330,20 @@ class SSHTunnel {
 
               try {
                 // Create SSH forwarding stream
-                stream = await this.ssh.forwardOut(
-                  '127.0.0.1', 0,
-                  targetHost, targetPort
-                );
+                stream = await this.ssh.forwardOut('127.0.0.1', 0, targetHost, targetPort);
 
                 // Send success response
                 const response = Buffer.from([
-                  0x05, 0x00, 0x00, 0x01,
-                  0, 0, 0, 0,  // Bind address (0.0.0.0)
-                  0, 0         // Bind port
+                  0x05,
+                  0x00,
+                  0x00,
+                  0x01,
+                  0,
+                  0,
+                  0,
+                  0, // Bind address (0.0.0.0)
+                  0,
+                  0, // Bind port
                 ]);
                 localSocket.write(response);
 
@@ -352,13 +360,9 @@ class SSHTunnel {
                   this.stats.bytesTransferred += chunk.length;
                   this.lastActivity = new Date();
                 });
-
               } catch (error) {
                 // Send error response
-                const response = Buffer.from([
-                  0x05, 0x01, 0x00, 0x01,
-                  0, 0, 0, 0, 0, 0
-                ]);
+                const response = Buffer.from([0x05, 0x01, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
                 localSocket.write(response);
                 localSocket.destroy();
                 this.stats.errors++;
@@ -390,7 +394,7 @@ class SSHTunnel {
     await listenOrReject(this.server, localPort, localHost);
 
     logger.info('SOCKS proxy established', {
-      local: `${localHost}:${localPort}`
+      local: `${localHost}:${localPort}`,
     });
   }
 
@@ -407,12 +411,12 @@ class SSHTunnel {
         localHost: this.config.localHost,
         localPort: this.config.localPort,
         remoteHost: this.config.remoteHost,
-        remotePort: this.config.remotePort
+        remotePort: this.config.remotePort,
       },
       stats: this.stats,
       created: this.createdAt,
       lastActivity: this.lastActivity,
-      activeConnections: this.connections.size
+      activeConnections: this.connections.size,
     };
   }
 
@@ -458,7 +462,7 @@ class SSHTunnel {
     this.state = TUNNEL_STATES.RECONNECTING;
 
     logger.info(`Reconnecting tunnel ${this.id}`, {
-      attempt: this.reconnectAttempts
+      attempt: this.reconnectAttempts,
     });
 
     try {
@@ -467,7 +471,7 @@ class SSHTunnel {
       return true;
     } catch (error) {
       logger.error(`Reconnect failed for tunnel ${this.id}`, {
-        error: error.message
+        error: error.message,
       });
 
       // Retry with exponential backoff
@@ -512,7 +516,7 @@ export async function createTunnel(serverName, ssh, config) {
     logger.info('SSH tunnel created', {
       id: tunnelId,
       type: config.type,
-      server: serverName
+      server: serverName,
     });
 
     return tunnel;

@@ -63,20 +63,32 @@ console.log('');
 console.log('📋 Example commands to test ssh_sync:');
 console.log('');
 console.log('# Dry run - see what would be synced');
-console.log('ssh_sync server:"test-server" source:"local:' +
-  srcDir.replace(/\\/g, '/') + '/" destination:"remote:/tmp/sync-dest/" dryRun:true exclude:["*.log","*.tmp"]');
+console.log(
+  'ssh_sync server:"test-server" source:"local:' +
+    srcDir.replace(/\\/g, '/') +
+    '/" destination:"remote:/tmp/sync-dest/" dryRun:true exclude:["*.log","*.tmp"]'
+);
 console.log('');
 console.log('# Actual push to remote');
-console.log('ssh_sync server:"test-server" source:"local:' +
-  srcDir.replace(/\\/g, '/') + '/" destination:"remote:/tmp/sync-dest/" exclude:["*.log","*.tmp"] verbose:true');
+console.log(
+  'ssh_sync server:"test-server" source:"local:' +
+    srcDir.replace(/\\/g, '/') +
+    '/" destination:"remote:/tmp/sync-dest/" exclude:["*.log","*.tmp"] verbose:true'
+);
 console.log('');
 console.log('# Pull from remote');
-console.log('ssh_sync server:"test-server" source:"remote:/tmp/sync-dest/" destination:"local:' +
-  path.join(TEST_DIR, 'pulled').replace(/\\/g, '/') + '/" verbose:true');
+console.log(
+  'ssh_sync server:"test-server" source:"remote:/tmp/sync-dest/" destination:"local:' +
+    path.join(TEST_DIR, 'pulled').replace(/\\/g, '/') +
+    '/" verbose:true'
+);
 console.log('');
 console.log('# Sync with delete option (careful!)');
-console.log('ssh_sync server:"test-server" source:"local:' +
-  srcDir.replace(/\\/g, '/') + '/" destination:"remote:/tmp/sync-dest/" delete:true dryRun:true');
+console.log(
+  'ssh_sync server:"test-server" source:"local:' +
+    srcDir.replace(/\\/g, '/') +
+    '/" destination:"remote:/tmp/sync-dest/" delete:true dryRun:true'
+);
 console.log('');
 console.log("⚠️  Note: Replace 'test-server' with an actual configured server name");
 console.log("    Run 'ssh_list_servers' to see available servers");

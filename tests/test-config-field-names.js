@@ -16,7 +16,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = path.join(__dirname, '..', 'src');
 
 let passed = 0;
-function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${passed + 1}. ${label}`); passed++; }
+function ok(label) {
+  console.log(`\x1b[32m✓\x1b[0m ${passed + 1}. ${label}`);
+  passed++;
+}
 
 // Field names the loader must expose on resolved server configs.
 const EXPECTED_CAMEL_FIELDS = {
@@ -26,13 +29,18 @@ const EXPECTED_CAMEL_FIELDS = {
   proxyJump: 'bastion',
   proxyCommand: 'ncat --proxy 127.0.0.1:1080 %h %p',
   forwardAgent: true,
-  group: 'production'
+  group: 'production',
 };
 
 // Stale names that must NOT exist on resolved server configs (pre-v3.0.0 shape).
 const FORBIDDEN_SNAKE_FIELDS = [
-  'sudo_password', 'default_dir', 'key_path', 'keypath',
-  'proxy_jump', 'proxy_command', 'audit_log'
+  'sudo_password',
+  'default_dir',
+  'key_path',
+  'keypath',
+  'proxy_jump',
+  'proxy_command',
+  'audit_log',
 ];
 
 function assertServerShape(server, source) {
@@ -44,32 +52,42 @@ function assertServerShape(server, source) {
   assert.strictEqual(server.passphrase, 'key-passphrase');
   assert.strictEqual(server.platform, 'linux');
   for (const [field, expected] of Object.entries(EXPECTED_CAMEL_FIELDS)) {
-    assert.strictEqual(server[field], expected, `${source}: ${field} must be "${expected}", got ${JSON.stringify(server[field])}`);
+    assert.strictEqual(
+      server[field],
+      expected,
+      `${source}: ${field} must be "${expected}", got ${JSON.stringify(server[field])}`
+    );
   }
   for (const field of FORBIDDEN_SNAKE_FIELDS) {
-    assert.ok(!(field in server), `${source}: stale field "${field}" must not exist on resolved config`);
+    assert.ok(
+      !(field in server),
+      `${source}: stale field "${field}" must not exist on resolved config`
+    );
   }
 }
 
 async function testEnvFieldNames() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-fieldnames-'));
   const envPath = path.join(dir, 'test.env');
-  fs.writeFileSync(envPath, [
-    'SSH_SERVER_FIELDCHECK_ENV_HOST=203.0.113.10',
-    'SSH_SERVER_FIELDCHECK_ENV_USER=demo',
-    'SSH_SERVER_FIELDCHECK_ENV_PASSWORD=pw-secret',
-    'SSH_SERVER_FIELDCHECK_ENV_KEYPATH=~/.ssh/fieldcheck_key',
-    'SSH_SERVER_FIELDCHECK_ENV_PASSPHRASE=key-passphrase',
-    'SSH_SERVER_FIELDCHECK_ENV_PORT=2222',
-    'SSH_SERVER_FIELDCHECK_ENV_DEFAULT_DIR=/opt/fieldcheck',
-    'SSH_SERVER_FIELDCHECK_ENV_SUDO_PASSWORD=sudo-secret',
-    'SSH_SERVER_FIELDCHECK_ENV_PLATFORM=linux',
-    'SSH_SERVER_FIELDCHECK_ENV_PROXYJUMP=bastion',
-    'SSH_SERVER_FIELDCHECK_ENV_PROXYCOMMAND=ncat --proxy 127.0.0.1:1080 %h %p',
-    'SSH_SERVER_FIELDCHECK_ENV_FORWARD_AGENT=true',
-    'SSH_SERVER_FIELDCHECK_ENV_GROUP=production',
-    ''
-  ].join('\n'));
+  fs.writeFileSync(
+    envPath,
+    [
+      'SSH_SERVER_FIELDCHECK_ENV_HOST=203.0.113.10',
+      'SSH_SERVER_FIELDCHECK_ENV_USER=demo',
+      'SSH_SERVER_FIELDCHECK_ENV_PASSWORD=pw-secret',
+      'SSH_SERVER_FIELDCHECK_ENV_KEYPATH=~/.ssh/fieldcheck_key',
+      'SSH_SERVER_FIELDCHECK_ENV_PASSPHRASE=key-passphrase',
+      'SSH_SERVER_FIELDCHECK_ENV_PORT=2222',
+      'SSH_SERVER_FIELDCHECK_ENV_DEFAULT_DIR=/opt/fieldcheck',
+      'SSH_SERVER_FIELDCHECK_ENV_SUDO_PASSWORD=sudo-secret',
+      'SSH_SERVER_FIELDCHECK_ENV_PLATFORM=linux',
+      'SSH_SERVER_FIELDCHECK_ENV_PROXYJUMP=bastion',
+      'SSH_SERVER_FIELDCHECK_ENV_PROXYCOMMAND=ncat --proxy 127.0.0.1:1080 %h %p',
+      'SSH_SERVER_FIELDCHECK_ENV_FORWARD_AGENT=true',
+      'SSH_SERVER_FIELDCHECK_ENV_GROUP=production',
+      '',
+    ].join('\n')
+  );
 
   try {
     const loader = new ConfigLoader();
@@ -89,23 +107,26 @@ async function testEnvFieldNames() {
 async function testTomlFieldNames() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-fieldnames-'));
   const tomlPath = path.join(dir, 'ssh-config.toml');
-  fs.writeFileSync(tomlPath, [
-    '[ssh_servers.fieldcheck_toml]',
-    'host = "203.0.113.10"',
-    'user = "demo"',
-    'password = "pw-secret"',
-    'key_path = "~/.ssh/fieldcheck_key"',
-    'passphrase = "key-passphrase"',
-    'port = 2222',
-    'default_dir = "/opt/fieldcheck"',
-    'sudo_password = "sudo-secret"',
-    'platform = "linux"',
-    'proxy_jump = "bastion"',
-    'proxy_command = "ncat --proxy 127.0.0.1:1080 %h %p"',
-    'forward_agent = true',
-    'group = "production"',
-    ''
-  ].join('\n'));
+  fs.writeFileSync(
+    tomlPath,
+    [
+      '[ssh_servers.fieldcheck_toml]',
+      'host = "203.0.113.10"',
+      'user = "demo"',
+      'password = "pw-secret"',
+      'key_path = "~/.ssh/fieldcheck_key"',
+      'passphrase = "key-passphrase"',
+      'port = 2222',
+      'default_dir = "/opt/fieldcheck"',
+      'sudo_password = "sudo-secret"',
+      'platform = "linux"',
+      'proxy_jump = "bastion"',
+      'proxy_command = "ncat --proxy 127.0.0.1:1080 %h %p"',
+      'forward_agent = true',
+      'group = "production"',
+      '',
+    ].join('\n')
+  );
 
   try {
     const loader = new ConfigLoader();
@@ -123,26 +144,51 @@ async function testTomlFieldNames() {
 async function testForwardAgentCoercion() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-fwdagent-'));
   const envPath = path.join(dir, 'test.env');
-  fs.writeFileSync(envPath, [
-    'SSH_SERVER_FA_ON_HOST=h', 'SSH_SERVER_FA_ON_USER=u', 'SSH_SERVER_FA_ON_FORWARD_AGENT=true',
-    'SSH_SERVER_FA_OFF_HOST=h', 'SSH_SERVER_FA_OFF_USER=u', 'SSH_SERVER_FA_OFF_FORWARD_AGENT=false',
-    'SSH_SERVER_FA_YES_HOST=h', 'SSH_SERVER_FA_YES_USER=u', 'SSH_SERVER_FA_YES_FORWARD_AGENT=YES',
-    'SSH_SERVER_FA_NONE_HOST=h', 'SSH_SERVER_FA_NONE_USER=u',
-    ''
-  ].join('\n'));
+  fs.writeFileSync(
+    envPath,
+    [
+      'SSH_SERVER_FA_ON_HOST=h',
+      'SSH_SERVER_FA_ON_USER=u',
+      'SSH_SERVER_FA_ON_FORWARD_AGENT=true',
+      'SSH_SERVER_FA_OFF_HOST=h',
+      'SSH_SERVER_FA_OFF_USER=u',
+      'SSH_SERVER_FA_OFF_FORWARD_AGENT=false',
+      'SSH_SERVER_FA_YES_HOST=h',
+      'SSH_SERVER_FA_YES_USER=u',
+      'SSH_SERVER_FA_YES_FORWARD_AGENT=YES',
+      'SSH_SERVER_FA_NONE_HOST=h',
+      'SSH_SERVER_FA_NONE_USER=u',
+      '',
+    ].join('\n')
+  );
   const tomlPath = path.join(dir, 'config.toml');
-  fs.writeFileSync(tomlPath, [
-    '[ssh_servers.fa_toml_bool]', 'host = "h"', 'user = "u"', 'forward_agent = true',
-    '[ssh_servers.fa_toml_str]', 'host = "h"', 'user = "u"', 'forward_agent = "true"',
-    '[ssh_servers.fa_toml_none]', 'host = "h"', 'user = "u"',
-    ''
-  ].join('\n'));
+  fs.writeFileSync(
+    tomlPath,
+    [
+      '[ssh_servers.fa_toml_bool]',
+      'host = "h"',
+      'user = "u"',
+      'forward_agent = true',
+      '[ssh_servers.fa_toml_str]',
+      'host = "h"',
+      'user = "u"',
+      'forward_agent = "true"',
+      '[ssh_servers.fa_toml_none]',
+      'host = "h"',
+      'user = "u"',
+      '',
+    ].join('\n')
+  );
 
   try {
     const envLoader = new ConfigLoader();
     const envs = await envLoader.load({ envPath, tomlPath: path.join(dir, 'absent.toml') });
     assert.strictEqual(envs.get('fa_on').forwardAgent, true, 'env FORWARD_AGENT=true → true');
-    assert.strictEqual(envs.get('fa_off').forwardAgent, false, 'env FORWARD_AGENT=false → false (must not be a truthy string)');
+    assert.strictEqual(
+      envs.get('fa_off').forwardAgent,
+      false,
+      'env FORWARD_AGENT=false → false (must not be a truthy string)'
+    );
     assert.strictEqual(envs.get('fa_yes').forwardAgent, true, 'env FORWARD_AGENT=YES → true');
     assert.strictEqual(envs.get('fa_none').forwardAgent, false, 'no FORWARD_AGENT → false');
 
@@ -150,22 +196,46 @@ async function testForwardAgentCoercion() {
     // drops it. Scrub process.env first so the reload reads purely from the
     // exported TOML, not the ambient environment dotenv just populated.
     const exported = envLoader.exportToToml();
-    assert.ok(/forward_agent = true/.test(exported), 'exportToToml emits forward_agent = true for opted-in server');
+    assert.ok(
+      /forward_agent = true/.test(exported),
+      'exportToToml emits forward_agent = true for opted-in server'
+    );
     for (const key of Object.keys(process.env)) {
       if (key.startsWith('SSH_SERVER_FA_')) delete process.env[key];
     }
     const roundtripPath = path.join(dir, 'roundtrip.toml');
     fs.writeFileSync(roundtripPath, exported);
-    const reloaded = await new ConfigLoader().load({ envPath: path.join(dir, 'absent.env'), tomlPath: roundtripPath });
-    assert.strictEqual(reloaded.get('fa_on').forwardAgent, true, 'export→reload keeps forwardAgent=true for opted-in server');
-    assert.strictEqual(reloaded.get('fa_off').forwardAgent, false, 'export→reload leaves forwardAgent=false for opted-out server');
+    const reloaded = await new ConfigLoader().load({
+      envPath: path.join(dir, 'absent.env'),
+      tomlPath: roundtripPath,
+    });
+    assert.strictEqual(
+      reloaded.get('fa_on').forwardAgent,
+      true,
+      'export→reload keeps forwardAgent=true for opted-in server'
+    );
+    assert.strictEqual(
+      reloaded.get('fa_off').forwardAgent,
+      false,
+      'export→reload leaves forwardAgent=false for opted-out server'
+    );
 
     const tomlLoader = new ConfigLoader();
     const toml = await tomlLoader.load({ envPath: path.join(dir, 'absent.env'), tomlPath });
-    assert.strictEqual(toml.get('fa_toml_bool').forwardAgent, true, 'TOML forward_agent = true → true');
-    assert.strictEqual(toml.get('fa_toml_str').forwardAgent, true, 'TOML forward_agent = "true" → true');
+    assert.strictEqual(
+      toml.get('fa_toml_bool').forwardAgent,
+      true,
+      'TOML forward_agent = true → true'
+    );
+    assert.strictEqual(
+      toml.get('fa_toml_str').forwardAgent,
+      true,
+      'TOML forward_agent = "true" → true'
+    );
     assert.strictEqual(toml.get('fa_toml_none').forwardAgent, false, 'no forward_agent → false');
-    ok('forwardAgent coerces env/TOML booleans correctly ("false"/absent → false) and round-trips through export');
+    ok(
+      'forwardAgent coerces env/TOML booleans correctly ("false"/absent → false) and round-trips through export'
+    );
   } finally {
     for (const key of Object.keys(process.env)) {
       if (key.startsWith('SSH_SERVER_FA_')) delete process.env[key];
@@ -181,11 +251,19 @@ async function testGroupExportRoundTrip() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-group-'));
   const label = 'prod #eu west';
   const tomlPath = path.join(dir, 'config.toml');
-  fs.writeFileSync(tomlPath, [
-    '[ssh_servers.grp_tagged]', 'host = "h"', 'user = "u"', `group = "${label}"`,
-    '[ssh_servers.grp_plain]', 'host = "h"', 'user = "u"',
-    ''
-  ].join('\n'));
+  fs.writeFileSync(
+    tomlPath,
+    [
+      '[ssh_servers.grp_tagged]',
+      'host = "h"',
+      'user = "u"',
+      `group = "${label}"`,
+      '[ssh_servers.grp_plain]',
+      'host = "h"',
+      'user = "u"',
+      '',
+    ].join('\n')
+  );
 
   try {
     const loader = new ConfigLoader();
@@ -195,13 +273,27 @@ async function testGroupExportRoundTrip() {
 
     const exportedToml = loader.exportToToml();
     assert.ok(exportedToml.includes(`group = "${label}"`), 'exportToToml emits the group');
-    assert.ok(!/\[ssh_servers\.grp_plain\][^[]*group/.test(exportedToml), 'untagged server exports no group key');
+    assert.ok(
+      !/\[ssh_servers\.grp_plain\][^[]*group/.test(exportedToml),
+      'untagged server exports no group key'
+    );
 
     const envPath = path.join(dir, 'roundtrip.env');
     fs.writeFileSync(envPath, loader.exportToEnv());
-    const reloaded = await new ConfigLoader().load({ envPath, tomlPath: path.join(dir, 'absent.toml') });
-    assert.strictEqual(reloaded.get('grp_tagged').group, label, 'export→reload keeps the group intact (quoting)');
-    assert.strictEqual(reloaded.get('grp_plain').group, undefined, 'untagged server stays untagged');
+    const reloaded = await new ConfigLoader().load({
+      envPath,
+      tomlPath: path.join(dir, 'absent.toml'),
+    });
+    assert.strictEqual(
+      reloaded.get('grp_tagged').group,
+      label,
+      'export→reload keeps the group intact (quoting)'
+    );
+    assert.strictEqual(
+      reloaded.get('grp_plain').group,
+      undefined,
+      'untagged server stays untagged'
+    );
     ok('group survives the .env/TOML export round-trip, spaces and "#" included');
   } finally {
     for (const key of Object.keys(process.env)) {
@@ -224,7 +316,8 @@ function testNoStaleAccessInSource() {
   // scan both the top-level modules and the tool group modules.
   const scanTargets = [];
   for (const file of fs.readdirSync(SRC_DIR)) {
-    if ((file.endsWith('.js') || file.endsWith('.ts')) && !excluded.has(file)) scanTargets.push(file);
+    if ((file.endsWith('.js') || file.endsWith('.ts')) && !excluded.has(file))
+      scanTargets.push(file);
   }
   const toolsDir = path.join(SRC_DIR, 'tools');
   if (fs.existsSync(toolsDir)) {
@@ -240,7 +333,11 @@ function testNoStaleAccessInSource() {
     });
   }
 
-  assert.deepStrictEqual(offenders, [], `stale snake_case config access found:\n${offenders.join('\n')}`);
+  assert.deepStrictEqual(
+    offenders,
+    [],
+    `stale snake_case config access found:\n${offenders.join('\n')}`
+  );
   ok('no handler reads stale .sudo_password / .default_dir / .keypath fields');
 }
 
@@ -253,7 +350,7 @@ async function main() {
   console.log(`\n✅ config field name tests passed (${passed} checks)`);
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error(error);
   process.exit(1);
 });

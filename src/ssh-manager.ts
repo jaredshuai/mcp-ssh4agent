@@ -116,7 +116,7 @@ class SSHManager {
           if (info.includes('Handshake') || info.includes('error')) {
             logger.debug('SSH2 Debug', { info });
           }
-        }
+        },
       };
 
       // Add host key verification callback if enabled
@@ -148,7 +148,7 @@ class SSHManager {
                 logger.warn('Failed to add host key', {
                   host,
                   port,
-                  error: err.message
+                  error: err.message,
                 });
               }
             });
@@ -195,94 +195,108 @@ class SSHManager {
     });
   }
 
-  async execCommand(command, options: { timeout?: number; cwd?: string; rawCommand?: boolean } = {}) {
+  async execCommand(
+    command,
+    options: { timeout?: number; cwd?: string; rawCommand?: boolean } = {}
+  ) {
     if (!this.connected) {
       throw new Error('Not connected to SSH server');
     }
 
     const { timeout = 30000, cwd, rawCommand = false } = options;
-    const fullCommand = (cwd && !rawCommand) ? buildCdPrefix(cwd) + command : command;
+    const fullCommand = cwd && !rawCommand ? buildCdPrefix(cwd) + command : command;
 
-    return new Promise<{ stdout: string; stderr: string; code: number; signal?: string }>((resolve, reject) => {
-      let stdout = '';
-      let stderr = '';
-      let completed = false;
-      let stream = null;
-      let timeoutId = null;
+    return new Promise<{ stdout: string; stderr: string; code: number; signal?: string }>(
+      (resolve, reject) => {
+        let stdout = '';
+        let stderr = '';
+        let completed = false;
+        let stream = null;
+        let timeoutId = null;
 
-      // Setup timeout first
-      if (timeout > 0) {
-        timeoutId = setTimeout(() => {
-          if (!completed) {
-            completed = true;
+        // Setup timeout first
+        if (timeout > 0) {
+          timeoutId = setTimeout(() => {
+            if (!completed) {
+              completed = true;
 
-            // Try multiple ways to kill the stream
-            if (stream) {
+              // Try multiple ways to kill the stream
+              if (stream) {
+                try {
+                  stream.write('\x03'); // Send Ctrl+C
+                  stream.end();
+                  stream.destroy();
+                } catch (e) {
+                  // Ignore errors
+                }
+              }
+
+              // Kill the entire client connection as last resort
               try {
-                stream.write('\x03'); // Send Ctrl+C
-                stream.end();
-                stream.destroy();
+                this.client.end();
+                this.connected = false;
               } catch (e) {
                 // Ignore errors
               }
+
+              reject(
+                new Error(`Command timeout after ${timeout}ms: ${command.substring(0, 100)}...`)
+              );
             }
-
-            // Kill the entire client connection as last resort
-            try {
-              this.client.end();
-              this.connected = false;
-            } catch (e) {
-              // Ignore errors
-            }
-
-            reject(new Error(`Command timeout after ${timeout}ms: ${command.substring(0, 100)}...`));
-          }
-        }, timeout);
-      }
-
-      this.client.exec(fullCommand, (err, streamObj) => {
-        if (err) {
-          completed = true;
-          if (timeoutId) clearTimeout(timeoutId);
-          reject(err);
-          return;
+          }, timeout);
         }
 
-        stream = streamObj;
-
-        stream.on('close', (code, signal) => {
-          if (!completed) {
-            completed = true;
-            if (timeoutId) clearTimeout(timeoutId);
-            resolve({
-              stdout,
-              stderr,
-              code: code || 0,
-              signal
-            });
-          }
-        });
-
-        stream.on('data', (data) => {
-          stdout += data.toString();
-        });
-
-        stream.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        stream.on('error', (err) => {
-          if (!completed) {
+        this.client.exec(fullCommand, (err, streamObj) => {
+          if (err) {
             completed = true;
             if (timeoutId) clearTimeout(timeoutId);
             reject(err);
+            return;
           }
+
+          stream = streamObj;
+
+          stream.on('close', (code, signal) => {
+            if (!completed) {
+              completed = true;
+              if (timeoutId) clearTimeout(timeoutId);
+              resolve({
+                stdout,
+                stderr,
+                code: code || 0,
+                signal,
+              });
+            }
+          });
+
+          stream.on('data', (data) => {
+            stdout += data.toString();
+          });
+
+          stream.stderr.on('data', (data) => {
+            stderr += data.toString();
+          });
+
+          stream.on('error', (err) => {
+            if (!completed) {
+              completed = true;
+              if (timeoutId) clearTimeout(timeoutId);
+              reject(err);
+            }
+          });
         });
-      });
-    });
+      }
+    );
   }
 
-  async execCommandStream(command, options: { cwd?: string; onStdout?: (chunk: string) => void; onStderr?: (chunk: string) => void } = {}) {
+  async execCommandStream(
+    command,
+    options: {
+      cwd?: string;
+      onStdout?: (chunk: string) => void;
+      onStderr?: (chunk: string) => void;
+    } = {}
+  ) {
     if (!this.connected) {
       throw new Error('Not connected to SSH server');
     }
@@ -306,7 +320,7 @@ class SSHManager {
             stderr,
             code: code || 0,
             signal,
-            stream
+            stream,
           });
         });
 
@@ -369,7 +383,7 @@ class SSHManager {
     try {
       const result = await this.execCommand('getent passwd $USER | cut -d: -f6', {
         timeout: 5000,
-        rawCommand: true
+        rawCommand: true,
       });
       homeDir = result.stdout.trim();
       if (homeDir && homeDir.startsWith('/')) {
@@ -384,7 +398,7 @@ class SSHManager {
     try {
       const result = await this.execCommand('env -i HOME=$HOME bash -c "echo $HOME"', {
         timeout: 5000,
-        rawCommand: true
+        rawCommand: true,
       });
       homeDir = result.stdout.trim();
       if (homeDir && homeDir.startsWith('/')) {
@@ -399,7 +413,7 @@ class SSHManager {
     try {
       const result = await this.execCommand('grep "^$USER:" /etc/passwd | cut -d: -f6', {
         timeout: 5000,
-        rawCommand: true
+        rawCommand: true,
       });
       homeDir = result.stdout.trim();
       if (homeDir && homeDir.startsWith('/')) {
@@ -414,7 +428,7 @@ class SSHManager {
     try {
       const result = await this.execCommand('cd ~ && pwd', {
         timeout: 5000,
-        rawCommand: true
+        rawCommand: true,
       });
       homeDir = result.stdout.trim();
       if (homeDir && homeDir.startsWith('/')) {

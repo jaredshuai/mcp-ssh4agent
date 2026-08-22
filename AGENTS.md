@@ -77,6 +77,9 @@ npm test                                      # Run the full test suite
 npm run typecheck                             # Type-check with tsc (no build, nothing emitted)
 npm run test:all                              # Tests + typecheck + validation
 npm run validate                              # Run all validation checks (B2: node scripts/validate.ts)
+npm run lint                                  # Biome lint (src/, tests/, cli/, scripts/, debug/)
+npm run lint:fix                              # Biome check --write: safe fixes + formatting
+npm run format                                # Biome format --write
 node --check src/index.ts                   # Check source syntax (native type stripping)
 ```
 
@@ -222,7 +225,7 @@ Run `npm run validate` before commits to check:
 - MCP server startup
 - Dependencies installed
 
-Install the git hook once with `npm run setup-hooks` to run typecheck + validate automatically before each commit.
+Install the git hook once with `npm run setup-hooks` to run `biome check` + typecheck + validate automatically before each commit. Lint/format tooling is Biome (`biome.json`, migrated from the old `.eslintrc.json` + `.prettierrc`); the CI lint step gates on `npx @biomejs/biome lint .`.
 
 CI (GitHub Actions): pushes to `main` run the Tests and Code Quality workflows on Node 24 (`.github/workflows/`). Both also accept `workflow_dispatch`, so they can be triggered manually — `gh workflow run "Tests" --ref main`.
 

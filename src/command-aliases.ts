@@ -124,7 +124,7 @@ export function listCommandAliases() {
       alias,
       command,
       isFromProfile: profileAliases[alias] === command,
-      isCustom: profileAliases[alias] !== command
+      isCustom: profileAliases[alias] !== command,
     });
   }
 
@@ -141,8 +141,10 @@ export function suggestAliases(command) {
   const commandLower = command.toLowerCase();
 
   for (const [alias, aliasCommand] of Object.entries(aliases)) {
-    if (aliasCommand.toLowerCase().includes(commandLower) ||
-        alias.toLowerCase().includes(commandLower)) {
+    if (
+      aliasCommand.toLowerCase().includes(commandLower) ||
+      alias.toLowerCase().includes(commandLower)
+    ) {
       suggestions.push({ alias, command: aliasCommand });
     }
   }

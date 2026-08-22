@@ -10,7 +10,7 @@ export const HEALTH_STATUS = {
   HEALTHY: 'healthy',
   WARNING: 'warning',
   CRITICAL: 'critical',
-  UNKNOWN: 'unknown'
+  UNKNOWN: 'unknown',
 };
 
 // Common services to monitor
@@ -22,7 +22,7 @@ const COMMON_SERVICES = {
   mongodb: { systemd: 'mongod', sysv: 'mongod' },
   redis: { systemd: 'redis', sysv: 'redis-server' },
   docker: { systemd: 'docker', sysv: 'docker' },
-  ssh: { systemd: 'sshd', sysv: 'ssh' }
+  ssh: { systemd: 'sshd', sysv: 'ssh' },
 };
 
 /**
@@ -64,14 +64,14 @@ function buildNetworkCheckCommand() {
  * Build command to check load average
  */
 function buildLoadAverageCommand() {
-  return 'uptime | awk -F\'load average:\' \'{print $2}\' | sed \'s/^[ \\t]*//\'';
+  return "uptime | awk -F'load average:' '{print $2}' | sed 's/^[ \\t]*//'";
 }
 
 /**
  * Build command to check system uptime
  */
 function buildUptimeCommand() {
-  return 'uptime -p 2>/dev/null || uptime | awk \'{print $3,$4}\' | sed \'s/,//\'';
+  return "uptime -p 2>/dev/null || uptime | awk '{print $3,$4}' | sed 's/,//'";
 }
 
 /**
@@ -82,7 +82,12 @@ function parseCPUUsage(output) {
   return {
     usage: usage.toFixed(2),
     percent: usage,
-    status: usage > 90 ? HEALTH_STATUS.CRITICAL : usage > 70 ? HEALTH_STATUS.WARNING : HEALTH_STATUS.HEALTHY
+    status:
+      usage > 90
+        ? HEALTH_STATUS.CRITICAL
+        : usage > 70
+          ? HEALTH_STATUS.WARNING
+          : HEALTH_STATUS.HEALTHY,
   };
 }
 
@@ -97,7 +102,12 @@ function parseMemoryUsage(output) {
       used_mb: mem.used,
       free_mb: mem.free,
       percent: parseFloat(mem.percent),
-      status: mem.percent > 90 ? HEALTH_STATUS.CRITICAL : mem.percent > 80 ? HEALTH_STATUS.WARNING : HEALTH_STATUS.HEALTHY
+      status:
+        mem.percent > 90
+          ? HEALTH_STATUS.CRITICAL
+          : mem.percent > 80
+            ? HEALTH_STATUS.WARNING
+            : HEALTH_STATUS.HEALTHY,
     };
   } catch (error) {
     logger.warn('Failed to parse memory output', { error: error.message });
@@ -109,13 +119,21 @@ function parseMemoryUsage(output) {
  * Parse disk usage output
  */
 function parseDiskUsage(output) {
-  const lines = output.trim().split('\n').filter(l => l);
+  const lines = output
+    .trim()
+    .split('\n')
+    .filter((l) => l);
   const disks = [];
 
   for (const line of lines) {
     try {
       const disk = JSON.parse(line);
-      disk.status = disk.percent > 90 ? HEALTH_STATUS.CRITICAL : disk.percent > 80 ? HEALTH_STATUS.WARNING : HEALTH_STATUS.HEALTHY;
+      disk.status =
+        disk.percent > 90
+          ? HEALTH_STATUS.CRITICAL
+          : disk.percent > 80
+            ? HEALTH_STATUS.WARNING
+            : HEALTH_STATUS.HEALTHY;
       disks.push(disk);
     } catch (error) {
       logger.warn('Failed to parse disk line', { line, error: error.message });
@@ -129,7 +147,10 @@ function parseDiskUsage(output) {
  * Parse network statistics
  */
 function parseNetworkStats(output) {
-  const lines = output.trim().split('\n').filter(l => l);
+  const lines = output
+    .trim()
+    .split('\n')
+    .filter((l) => l);
   const interfaces = [];
 
   for (const line of lines) {
@@ -151,7 +172,7 @@ function parseNetworkStats(output) {
  * Determine overall health status
  */
 function determineOverallHealth(cpu, memory, disks) {
-  const statuses = [cpu.status, memory.status, ...disks.map(d => d.status)];
+  const statuses = [cpu.status, memory.status, ...disks.map((d) => d.status)];
 
   if (statuses.includes(HEALTH_STATUS.CRITICAL)) {
     return HEALTH_STATUS.CRITICAL;
@@ -203,21 +224,23 @@ export function parseServiceStatus(output, serviceName) {
     enabled: enabled === 'ENABLED' ? 'yes' : enabled === 'DISABLED' ? 'no' : 'unknown',
     pid: pid && pid !== '' ? parseInt(pid) : null,
     details: details || 'unknown',
-    health: status === 'ACTIVE' ? HEALTH_STATUS.HEALTHY : HEALTH_STATUS.CRITICAL
+    health: status === 'ACTIVE' ? HEALTH_STATUS.HEALTHY : HEALTH_STATUS.CRITICAL,
   };
 }
 
 /**
  * Build command to list running processes
  */
-export function buildProcessListCommand(options: { sortBy?: string; limit?: number; filter?: string | null } = {}) {
+export function buildProcessListCommand(
+  options: { sortBy?: string; limit?: number; filter?: string | null } = {}
+) {
   const {
-    sortBy = 'cpu',  // cpu, memory, pid
+    sortBy = 'cpu', // cpu, memory, pid
     limit = 20,
-    filter = null
+    filter = null,
   } = options;
 
-  let sortFlag = sortBy === 'memory' ? '-m' : '-c';  // -c for CPU, -m for memory
+  let sortFlag = sortBy === 'memory' ? '-m' : '-c'; // -c for CPU, -m for memory
   let command = `ps aux --sort=${sortFlag === '-c' ? '-pcpu' : '-pmem'} | head -n ${limit + 1}`;
 
   if (filter) {
@@ -225,7 +248,8 @@ export function buildProcessListCommand(options: { sortBy?: string; limit?: numb
   }
 
   // Format output as JSON-like structure
-  command += ' | awk \'NR>1 {printf "{\\"user\\":\\"%s\\",\\"pid\\":%s,\\"cpu\\":%.1f,\\"mem\\":%.1f,\\"vsz\\":%s,\\"rss\\":%s,\\"stat\\":\\"%s\\",\\"start\\":\\"%s\\",\\"time\\":\\"%s\\",\\"command\\":\\"%s\\"}\\n", $1,$2,$3,$4,$5,$6,$8,$9,$10,substr($0,index($0,$11))}\'';
+  command +=
+    ' | awk \'NR>1 {printf "{\\"user\\":\\"%s\\",\\"pid\\":%s,\\"cpu\\":%.1f,\\"mem\\":%.1f,\\"vsz\\":%s,\\"rss\\":%s,\\"stat\\":\\"%s\\",\\"start\\":\\"%s\\",\\"time\\":\\"%s\\",\\"command\\":\\"%s\\"}\\n", $1,$2,$3,$4,$5,$6,$8,$9,$10,substr($0,index($0,$11))}\'';
 
   return command;
 }
@@ -234,7 +258,10 @@ export function buildProcessListCommand(options: { sortBy?: string; limit?: numb
  * Parse process list output
  */
 export function parseProcessList(output) {
-  const lines = output.trim().split('\n').filter(l => l);
+  const lines = output
+    .trim()
+    .split('\n')
+    .filter((l) => l);
   const processes = [];
 
   for (const line of lines) {
@@ -281,13 +308,13 @@ export function createAlertConfig(thresholds) {
     cpu: 80,
     memory: 90,
     disk: 85,
-    enabled: true
+    enabled: true,
   };
 
   return {
     ...defaults,
     ...thresholds,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   };
 }
 
@@ -296,7 +323,7 @@ export function createAlertConfig(thresholds) {
  */
 export function buildSaveAlertConfigCommand(config, configPath = '/etc/ssh-manager-alerts.json') {
   const jsonData = JSON.stringify(config, null, 2);
-  const escapedJson = jsonData.replace(/'/g, '\'\\\'\'');
+  const escapedJson = jsonData.replace(/'/g, "'\\''");
   return `echo '${escapedJson}' > "${configPath}"`;
 }
 
@@ -319,7 +346,7 @@ export function checkAlertThresholds(metrics, thresholds) {
       severity: 'warning',
       message: `CPU usage (${metrics.cpu.percent}%) exceeds threshold (${thresholds.cpu}%)`,
       value: metrics.cpu.percent,
-      threshold: thresholds.cpu
+      threshold: thresholds.cpu,
     });
   }
 
@@ -329,7 +356,7 @@ export function checkAlertThresholds(metrics, thresholds) {
       severity: 'warning',
       message: `Memory usage (${metrics.memory.percent}%) exceeds threshold (${thresholds.memory}%)`,
       value: metrics.memory.percent,
-      threshold: thresholds.memory
+      threshold: thresholds.memory,
     });
   }
 
@@ -342,7 +369,7 @@ export function checkAlertThresholds(metrics, thresholds) {
           message: `Disk usage on ${disk.mount} (${disk.percent}%) exceeds threshold (${thresholds.disk}%)`,
           mount: disk.mount,
           value: disk.percent,
-          threshold: thresholds.disk
+          threshold: thresholds.disk,
         });
       }
     }
@@ -375,7 +402,7 @@ export function buildComprehensiveHealthCheckCommand() {
  * Parse comprehensive health check output
  */
 export function parseComprehensiveHealthCheck(output) {
-  const sections = output.split('=== ').filter(s => s);
+  const sections = output.split('=== ').filter((s) => s);
   // Sections are populated dynamically by parsed output name; keep it loose.
   const result: Record<string, any> = {};
 
@@ -384,24 +411,24 @@ export function parseComprehensiveHealthCheck(output) {
     const data = content.join('\n').trim();
 
     switch (name.toLowerCase().trim()) {
-    case 'cpu ===':
-      result.cpu = parseCPUUsage(data);
-      break;
-    case 'memory ===':
-      result.memory = parseMemoryUsage(data);
-      break;
-    case 'disk ===':
-      result.disks = parseDiskUsage(data);
-      break;
-    case 'load ===':
-      result.load_average = data;
-      break;
-    case 'uptime ===':
-      result.uptime = data;
-      break;
-    case 'network ===':
-      result.network = parseNetworkStats(data);
-      break;
+      case 'cpu ===':
+        result.cpu = parseCPUUsage(data);
+        break;
+      case 'memory ===':
+        result.memory = parseMemoryUsage(data);
+        break;
+      case 'disk ===':
+        result.disks = parseDiskUsage(data);
+        break;
+      case 'load ===':
+        result.load_average = data;
+        break;
+      case 'uptime ===':
+        result.uptime = data;
+        break;
+      case 'network ===':
+        result.network = parseNetworkStats(data);
+        break;
     }
   }
 

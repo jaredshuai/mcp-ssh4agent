@@ -24,7 +24,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_PATH = path.join(__dirname, '..', 'src', 'tools', 'core.ts');
 
 let passed = 0;
-function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }
+function ok(label) {
+  console.log(`\x1b[32m✓\x1b[0m ${label}`);
+  passed++;
+}
 
 const cwd = 'C:\\mcp\\mcp-ssh-manager';
 const windowsPath = (value) => toRsyncLocalPath(value, { platform: 'win32', cwd });
@@ -119,7 +122,9 @@ for (const input of everyWindowsInput) {
     `trailing separator semantics must be preserved: ${input} → ${converted}`
   );
 }
-ok(`invariants hold for all ${everyWindowsInput.length} Windows inputs (no drive-colon, no backslash, idempotent, trailing separator preserved)`);
+ok(
+  `invariants hold for all ${everyWindowsInput.length} Windows inputs (no drive-colon, no backslash, idempotent, trailing separator preserved)`
+);
 
 // ── 4. Platform isolation ────────────────────────────────────────────────────
 //
@@ -175,7 +180,11 @@ assert.match(
 );
 
 const rsyncArgPushes = indexSource.match(/rsyncArgs\.push\((localPath|rsyncLocalPath)\)/g) || [];
-assert.equal(rsyncArgPushes.length, 2, 'ssh_sync passes exactly two local-path arguments to rsync (push and pull)');
+assert.equal(
+  rsyncArgPushes.length,
+  2,
+  'ssh_sync passes exactly two local-path arguments to rsync (push and pull)'
+);
 assert.ok(
   rsyncArgPushes.every((line) => line.includes('rsyncLocalPath')),
   `rsync must receive the converted path, not the native one: found ${rsyncArgPushes.join(', ')}`

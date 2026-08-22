@@ -37,8 +37,9 @@
     "setup-hooks": "node scripts/setup-hooks.ts",
     "demo": "node scripts/demo.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint src/*.ts",
-    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.js'"
+    "lint": "npx @biomejs/biome lint .",
+    "lint:fix": "npx @biomejs/biome check --write .",
+    "format": "npx @biomejs/biome format --write ."
   },
   "keywords": [
     "mcp",
@@ -97,9 +98,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "eslint": "^8.56.0",
+    "@biomejs/biome": "2.5.10",
     "knip": "^5.0.0",
-    "prettier": "^3.2.4",
     "typescript": "^6.0.3"
   },
   "engines": {

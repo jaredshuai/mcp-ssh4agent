@@ -8,13 +8,16 @@ import assert from 'assert';
 import SSHManager from '../src/ssh-manager.ts';
 
 let passed = 0;
-function ok(label) { console.log(`\x1b[32m✓\x1b[0m ${label}`); passed++; }
+function ok(label) {
+  console.log(`\x1b[32m✓\x1b[0m ${label}`);
+  passed++;
+}
 
 // Run connect() with a fake ssh2 client and return the connConfig it built.
 // authSock === null removes SSH_AUTH_SOCK for the call; a string sets it.
 // The original environment is always restored.
 function captureConnConfig(config, authSock) {
-  const had = Object.prototype.hasOwnProperty.call(process.env, 'SSH_AUTH_SOCK');
+  const had = Object.hasOwn(process.env, 'SSH_AUTH_SOCK');
   const prev = process.env.SSH_AUTH_SOCK;
   if (authSock === null) delete process.env.SSH_AUTH_SOCK;
   else process.env.SSH_AUTH_SOCK = authSock;
@@ -23,14 +26,23 @@ function captureConnConfig(config, authSock) {
     const mgr = new SSHManager(config);
     let captured = null;
     mgr.client = {
-      on: () => {},
-      once: () => {},
+      // no-op event stubs — the fake client never emits
+      on: () => {
+        /* noop */
+      },
+      once: () => {
+        /* noop */
+      },
       // connect() builds connConfig synchronously then calls client.connect();
       // capturing here is enough. The returned promise never resolves (no
       // 'ready' event) so we deliberately ignore it.
-      connect: (cfg) => { captured = cfg; }
+      connect: (cfg) => {
+        captured = cfg;
+      },
     };
-    mgr.connect().catch(() => {});
+    mgr.connect().catch(() => {
+      /* expected to never resolve */
+    });
     return captured;
   } finally {
     if (had) process.env.SSH_AUTH_SOCK = prev;
@@ -43,14 +55,22 @@ const base = { host: 'example.com', user: 'demo' };
 function testForwardingEnabled() {
   const cfg = captureConnConfig({ ...base, forwardAgent: true }, '/tmp/agent.sock');
   assert.strictEqual(cfg.agent, '/tmp/agent.sock', 'agent must be set from SSH_AUTH_SOCK');
-  assert.strictEqual(cfg.agentForward, true, 'agentForward must be true when forwardAgent + agent are set');
+  assert.strictEqual(
+    cfg.agentForward,
+    true,
+    'agentForward must be true when forwardAgent + agent are set'
+  );
   ok('forwardAgent:true with SSH_AUTH_SOCK present enables agentForward');
 }
 
 function testForwardingDisabledExplicitly() {
   const cfg = captureConnConfig({ ...base, forwardAgent: false }, '/tmp/agent.sock');
   assert.strictEqual(cfg.agent, '/tmp/agent.sock', 'agent still set for normal agent auth');
-  assert.strictEqual(cfg.agentForward, undefined, 'agentForward must stay unset when forwardAgent is false');
+  assert.strictEqual(
+    cfg.agentForward,
+    undefined,
+    'agentForward must stay unset when forwardAgent is false'
+  );
   ok('forwardAgent:false leaves agentForward unset (agent auth unaffected)');
 }
 
@@ -67,7 +87,11 @@ function testNoAgentNoForwardNoThrow() {
   // reaching the assertions with a captured config proves no synchronous throw.
   const cfg = captureConnConfig({ ...base, forwardAgent: true }, null);
   assert.strictEqual(cfg.agent, undefined, 'no agent when SSH_AUTH_SOCK is absent');
-  assert.strictEqual(cfg.agentForward, undefined, 'agentForward must not be set without an agent (would make ssh2 throw)');
+  assert.strictEqual(
+    cfg.agentForward,
+    undefined,
+    'agentForward must not be set without an agent (would make ssh2 throw)'
+  );
   ok('forwardAgent:true without SSH_AUTH_SOCK sets neither agent nor agentForward (no ssh2 throw)');
 }
 

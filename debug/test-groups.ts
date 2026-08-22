@@ -17,7 +17,9 @@ console.log('# 1. List existing groups');
 console.log('ssh_group_manage action:"list"');
 console.log('');
 console.log('# 2. Create a new group');
-console.log('ssh_group_manage action:"create" name:"webservers" servers:["web1","web2","web3"] description:"Web application servers" strategy:"rolling" delay:5000');
+console.log(
+  'ssh_group_manage action:"create" name:"webservers" servers:["web1","web2","web3"] description:"Web application servers" strategy:"rolling" delay:5000'
+);
 console.log('');
 console.log('# 3. Add servers to a group');
 console.log('ssh_group_manage action:"add-servers" name:"production" servers:["prod1","prod2"]');
@@ -25,10 +27,14 @@ console.log('');
 console.log('# 4. Execute command on a group');
 console.log('ssh_execute_group group:"all" command:"uptime" strategy:"parallel"');
 console.log('ssh_execute_group group:"production" command:"df -h" strategy:"rolling" delay:3000');
-console.log('ssh_execute_group group:"webservers" command:"systemctl status nginx" stopOnError:true');
+console.log(
+  'ssh_execute_group group:"webservers" command:"systemctl status nginx" stopOnError:true'
+);
 console.log('');
 console.log('# 5. Update group settings');
-console.log('ssh_group_manage action:"update" name:"production" strategy:"rolling" delay:10000 stopOnError:true');
+console.log(
+  'ssh_group_manage action:"update" name:"production" strategy:"rolling" delay:10000 stopOnError:true'
+);
 console.log('');
 console.log('# 6. Remove servers from group');
 console.log('ssh_group_manage action:"remove-servers" name:"staging" servers:["old-server"]');

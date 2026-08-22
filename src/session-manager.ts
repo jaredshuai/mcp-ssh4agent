@@ -19,7 +19,7 @@ const SESSION_STATES = {
   READY: 'ready',
   BUSY: 'busy',
   ERROR: 'error',
-  CLOSED: 'closed'
+  CLOSED: 'closed',
 };
 
 class SSHSession {
@@ -50,7 +50,7 @@ class SSHSession {
       cwd: null,
       env: {},
       history: [],
-      variables: {}
+      variables: {},
     };
     this.createdAt = new Date();
     this.lastActivity = new Date();
@@ -65,7 +65,7 @@ class SSHSession {
   async initialize() {
     try {
       logger.info(`Initializing SSH session ${this.id}`, {
-        server: this.serverName
+        server: this.serverName,
       });
 
       // Start an interactive shell
@@ -74,8 +74,8 @@ class SSHSession {
         cols: 80,
         rows: 24,
         modes: {
-          ECHO: 0
-        }
+          ECHO: 0,
+        },
       });
 
       // Setup event handlers
@@ -86,7 +86,7 @@ class SSHSession {
         // Log output in verbose mode
         if (logger.verbose) {
           logger.debug(`Session ${this.id} output`, {
-            data: data.toString().substring(0, 200)
+            data: data.toString().substring(0, 200),
           });
         }
       });
@@ -100,7 +100,7 @@ class SSHSession {
       this.shell.stderr.on('data', (data) => {
         this.errorBuffer += data.toString();
         logger.warn(`Session ${this.id} stderr`, {
-          error: data.toString()
+          error: data.toString(),
         });
       });
 
@@ -118,13 +118,12 @@ class SSHSession {
 
       logger.info(`Session ${this.id} initialized`, {
         server: this.serverName,
-        cwd: this.context.cwd
+        cwd: this.context.cwd,
       });
-
     } catch (error) {
       this.state = SESSION_STATES.ERROR;
       logger.error(`Failed to initialize session ${this.id}`, {
-        error: error.message
+        error: error.message,
       });
       throw error;
     }
@@ -142,7 +141,7 @@ class SSHSession {
       }
 
       // Wait a bit
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     throw new Error(`Timeout waiting for marker: ${marker}`);
@@ -167,7 +166,7 @@ class SSHSession {
       }
     } catch (error) {
       logger.warn(`Failed to update context for session ${this.id}`, {
-        error: error.message
+        error: error.message,
       });
     }
   }
@@ -193,19 +192,21 @@ class SSHSession {
         this.context.history.push({
           command,
           timestamp: new Date(),
-          cwd: this.context.cwd
+          cwd: this.context.cwd,
         });
 
         logger.info(`Session ${this.id} executing`, {
           command: command.substring(0, 100),
-          server: this.serverName
+          server: this.serverName,
         });
       }
 
       const endMarker = generateMarker('cmd');
 
       // Send command wrapped in an explicit completion marker
-      this.shell.write(`set +e\n${command}\n__mcp_status=$?\nprintf '\\n${endMarker}:%s\\n' "$__mcp_status"\n`);
+      this.shell.write(
+        `set +e\n${command}\n__mcp_status=$?\nprintf '\\n${endMarker}:%s\\n' "$__mcp_status"\n`
+      );
 
       // Wait for command completion marker
       await this.waitForMarker(endMarker, options.timeout || 30000);
@@ -231,14 +232,13 @@ class SSHSession {
         success,
         output,
         error: this.errorBuffer,
-        session: this.id
+        session: this.id,
       };
-
     } catch (error) {
       this.state = SESSION_STATES.ERROR;
       logger.error(`Session ${this.id} execution failed`, {
         command,
-        error: error.message
+        error: error.message,
       });
       throw error;
     }
@@ -272,7 +272,7 @@ class SSHSession {
       created: this.createdAt,
       lastActivity: this.lastActivity,
       historyCount: this.context.history.length,
-      variables: Object.keys(this.context.variables)
+      variables: Object.keys(this.context.variables),
     };
   }
 
@@ -317,7 +317,7 @@ export async function createSession(serverName, ssh) {
 
     logger.info('SSH session created', {
       id: sessionId,
-      server: serverName
+      server: serverName,
     });
 
     return session;
@@ -376,7 +376,8 @@ export function closeSession(sessionId) {
 /**
  * Cleanup old sessions
  */
-function cleanupSessions(maxAge = 30 * 60 * 1000) { // 30 minutes default
+function cleanupSessions(maxAge = 30 * 60 * 1000) {
+  // 30 minutes default
   const now = Date.now();
   let cleanedCount = 0;
 
@@ -385,7 +386,7 @@ function cleanupSessions(maxAge = 30 * 60 * 1000) { // 30 minutes default
 
     if (age > maxAge) {
       logger.info(`Cleaning up inactive session ${id}`, {
-        age: Math.floor(age / 1000) + 's'
+        age: Math.floor(age / 1000) + 's',
       });
       session.close();
       cleanedCount++;
@@ -398,10 +399,13 @@ function cleanupSessions(maxAge = 30 * 60 * 1000) { // 30 minutes default
 // Periodic cleanup of inactive sessions.
 // unref() so this interval never keeps the process alive on its own (a stdio MCP
 // server must exit when its transport closes, not be pinned by a background timer).
-const sessionCleanup = setInterval(() => {
-  const cleaned = cleanupSessions();
-  if (cleaned > 0) {
-    logger.info(`Cleaned up ${cleaned} inactive sessions`);
-  }
-}, 5 * 60 * 1000); // Every 5 minutes
+const sessionCleanup = setInterval(
+  () => {
+    const cleaned = cleanupSessions();
+    if (cleaned > 0) {
+      logger.info(`Cleaned up ${cleaned} inactive sessions`);
+    }
+  },
+  5 * 60 * 1000
+); // Every 5 minutes
 if (typeof sessionCleanup.unref === 'function') sessionCleanup.unref();
