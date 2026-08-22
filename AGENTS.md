@@ -83,7 +83,7 @@ npm run format                                # Biome format --write
 node --check src/index.ts                   # Check source syntax (native type stripping)
 ```
 
-**Language / typecheck**: the entire server (`src/**/*.ts`, entry `src/index.ts`) is TypeScript run **natively by Node's type stripping** (`engines: ">=23.6.0"`; no tsx, no build, nothing emitted) — `node src/index.ts` is the whole runtime contract. `tsconfig.json` is `noEmit` type-checking only; `allowJs`/`checkJs` cover the plain-JS test files (`tests/**/*.js` is in the include list). Type-stripping caveats apply: only erasable syntax (no enums/namespaces/parameter properties), and relative imports must carry explicit `.ts` extensions. Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs the same way — plain `node`, no tsx, nothing left in the dependency tree. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
+**Language / typecheck**: the entire server (`src/**/*.ts`, entry `src/index.ts`) is TypeScript run **natively by Node's type stripping** (dev tree needs Node ≥23.6; no tsx, no build, nothing emitted in-repo) — `node src/index.ts` is the whole development runtime contract. Exception for publishing only: the npm artifact is compiled to JS by `tsc -p tsconfig.build.json` on `prepack` (Node refuses type stripping under `node_modules`), so consumers need only Node ≥20 (`engines`). `tsconfig.json` is `noEmit` type-checking only; `allowJs`/`checkJs` cover the plain-JS test files (`tests/**/*.js` is in the include list). Type-stripping caveats apply: only erasable syntax (no enums/namespaces/parameter properties), and relative imports must carry explicit `.ts` extensions. Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs the same way — plain `node`, no tsx, nothing left in the dependency tree. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
 New tests default to plain `.js` (checkJs covers them); use `.ts` only when the test itself needs TypeScript syntax.
 
 ### Debug Tools (in `debug/` directory)
@@ -235,13 +235,17 @@ This server is MCP-compatible, so any agent that speaks MCP can drive it. Each a
 
 **Claude Code:**
 ```bash
-claude mcp add ssh-manager node /absolute/path/to/mcp-ssh-manager/src/index.ts
+# Users: published package via npx (nothing to clone)
+claude mcp add ssh-manager -- npx -y mcp-ssh4agent
+
+# Developers: local checkout
+claude mcp add ssh-manager node /absolute/path/to/mcp-ssh4agent/src/index.ts
 ```
 Config stored at `~/.config/claude-code/claude_code_config.json`
 
 **OpenAI Codex:** run `ssh-manager codex setup` (writes TOML to `~/.codex/ssh-config.toml`).
 
-**Other agents (Cursor, Cline, etc.):** point their MCP client at `node /absolute/path/to/mcp-ssh-manager/src/index.ts` and pass servers via `.env` or `SSH_CONFIG_PATH`.
+**Other agents (Cursor, Cline, etc.):** point their MCP client at `{ "command": "npx", "args": ["-y", "mcp-ssh4agent"] }` (users) or `node /absolute/path/to/mcp-ssh4agent/src/index.ts` (developers), and pass servers via `.env` or `SSH_CONFIG_PATH`.
 
 ## Agent skills
 

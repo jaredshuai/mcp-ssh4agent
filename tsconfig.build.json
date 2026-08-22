@@ -1,0 +1,18 @@
+{
+  "//": [
+    "Publish-only emit config (npm run build / prepack). The dev tree stays",
+    "zero-build: node src/index.ts via type stripping. The npm artifact must",
+    "be plain JS because Node refuses type stripping under node_modules.",
+    "rewriteRelativeImportExtensions turns the .ts import specifiers the",
+    "source style requires into .js in the output (TS >=5.7)."
+  ],
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src/**/*.ts", "cli/**/*.ts"],
+  "exclude": ["node_modules"]
+}

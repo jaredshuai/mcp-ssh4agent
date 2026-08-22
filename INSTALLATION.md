@@ -78,7 +78,7 @@ SSH_SERVER_DEV1_DEFAULT_DIR=/var/www
 
 ```bash
 ssh-manager --version
-# Should show: SSH Manager CLI v3.8.0
+# Should show: SSH Manager CLI v4.0.0
 ```
 
 ### 2. Check MCP Installation

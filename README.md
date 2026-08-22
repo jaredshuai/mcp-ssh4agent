@@ -295,7 +295,7 @@ ssh-manager tools disable backup
 
 ## 📋 Prerequisites
 
-- Node.js (v23.6 or higher)
+- Node.js (v23.6 or higher for working on the sources; **v20+ is enough to run the published npm package** — see Quick Start)
 - npm (comes with Node.js)
 - **Platforms**: Linux, macOS, Windows
 - **For Claude Code**: Claude Code CLI installed
@@ -307,24 +307,26 @@ ssh-manager tools disable backup
 
 ## 🚀 Quick Start - Claude Code
 
+> **Requires Node.js ≥ 20** for the npm package (`npx -y mcp-ssh4agent` — it ships as compiled JS). Working from the sources instead requires Node ≥ 23.6 (native TypeScript type stripping, no build step).
+
 ### 1. Install MCP SSH Manager
 
-**Option A: Install from npm (recommended)**
+**Option A: Run from npm with npx (recommended — nothing to install)**
 
 ```bash
-# Install globally from npm
-npm install -g mcp-ssh-manager
+# One-shot run (agents use this form; npx fetches mcp-ssh4agent on demand)
+npx -y mcp-ssh4agent
 
-# Or install locally
-npx mcp-ssh-manager
+# Or install globally
+npm install -g mcp-ssh4agent
 ```
 
 **Option B: Install from source**
 
 ```bash
 # Clone and install
-git clone https://github.com/bvisible/mcp-ssh-manager.git
-cd mcp-ssh-manager
+git clone https://github.com/jaredshuai/mcp-ssh4agent.git
+cd mcp-ssh4agent
 npm install
 
 # Install the ssh-manager CLI globally (optional — uses npm link)
@@ -337,14 +339,23 @@ ssh-manager server add
 ### 2. Install to Claude Code
 
 ```bash
-# For personal use (current user only)
-claude mcp add ssh-manager node /path/to/mcp-ssh-manager/src/index.ts
+# For personal use (current user only) — npx form, no local checkout needed
+claude mcp add ssh-manager -- npx -y mcp-ssh4agent
 
 # For team sharing (creates .mcp.json in project)
-claude mcp add ssh-manager --scope project node /path/to/mcp-ssh-manager/src/index.ts
+claude mcp add ssh-manager --scope project -- npx -y mcp-ssh4agent
 
 # For all your projects
-claude mcp add ssh-manager --scope user node /path/to/mcp-ssh-manager/src/index.ts
+claude mcp add ssh-manager --scope user -- npx -y mcp-ssh4agent
+
+# From a local checkout instead:
+claude mcp add ssh-manager node /path/to/mcp-ssh4agent/src/index.ts
+```
+
+**Other MCP clients** (Cursor, Cline, etc.): point the client at
+
+```json
+{ "command": "npx", "args": ["-y", "mcp-ssh4agent"] }
 ```
 
 ### 3. Configure Auto-Approval (Optional but Recommended)
