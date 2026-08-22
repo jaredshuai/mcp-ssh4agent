@@ -740,15 +740,16 @@ The `ssh-manager` CLI (TypeScript, run natively via Node type stripping — see 
 ```
 mcp-ssh-manager/
 ├── src/
-│   ├── index.js              # Main MCP server (37 tools)
-│   ├── ssh-manager.js        # SSH connection handling
-│   ├── config-loader.js      # .env & TOML config loading
-│   ├── session-manager.js    # Persistent SSH sessions
-│   ├── backup-manager.js     # Backup & restore
-│   ├── health-monitor.js     # Health checks & alerts
-│   ├── database-manager.js   # Database operations
-│   ├── tunnel-manager.js     # SSH tunnel management
-│   ├── server-groups.js      # Group operations
+│   ├── index.ts              # Main MCP server (37 tools)
+│   ├── ssh-manager.ts        # SSH connection handling
+│   ├── config-loader.ts      # .env & TOML config loading
+│   ├── session-manager.ts    # Persistent SSH sessions
+│   ├── backup-manager.ts     # Backup & restore
+│   ├── health-monitor.ts     # Health checks & alerts
+│   ├── database-manager.ts   # Database operations
+│   ├── tunnel-manager.ts     # SSH tunnel management
+│   ├── server-groups.ts      # Group operations
+│   ├── tools/                # MCP tool definitions (6 groups)
 │   └── ...
 ├── cli/
 │   ├── ssh-manager.ts         # CLI main entry (TypeScript, node shebang)

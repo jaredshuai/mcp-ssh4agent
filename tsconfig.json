@@ -33,6 +33,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.js", "src/**/*.ts", "scripts/**/*.ts", "cli/**/*.ts", "debug/**/*.ts", "tests/**/*.ts", "tests/**/*.js"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "cli/**/*.ts", "debug/**/*.ts", "tests/**/*.ts", "tests/**/*.js"],
   "exclude": ["node_modules"]
 }

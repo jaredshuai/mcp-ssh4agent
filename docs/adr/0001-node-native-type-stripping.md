@@ -15,3 +15,5 @@ Native stripping keeps the `node src/index.ts` contract byte-identical to the ol
 - CI matrices run Node 24 only (was 18.x + 20.x).
 - Type-stripping constraints apply to server code: erasable syntax only (no enums, namespaces, parameter properties) and relative imports must carry explicit `.ts` extensions.
 - Script/CLI/debug code still runs via tsx — only the server runtime needed the native path.
+
+> **Update (2026-08-22, commit fa4b32b):** tsx was later retired entirely — the CLI, scripts and debug helpers now also run on native type stripping, and the tsx dependency is gone. The decision recorded above (native stripping as the only runtime) now covers all tooling; the Consequences note above predates this and is kept for the historical record.
