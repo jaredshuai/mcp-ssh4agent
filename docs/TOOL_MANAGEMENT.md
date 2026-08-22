@@ -468,6 +468,6 @@ Add comments to your config file to remember why you enabled specific groups:
 ## See Also
 
 - [README.md](../README.md) - Main project documentation
-- [CLAUDE.md](../CLAUDE.md) - Instructions for Claude Code AI
-- [Tool Registry Source](../src/tool-registry.js) - Tool group definitions
-- [Config Manager Source](../src/tool-config-manager.js) - Configuration logic
+- [AGENTS.md](../AGENTS.md) - Instructions for AI agents
+- [Tool Registry Source](../src/tool-registry.ts) - Tool group definitions
+- [Config Manager Source](../src/tool-config-manager.ts) - Configuration logic

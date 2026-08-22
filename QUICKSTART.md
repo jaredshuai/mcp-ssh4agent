@@ -5,10 +5,10 @@ Get up and running in 5 minutes! 🚀
 ## 1️⃣ Clone & Install (1 minute)
 
 ```bash
-git clone https://github.com/bvisible/mcp-ssh-manager.git
-cd mcp-ssh-manager
+git clone https://github.com/jaredshuai/mcp-ssh4agent.git
+cd mcp-ssh4agent
 npm install
-cd cli && ./install.sh
+npm run install-cli
 ```
 
 ## 2️⃣ Add Your First Server (2 minutes)
@@ -30,7 +30,7 @@ Enter:
 ## 3️⃣ Install to Claude Code (1 minute)
 
 ```bash
-claude mcp add ssh-manager node $(pwd)/src/index.js
+claude mcp add ssh-manager node $(pwd)/src/index.ts
 ```
 
 ## 4️⃣ Test It! (1 minute)

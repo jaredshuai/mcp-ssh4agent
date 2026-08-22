@@ -295,7 +295,7 @@ ssh-manager tools disable backup
 
 ## 📋 Prerequisites
 
-- Node.js (v18 or higher)
+- Node.js (v23.6 or higher)
 - npm (comes with Node.js)
 - **Platforms**: Linux, macOS, Windows
 - **For Claude Code**: Claude Code CLI installed

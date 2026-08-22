@@ -2,34 +2,31 @@
 
 ## 📋 Prerequisites
 
-- **Node.js** (v18 or higher) - [Download](https://nodejs.org/)
+- **Node.js** (v23.6 or higher — the server and CLI run TypeScript natively via type stripping) - [Download](https://nodejs.org/)
 - **Claude Code CLI** - [Installation Guide](https://claude.ai/code)
-- **Bash** (4.0+) - Pre-installed on macOS/Linux
 - **Git** - For cloning the repository
 
 Verify installations:
 ```bash
-node --version   # Should show v18.x.x or higher
+node --version   # Should show v23.6.x or higher
 claude --version # Should show Claude Code version
-bash --version   # Should show version 4.0 or higher
 ```
 
 ## 🚀 Quick Installation
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/bvisible/mcp-ssh-manager.git
-cd mcp-ssh-manager
+git clone https://github.com/jaredshuai/mcp-ssh4agent.git
+cd mcp-ssh4agent
 
 # 2. Install dependencies
 npm install
 
-# 3. Install the Bash CLI
-cd cli && ./install.sh
-cd ..
+# 3. Install the CLI globally (npm link)
+npm run install-cli
 
 # 4. Install to Claude Code
-claude mcp add ssh-manager node $(pwd)/src/index.js
+claude mcp add ssh-manager node $(pwd)/src/index.ts
 ```
 
 ## 🔧 Server Configuration
@@ -81,7 +78,7 @@ SSH_SERVER_DEV1_DEFAULT_DIR=/var/www
 
 ```bash
 ssh-manager --version
-# Should show: SSH Manager CLI v2.0.0
+# Should show: SSH Manager CLI v3.8.0
 ```
 
 ### 2. Check MCP Installation
@@ -130,7 +127,7 @@ chmod 600 ~/.ssh/your_key
 ```bash
 # Restart Claude Code and re-add
 claude mcp remove ssh-manager
-claude mcp add ssh-manager node $(pwd)/src/index.js
+claude mcp add ssh-manager node $(pwd)/src/index.ts
 ```
 
 ## 🌍 Environment Variables
@@ -151,7 +148,7 @@ To share with your team:
 
 ```bash
 # Create project configuration
-claude mcp add ssh-manager --scope project node $(pwd)/src/index.js
+claude mcp add ssh-manager --scope project node $(pwd)/src/index.ts
 ```
 
 This creates `.mcp.json` that can be committed to Git.
@@ -163,7 +160,7 @@ This creates `.mcp.json` that can be committed to Git.
 claude mcp remove ssh-manager
 
 # Uninstall CLI
-sudo rm /usr/local/bin/ssh-manager
+npm uninstall -g mcp-ssh-manager
 
 # Remove configuration
 rm -rf ~/.ssh-manager

@@ -23,13 +23,13 @@ npm run install-cli     # checks deps + `npm link` (creates the ssh-manager shim
 ### Manual Run (no global install)
 
 ```bash
-node cli/ssh-manager.js --help
+node cli/ssh-manager.ts --help
 ```
 
 ### Dependencies
 
 **Required:**
-- Node.js (>=18) and `npm`
+- Node.js (>=23.6) and `npm`
 - `ssh`
 
 **Optional:**
@@ -230,7 +230,7 @@ on macOS/Linux). If your shell can't find it:
 
 - **Restart your terminal** so PATH refreshes (common need on Windows).
 - Verify the link: `npm ls -g mcp-ssh-manager` should list it.
-- Or skip the global shim entirely and run directly: `node cli/ssh-manager.js --help`
+- Or skip the global shim entirely and run directly: `node cli/ssh-manager.ts --help`
 
 ### Missing optional dependencies
 
