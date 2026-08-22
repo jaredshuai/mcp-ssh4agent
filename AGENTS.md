@@ -81,6 +81,7 @@ node --check src/index.ts                   # Check source syntax (native type s
 ```
 
 **Language / typecheck**: the entire server (`src/**/*.ts`, entry `src/index.ts`) is TypeScript run **natively by Node's type stripping** (`engines: ">=23.6.0"`; no tsx, no build, nothing emitted) — `node src/index.ts` is the whole runtime contract. `tsconfig.json` is `noEmit` type-checking only; `allowJs`/`checkJs` cover the plain-JS test files (`tests/**/*.js` is in the include list). Type-stripping caveats apply: only erasable syntax (no enums/namespaces/parameter properties), and relative imports must carry explicit `.ts` extensions. Script/CLI/debug code (`scripts/*.ts`, `cli/**/*.ts`, `debug/*.ts`) runs the same way — plain `node`, no tsx, nothing left in the dependency tree. Baseline is 0 typecheck errors; CI enforces it on Node 24. `typescript` is pinned to `^6` because knip 5 declares `peer typescript ">=5.0.4 <7"` — bumping one requires bumping the other.
+New tests default to plain `.js` (checkJs covers them); use `.ts` only when the test itself needs TypeScript syntax.
 
 ### Debug Tools (in `debug/` directory)
 ```bash
