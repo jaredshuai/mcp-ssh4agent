@@ -21,7 +21,7 @@ const fail = (msg: string) => {
 };
 const warn = (msg: string) => console.log(`  ${YELLOW}⚠️${RESET}  ${msg}`);
 
-console.log('🔍 MCP SSH Manager - Code Validation');
+console.log('🔍 MCP SSH4Agent - Code Validation');
 console.log('=====================================');
 console.log('');
 

@@ -1,4 +1,4 @@
-# SSH Manager CLI
+# SSH4Agent CLI
 
 A simple, powerful, and fast cross-platform CLI for managing SSH servers.
 
@@ -8,7 +8,7 @@ A simple, powerful, and fast cross-platform CLI for managing SSH servers.
 - 🎨 **Beautiful**: Colored output with emojis
 - 📦 **Simple**: Single command for all operations
 - 🔧 **Powerful**: Tunnels, sync, monitoring, and more
-- 🔌 **Integrated**: Works with MCP SSH Manager server
+- 🔌 **Integrated**: Works with MCP SSH4Agent server
 - 🪟 **Cross-platform**: Runs natively on Windows, macOS, and Linux — no Bash/Git Bash/WSL required
 
 ## Installation
@@ -17,7 +17,7 @@ A simple, powerful, and fast cross-platform CLI for managing SSH servers.
 
 ```bash
 # From the project root
-npm run install-cli     # checks deps + `npm link` (creates the ssh-manager shim)
+npm run install-cli     # checks deps + `npm link` (creates the ssh4agent shim)
 ```
 
 ### Manual Run (no global install)
@@ -33,7 +33,7 @@ node cli/ssh-manager.ts --help
 - `ssh`
 
 **Optional:**
-- `rsync` - For `ssh-manager sync` (not bundled on Windows; install separately if needed)
+- `rsync` - For `ssh4agent sync` (not bundled on Windows; install separately if needed)
 - `jq` - For JSON configuration management
 - `sshpass` - For password authentication testing
 
@@ -43,65 +43,65 @@ node cli/ssh-manager.ts --help
 
 ```bash
 # Add a new server interactively
-ssh-manager server add
+ssh4agent server add
 
 # List all servers
-ssh-manager server list
+ssh4agent server list
 
 # Test connection
-ssh-manager server test prod1
+ssh4agent server test prod1
 
 # Show server details
-ssh-manager server show prod1
+ssh4agent server show prod1
 
 # Remove a server
-ssh-manager server remove prod1
+ssh4agent server remove prod1
 
 # Edit configuration
-ssh-manager server edit
+ssh4agent server edit
 ```
 
 ### Quick SSH Connection
 
 ```bash
 # Connect to a server
-ssh-manager ssh prod1
+ssh4agent ssh prod1
 ```
 
 ### File Synchronization
 
 ```bash
 # Push files to server
-ssh-manager sync push prod1 ./app /var/www/app
+ssh4agent sync push prod1 ./app /var/www/app
 
 # Pull files from server
-ssh-manager sync pull prod1 /var/log/app.log ./logs/
+ssh4agent sync pull prod1 /var/log/app.log ./logs/
 ```
 
 ### SSH Tunnels
 
 ```bash
 # Local port forwarding (access remote service locally)
-ssh-manager tunnel create prod1 local 3307:localhost:3306
+ssh4agent tunnel create prod1 local 3307:localhost:3306
 
 # Remote port forwarding (expose local service)
-ssh-manager tunnel create prod1 remote 8080:localhost:8080
+ssh4agent tunnel create prod1 remote 8080:localhost:8080
 
 # SOCKS proxy
-ssh-manager tunnel create prod1 dynamic 1080
+ssh4agent tunnel create prod1 dynamic 1080
 
 # List active tunnels
-ssh-manager tunnel list
+ssh4agent tunnel list
 ```
 
 ### Execute Commands
 
 ```bash
 # Run command on server
-ssh-manager exec prod1 "uptime"
+ssh4agent exec prod1 "uptime"
 
 # Run complex commands
-ssh-manager exec prod1 "df -h | grep /var"
+ssh4agent exec prod1 "df -h | grep /var"
 ```
 
 ## Configuration
@@ -127,7 +127,7 @@ SSH_SERVER_DB1_DEFAULT_DIR=/var/lib/mysql
 
 ### CLI Configuration
 
-Configuration stored in `~/.ssh-manager/config.json`:
+Configuration stored in `~/.ssh4agent/config.json`:
 
 ```json
 {
@@ -146,7 +146,7 @@ Access remote MySQL locally:
 
 ```bash
 # Create tunnel
-ssh-manager tunnel create prod1 local 3307:localhost:3306
+ssh4agent tunnel create prod1 local 3307:localhost:3306
 
 # Connect to MySQL
 mysql -h localhost -P 3307 -u root -p
@@ -156,13 +156,13 @@ mysql -h localhost -P 3307 -u root -p
 
 ```bash
 # Sync application files
-ssh-manager sync push prod1 ./dist/ /var/www/app/
+ssh4agent sync push prod1 ./dist/ /var/www/app/
 
 # Restart service
-ssh-manager exec prod1 "sudo systemctl restart app"
+ssh4agent exec prod1 "sudo systemctl restart app"
 
 # Check status
-ssh-manager exec prod1 "systemctl status app"
+ssh4agent exec prod1 "systemctl status app"
 ```
 
 ### Backup Logs
@@ -172,18 +172,18 @@ ssh-manager exec prod1 "systemctl status app"
 mkdir -p ./backups/$(date +%Y%m%d)
 
 # Pull logs
-ssh-manager sync pull prod1 /var/log/app/ ./backups/$(date +%Y%m%d)/
+ssh4agent sync pull prod1 /var/log/app/ ./backups/$(date +%Y%m%d)/
 ```
 
 ## Advanced Usage
 
 ### Using with MCP Server
 
-The CLI works seamlessly with the MCP SSH Manager server:
+The CLI works seamlessly with the MCP SSH4Agent server:
 
 ```bash
 # Use CLI for configuration
-ssh-manager server add
+ssh4agent server add
 
 # Use MCP tools in Claude for operations
 # The same .env file is shared
@@ -193,14 +193,14 @@ ssh-manager server add
 
 ```bash
 #!/bin/bash
-# Deploy script using ssh-manager
+# Deploy script using ssh4agent
 
 SERVERS=(prod1 prod2 prod3)
 
 for server in "${SERVERS[@]}"; do
     echo "Deploying to $server..."
-    ssh-manager sync push $server ./dist/ /var/www/app/
-    ssh-manager exec $server "sudo systemctl restart app"
+    ssh4agent sync push $server ./dist/ /var/www/app/
+    ssh4agent exec $server "sudo systemctl restart app"
 done
 ```
 
@@ -210,9 +210,9 @@ Create shell aliases for common operations:
 
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
-alias sml='ssh-manager server list'
-alias smt='ssh-manager server test'
-alias smc='ssh-manager ssh'
+alias sml='ssh4agent server list'
+alias smt='ssh4agent server test'
+alias smc='ssh4agent ssh'
 
 # Usage
 sml          # List servers
@@ -224,12 +224,12 @@ smc prod1    # Connect to prod1
 
 ### Command not found
 
-After `npm run install-cli`, the `ssh-manager` shim lives in npm's global bin
+After `npm run install-cli`, the `ssh4agent` shim lives in npm's global bin
 directory (`%APPDATA%\npm` on Windows; `/usr/local/bin` or `~/.npm-global/bin`
 on macOS/Linux). If your shell can't find it:
 
 - **Restart your terminal** so PATH refreshes (common need on Windows).
-- Verify the link: `npm ls -g mcp-ssh-manager` should list it.
+- Verify the link: `npm ls -g mcp-ssh4agent` should list it.
 - Or skip the global shim entirely and run directly: `node cli/ssh-manager.ts --help`
 
 ### Missing optional dependencies
@@ -248,12 +248,12 @@ sudo dnf install jq sshpass
 ```
 
 On Windows, `rsync` is not bundled — install it via MSYS2, Scoop
-(`scoop install rsync`), or WSL if you need `ssh-manager sync`. `jq` is
+(`scoop install rsync`), or WSL if you need `ssh4agent sync`. `jq` is
 available via Scoop/Chocolatey; `sshpass` has no native Windows build.
 
 ## Contributing
 
-The CLI is part of the MCP SSH Manager project. Contributions welcome!
+The CLI is part of the MCP SSH4Agent project. Contributions welcome!
 
 1. Fork the repository
 2. Create your feature branch

@@ -29,7 +29,7 @@ function ok(label) {
   passed++;
 }
 
-const cwd = 'C:\\mcp\\mcp-ssh-manager';
+const cwd = 'C:\\mcp\\mcp-ssh4agent';
 const windowsPath = (value) => toRsyncLocalPath(value, { platform: 'win32', cwd });
 
 // ── 1. Known conversions ─────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ const cases = [
   [
     'drive-relative path is made unambiguous',
     'C:package.json',
-    '/c/mcp/mcp-ssh-manager/package.json',
+    '/c/mcp/mcp-ssh4agent/package.json',
   ],
   ['drive root', 'C:\\', '/c/'],
   ['UNC path', '\\\\server\\share\\folder\\', '//server/share/folder/'],

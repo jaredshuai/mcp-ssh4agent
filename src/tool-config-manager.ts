@@ -13,10 +13,22 @@ import { TOOL_GROUPS, findToolGroup, getAllTools } from './tool-registry.ts';
 
 /**
  * Configuration file location
- * User-global only: ~/.ssh-manager/tools-config.json
+ * User-global only: ~/.ssh4agent/tools-config.json
  */
-const CONFIG_DIR = path.join(os.homedir(), '.ssh-manager');
+const CONFIG_DIR = path.join(os.homedir(), '.ssh4agent');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'tools-config.json');
+// Pre-rebrand location; kept as a read-only fallback (writes always go to CONFIG_FILE).
+const LEGACY_CONFIG_FILE = path.join(os.homedir(), '.ssh-manager', 'tools-config.json');
+
+function resolveReadPath(): string {
+  if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(LEGACY_CONFIG_FILE)) {
+    logger.info(
+      `Using legacy tool config ${LEGACY_CONFIG_FILE} — move it to ${CONFIG_FILE} to migrate`
+    );
+    return LEGACY_CONFIG_FILE;
+  }
+  return CONFIG_FILE;
+}
 
 /**
  * Tool Configuration Manager Class
@@ -37,8 +49,9 @@ class ToolConfigManager {
    */
   async load() {
     try {
-      if (fs.existsSync(this.configPath)) {
-        const content = fs.readFileSync(this.configPath, 'utf8');
+      const readPath = resolveReadPath();
+      if (fs.existsSync(readPath)) {
+        const content = fs.readFileSync(readPath, 'utf8');
         this.config = JSON.parse(content);
 
         // Validate config structure
@@ -46,7 +59,7 @@ class ToolConfigManager {
           logger.warn('Invalid tool configuration, using defaults');
           this.config = this.getDefaultConfig();
         } else {
-          logger.info(`Tool configuration loaded from ${this.configPath}`);
+          logger.info(`Tool configuration loaded from ${readPath}`);
           logger.info(
             `Mode: ${this.config.mode}, Enabled tools: ${this.getEnabledTools().length}/37`
           );
@@ -54,7 +67,7 @@ class ToolConfigManager {
       } else {
         // No config file - default to all tools enabled
         logger.info('No tool configuration found, enabling all tools (default)');
-        logger.info('Run "ssh-manager tools configure" to optimize and reduce context usage');
+        logger.info('Run "ssh4agent tools configure" to optimize and reduce context usage');
         this.config = this.getDefaultConfig();
       }
     } catch (error) {
@@ -84,7 +97,7 @@ class ToolConfigManager {
       },
       tools: {},
       _comment:
-        'Tool configuration for MCP SSH Manager. Run "ssh-manager tools configure" to customize.',
+        'Tool configuration for MCP SSH4Agent. Run "ssh4agent tools configure" to customize.',
     };
   }
 
@@ -389,7 +402,7 @@ class ToolConfigManager {
   exportClaudeCodeConfig() {
     const enabledTools = this.getEnabledTools();
 
-    const autoApprovalPatterns = enabledTools.map((tool) => `mcp__ssh-manager__${tool}`);
+    const autoApprovalPatterns = enabledTools.map((tool) => `mcp__ssh4agent__${tool}`);
 
     return {
       comment: 'Add these patterns to autoApprove.tools in claude_code_config.json',

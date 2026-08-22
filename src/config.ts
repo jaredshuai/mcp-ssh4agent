@@ -1,4 +1,4 @@
-// Configuration constants for MCP SSH Manager
+// Configuration constants for MCP SSH4Agent
 
 // Output limits to prevent Claude Code crashes
 const OUTPUT_LIMITS = {

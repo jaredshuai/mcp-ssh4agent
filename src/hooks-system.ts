@@ -1,5 +1,5 @@
 /**
- * Hooks System for MCP SSH Manager
+ * Hooks System for MCP SSH4Agent
  * Provides automation through pre/post execution hooks
  */
 

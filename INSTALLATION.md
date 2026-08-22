@@ -1,4 +1,4 @@
-# Installation Guide for MCP SSH Manager
+# Installation Guide for MCP SSH4Agent
 
 ## 📋 Prerequisites
 
@@ -26,7 +26,7 @@ npm install
 npm run install-cli
 
 # 4. Install to Claude Code
-claude mcp add ssh-manager node $(pwd)/src/index.ts
+claude mcp add ssh4agent node $(pwd)/src/index.ts
 ```
 
 ## 🔧 Server Configuration
@@ -35,7 +35,7 @@ claude mcp add ssh-manager node $(pwd)/src/index.ts
 
 ```bash
 # Launch interactive menu
-ssh-manager
+ssh4agent
 
 # Choose "Server Management" → "Add New Server"
 # Follow the guided wizard
@@ -44,10 +44,10 @@ ssh-manager
 ### Direct Commands
 
 ```bash
-ssh-manager server add    # Add new server
-ssh-manager server list   # List all servers
-ssh-manager server test   # Test connection
-ssh-manager server remove # Remove server
+ssh4agent server add    # Add new server
+ssh4agent server list   # List all servers
+ssh4agent server test   # Test connection
+ssh4agent server remove # Remove server
 ```
 
 ### Manual Configuration
@@ -77,15 +77,15 @@ SSH_SERVER_DEV1_DEFAULT_DIR=/var/www
 ### 1. Check CLI Installation
 
 ```bash
-ssh-manager --version
-# Should show: SSH Manager CLI v4.0.0
+ssh4agent --version
+# Should show: SSH4Agent CLI v4.0.0
 ```
 
 ### 2. Check MCP Installation
 
 ```bash
 claude mcp list
-# Should show: ssh-manager
+# Should show: ssh4agent
 ```
 
 ### 3. Test in Claude Code
@@ -111,8 +111,8 @@ source ~/.bashrc
 
 ```bash
 # Check .env file location
-export SSH_MANAGER_ENV="$(pwd)/.env"
-ssh-manager server list
+export SSH4AGENT_ENV="$(pwd)/.env"
+ssh4agent server list
 ```
 
 ### Permission denied
@@ -126,8 +126,8 @@ chmod 600 ~/.ssh/your_key
 
 ```bash
 # Restart Claude Code and re-add
-claude mcp remove ssh-manager
-claude mcp add ssh-manager node $(pwd)/src/index.ts
+claude mcp remove ssh4agent
+claude mcp add ssh4agent node $(pwd)/src/index.ts
 ```
 
 ## 🌍 Environment Variables
@@ -136,7 +136,7 @@ Set these in your shell profile (`~/.bashrc` or `~/.zshrc`):
 
 ```bash
 # Point to your .env file
-export SSH_MANAGER_ENV="/path/to/your/.env"
+export SSH4AGENT_ENV="/path/to/your/.env"
 
 # Optional: Set default log level
 export SSH_LOG_LEVEL="INFO"
@@ -148,7 +148,7 @@ To share with your team:
 
 ```bash
 # Create project configuration
-claude mcp add ssh-manager --scope project node $(pwd)/src/index.ts
+claude mcp add ssh4agent --scope project node $(pwd)/src/index.ts
 ```
 
 This creates `.mcp.json` that can be committed to Git.
@@ -157,21 +157,21 @@ This creates `.mcp.json` that can be committed to Git.
 
 ```bash
 # Remove from Claude Code
-claude mcp remove ssh-manager
+claude mcp remove ssh4agent
 
 # Uninstall CLI
-npm uninstall -g mcp-ssh-manager
+npm uninstall -g mcp-ssh4agent
 
 # Remove configuration
-rm -rf ~/.ssh-manager
+rm -rf ~/.ssh4agent
 ```
 
 ## 📚 Next Steps
 
 After installation:
 1. Add your servers using the interactive wizard
-2. Test connections: `ssh-manager server test`
-3. Try quick SSH: `ssh-manager ssh servername`
-4. Explore features: `ssh-manager --help`
+2. Test connections: `ssh4agent server test`
+3. Try quick SSH: `ssh4agent ssh servername`
+4. Explore features: `ssh4agent --help`
 
 For more information, see the [README](README.md).

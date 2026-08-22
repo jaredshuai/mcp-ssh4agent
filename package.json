@@ -1,12 +1,12 @@
 {
   "name": "mcp-ssh4agent",
   "version": "4.0.0",
-  "description": "MCP SSH Manager: Model Context Protocol server for SSH remote server management. Control SSH connections from any MCP-compatible AI agent (Claude Code, Codex, Cursor, Cline, etc.) - execute commands, transfer files, database operations, backups, health monitoring, and DevOps automation. NEW: Tool activation system reduces context usage by 92%",
+  "description": "MCP SSH4Agent: Model Context Protocol server for SSH remote server management. Control SSH connections from any MCP-compatible AI agent (Claude Code, Codex, Cursor, Cline, etc.) - execute commands, transfer files, database operations, backups, health monitoring, and DevOps automation. NEW: Tool activation system reduces context usage by 92%",
   "main": "dist/src/index.js",
   "files": ["dist/", "README.md", "LICENSE", "CHANGELOG.md"],
   "bin": {
-    "mcp-ssh-manager": "dist/src/index.js",
-    "ssh-manager": "dist/cli/ssh-manager.js"
+    "mcp-ssh4agent": "dist/src/index.js",
+    "ssh4agent": "dist/cli/ssh-manager.js"
   },
   "type": "module",
   "scripts": {
@@ -61,7 +61,7 @@
     "codex",
     "model-context-protocol",
     "remote-server",
-    "ssh-manager",
+    "ssh4agent",
     "ssh manager mcp",
     "remote-ssh",
     "ssh-automation",

@@ -1,4 +1,4 @@
-// Cross-platform installer for the ssh-manager CLI (replaces cli/install.sh).
+// Cross-platform installer for the ssh4agent CLI (replaces cli/install.sh).
 // Run via: `npm run install-cli` → `node scripts/install.ts`
 //
 // Pure Node.js, no shell-isms. Works on Windows, macOS, Linux.
@@ -6,7 +6,7 @@
 // - Installs the CLI globally via `npm link` (uses the `bin` field in
 //   package.json — npm creates the right shim per platform: a .cmd on
 //   Windows, a symlink on unix). No manual /usr/local/bin writes.
-// - Verifies `ssh-manager --version` resolves on PATH after install.
+// - Verifies `ssh4agent --version` resolves on PATH after install.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -31,7 +31,7 @@ const info = (m: string) => console.log(`  ${BLUE}ℹ${RESET} ${m}`);
 const _HERE = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = dirname(_HERE);
 
-console.log(`${BLUE}SSH Manager CLI Installation${RESET}`);
+console.log(`${BLUE}SSH4Agent CLI Installation${RESET}`);
 console.log('==============================');
 console.log('');
 
@@ -86,11 +86,11 @@ if (!existsSync(`${PROJECT_ROOT}/node_modules/@modelcontextprotocol/sdk`)) {
 }
 
 // 3. Global install via `npm link` (uses package.json `bin` field — npm creates
-//    the platform-appropriate shim: ssh-manager.cmd on Windows, symlink on
+//    the platform-appropriate shim: ssh4agent.cmd on Windows, symlink on
 //    unix). `npm link` keeps the install pointing at this source tree, which
 //    suits a project under active development. Use `npm install -g .` instead
 //    for a frozen copy.
-console.log(`${YELLOW}Installing ssh-manager globally (npm link)...${RESET}`);
+console.log(`${YELLOW}Installing ssh4agent globally (npm link)...${RESET}`);
 const npmLink = spawnSync('npm link', {
   cwd: PROJECT_ROOT,
   stdio: 'inherit',
@@ -104,9 +104,9 @@ if (npmLink.status !== 0) {
   process.exit(1);
 }
 
-// 4. Verify the CLI is now on PATH. ssh-manager resolves to a .cmd shim on
+// 4. Verify the CLI is now on PATH. ssh4agent resolves to a .cmd shim on
 //    Windows, so this also needs shell: true with a single-string command.
-const verify = spawnSync('ssh-manager --version', {
+const verify = spawnSync('ssh4agent --version', {
   stdio: ['ignore', 'pipe', 'pipe'],
   shell: true,
 });
@@ -117,18 +117,18 @@ if (verify.status === 0) {
   if (version) info(version);
   console.log('');
   console.log('Quick start:');
-  console.log('  ssh-manager --help           # Show help');
-  console.log('  ssh-manager server add       # Add a new server');
-  console.log('  ssh-manager server list      # List servers');
-  console.log('  ssh-manager server test      # Test connection');
+  console.log('  ssh4agent --help           # Show help');
+  console.log('  ssh4agent server add       # Add a new server');
+  console.log('  ssh4agent server list      # List servers');
+  console.log('  ssh4agent server test      # Test connection');
   console.log('');
   console.log('Configuration files:');
-  console.log(`  ${os.homedir()}/.ssh-manager/      # Config directory`);
+  console.log(`  ${os.homedir()}/.ssh4agent/      # Config directory`);
   console.log('  .env                         # Server definitions');
 } else {
   console.log('');
-  fail('ssh-manager not found on PATH after install');
-  info('Restart your shell (PATH may need to refresh), or run ssh-manager');
+  fail('ssh4agent not found on PATH after install');
+  info('Restart your shell (PATH may need to refresh), or run ssh4agent');
   console.log(`  via:  node ${PROJECT_ROOT.replace(/\\/g, '/')}/cli/ssh-manager.ts`);
   process.exit(1);
 }

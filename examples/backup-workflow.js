@@ -32,7 +32,7 @@ const mysqlBackup = {
 //   "success": true,
 //   "backup_id": "mysql_pre-deployment_2025-10-01T10-30-45-000Z_abc123de",
 //   "size_human": "50.00 MB",
-//   "location": "/var/backups/ssh-manager/mysql_pre-deployment_2025-10-01T10-30-45-000Z_abc123de.gz"
+//   "location": "/var/backups/ssh4agent/mysql_pre-deployment_2025-10-01T10-30-45-000Z_abc123de.gz"
 // }
 
 // ============================================================================

@@ -31,23 +31,31 @@ const __dirname = path.dirname(__filename);
 
 // Resolve .env file path with fallback chain:
 // 1. SSH_ENV_PATH env var (explicit override)
-// 2. ~/.ssh-manager/.env (user config dir — where ssh-manager CLI writes)
-// 3. process.cwd()/.env (standard working directory)
-// 4. ~/.env (home directory)
-// 5. __dirname/../.env (backward compat for local installs)
+// 2. ~/.ssh4agent/.env (user config dir — where ssh4agent CLI writes)
+// 3. ~/.ssh-manager/.env (legacy dir, read-only fallback)
+// 4. process.cwd()/.env (standard working directory)
+// 5. ~/.env (home directory)
+// 6. __dirname/../.env (backward compat for local installs)
 function resolveEnvFilePath() {
   if (process.env.SSH_ENV_PATH) {
     return process.env.SSH_ENV_PATH;
   }
-  const sshManagerHome = process.env.SSH_MANAGER_HOME || path.join(os.homedir(), '.ssh-manager');
+  const home = process.env.SSH4AGENT_HOME || path.join(os.homedir(), '.ssh4agent');
+  const legacyHome = path.join(os.homedir(), '.ssh-manager');
   const candidates = [
-    path.join(sshManagerHome, '.env'),
+    path.join(home, '.env'),
+    path.join(legacyHome, '.env'),
     path.join(process.cwd(), '.env'),
     path.join(os.homedir(), '.env'),
     path.join(__dirname, '..', '.env'),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
+      if (candidate === path.join(legacyHome, '.env')) {
+        console.error(
+          `ℹ️ Using legacy config ${candidate} — move it to ${path.join(home, '.env')} to migrate`
+        );
+      }
       return candidate;
     }
   }
@@ -63,7 +71,7 @@ function getRuntimeEnv(name) {
 }
 
 // Initialize logger
-logger.info('MCP SSH Manager starting', {
+logger.info('MCP SSH4Agent starting', {
   logLevel: getRuntimeEnv('SSH_LOG_LEVEL') || 'INFO',
   verbose: getRuntimeEnv('SSH_VERBOSE') === 'true',
   envFilePath,
@@ -103,7 +111,7 @@ try {
     `Tool configuration loaded: ${summary.mode} mode, ${summary.enabledCount}/${summary.totalTools} tools enabled`
   );
   if (summary.mode === 'all') {
-    logger.info('💡 Tip: Run "ssh-manager tools configure" to reduce context usage in Claude Code');
+    logger.info('💡 Tip: Run "ssh4agent tools configure" to reduce context usage in Claude Code');
   }
 } catch (error) {
   logger.error('Failed to load tool configuration', { error: error.message });
@@ -550,7 +558,7 @@ function getServerVersion() {
 // Create MCP server
 const serverVersion = getServerVersion();
 const server = new McpServer({
-  name: 'mcp-ssh-manager',
+  name: 'ssh4agent',
   version: serverVersion,
 });
 
@@ -643,14 +651,12 @@ async function main() {
   const serverList = Object.keys(servers);
   const activeProfile = getActiveProfileName();
 
-  console.error('🚀 MCP SSH Manager Server started');
+  console.error('🚀 MCP SSH4Agent Server started');
   console.error(`📦 Profile: ${activeProfile}`);
   console.error(
     `🖥️  Available servers: ${serverList.length > 0 ? serverList.join(', ') : 'none configured'}`
   );
-  console.error(
-    '💡 Use "ssh-manager server add" (or edit ~/.ssh-manager/.env) to configure servers'
-  );
+  console.error('💡 Use "ssh4agent server add" (or edit ~/.ssh4agent/.env) to configure servers');
   console.error('🔄 Connection management: Auto-reconnect enabled, 30min timeout');
 
   // Set up periodic cleanup of old connections (every 10 minutes).

@@ -788,7 +788,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
     'ssh_alert_setup',
     {
       description:
-        'Configures and evaluates CPU, memory, and disk usage alert thresholds for a remote server. The action parameter selects: set writes the threshold config to /etc/ssh-manager-alerts.json on the remote host (mutating, may need write access to /etc, and is blocked on readonly servers); get reads back that config; check reads current metrics and compares them to stored thresholds. get and check are read-only. enabled defaults to true; check errors if no config exists yet.',
+        'Configures and evaluates CPU, memory, and disk usage alert thresholds for a remote server. The action parameter selects: set writes the threshold config to /etc/ssh4agent-alerts.json on the remote host (mutating, may need write access to /etc, and is blocked on readonly servers); get reads back that config; check reads current metrics and compares them to stored thresholds. get and check are read-only. enabled defaults to true; check errors if no config exists yet.',
       inputSchema: {
         server: z.string().describe('Server name'),
         action: z
@@ -826,7 +826,8 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
       }
       try {
         const ssh = await getConnection(serverName);
-        const configPath = '/etc/ssh-manager-alerts.json';
+        // BREAKING (unreleased): the pre-rebrand /etc/ssh-manager-alerts.json is no longer read.
+        const configPath = '/etc/ssh4agent-alerts.json';
 
         logger.info(`Alert setup action: ${action}`, {
           server: serverName,

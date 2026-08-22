@@ -21,7 +21,7 @@ const fail = (m: string) => console.log(`${RED}❌${NC} ${m}`);
 const _HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.dirname(_HERE);
 
-console.log('🔧 Testing MCP SSH Manager server over stdio');
+console.log('🔧 Testing MCP SSH4Agent server over stdio');
 console.log('=============================================');
 console.log('');
 

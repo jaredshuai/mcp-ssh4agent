@@ -1,4 +1,4 @@
-# MCP SSH Manager
+# MCP SSH4Agent
 
 An MCP server that lets any MCP-compatible AI agent operate remote servers over SSH: run commands, move files, manage server groups and policy. Single context: one server process, one configuration, one vocabulary.
 

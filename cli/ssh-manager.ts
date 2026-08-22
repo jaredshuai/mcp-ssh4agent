@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// SSH Manager CLI — main entry.
+// SSH4Agent CLI — main entry.
 //
-// Cross-platform TypeScript port of cli/ssh-manager (the bash entry).
+// Cross-platform TypeScript port of cli/ssh4agent (the bash entry).
 // Implements: VERSION resolution, show_help/show_version, the cmd_exec /
 // cmd_sync / cmd_ssh / cmd_tunnel primitives, the main() dispatcher, and the
 // interactive_mode loop. Run natively: `node cli/ssh-manager.ts` (Node
@@ -43,9 +43,9 @@ import {
 
 import {
   PROJECT_ROOT,
-  SSH_MANAGER_CONFIG,
-  SSH_MANAGER_ENV,
-  SSH_MANAGER_HOME,
+  SSH4AGENT_CONFIG,
+  SSH4AGENT_ENV,
+  SSH4AGENT_HOME,
   init_config,
   check_dependencies,
   get_server_config,
@@ -103,21 +103,21 @@ export function get_version(): string {
 
 // ── show_version ───────────────────────────────────────────────────────────────
 export function show_version(): void {
-  process.stdout.write(`SSH Manager CLI v${VERSION}\n`);
+  process.stdout.write(`SSH4Agent CLI v${VERSION}\n`);
   process.stdout.write('Simple and powerful SSH server management\n');
 }
 
 // ── show_help ──────────────────────────────────────────────────────────────────
 export function show_help(): void {
-  const homeDisplay = process.env.SSH_MANAGER_HOME || '~/.ssh-manager';
-  const envDisplay = SSH_MANAGER_ENV || '.env';
+  const homeDisplay = process.env.SSH4AGENT_HOME || '~/.ssh4agent';
+  const envDisplay = SSH4AGENT_ENV || '.env';
   const out: string[] = [];
-  out.push(`${BOLD}SSH Manager CLI${NC} - Simple and powerful SSH server management`);
+  out.push(`${BOLD}SSH4Agent CLI${NC} - Simple and powerful SSH server management`);
   out.push('');
   out.push(`${BOLD}USAGE:${NC}`);
-  out.push('    ssh-manager              # Interactive mode (menu)');
-  out.push('    ssh-manager -i           # Interactive mode (menu)');
-  out.push('    ssh-manager <command>    # Direct command mode');
+  out.push('    ssh4agent              # Interactive mode (menu)');
+  out.push('    ssh4agent -i           # Interactive mode (menu)');
+  out.push('    ssh4agent <command>    # Direct command mode');
   out.push('');
   out.push(`${BOLD}COMMANDS:${NC}`);
   out.push(`    ${CYAN}server${NC}      Server management`);
@@ -173,29 +173,29 @@ export function show_help(): void {
   out.push('');
   out.push(`${BOLD}EXAMPLES:${NC}`);
   out.push('    # Add a new server');
-  out.push('    ssh-manager server add');
+  out.push('    ssh4agent server add');
   out.push('    ');
   out.push('    # List all servers');
-  out.push('    ssh-manager server list');
+  out.push('    ssh4agent server list');
   out.push('    ');
   out.push('    # Test connection to prod1');
-  out.push('    ssh-manager server test prod1');
+  out.push('    ssh4agent server test prod1');
   out.push('    ');
   out.push('    # Sync files to server');
-  out.push('    ssh-manager sync push prod1 ./app /var/www/app');
+  out.push('    ssh4agent sync push prod1 ./app /var/www/app');
   out.push('    ');
   out.push('    # Create SSH tunnel');
-  out.push('    ssh-manager tunnel create prod1 local 3307:localhost:3306');
+  out.push('    ssh4agent tunnel create prod1 local 3307:localhost:3306');
   out.push('    ');
   out.push('    # Monitor server');
-  out.push('    ssh-manager monitor prod1 cpu');
+  out.push('    ssh4agent monitor prod1 cpu');
   out.push('');
   out.push(`${BOLD}CONFIGURATION:${NC}`);
   out.push(`    Config directory: ${homeDisplay}`);
   out.push(`    Server config:    ${envDisplay}`);
   out.push('');
   out.push(`${BOLD}DOCUMENTATION:${NC}`);
-  out.push('    https://github.com/bvisible/mcp-ssh-manager');
+  out.push('    https://github.com/jaredshuai/mcp-ssh4agent');
   out.push('');
   process.stdout.write(out.join('\n'));
 }
@@ -204,7 +204,7 @@ export function show_help(): void {
 export function cmd_exec(server: string, ...commandParts: string[]): void {
   const command = commandParts.join(' ');
   if (!server || !command) {
-    print_error('Usage: ssh-manager exec <server> <command>');
+    print_error('Usage: ssh4agent exec <server> <command>');
     process.exitCode = 1;
     return;
   }
@@ -242,12 +242,12 @@ export function cmd_sync(
   _extra?: string
 ): void {
   if (!direction || !server || !source || !dest) {
-    print_error('Usage: ssh-manager sync <push|pull> <server> <source> <destination>');
+    print_error('Usage: ssh4agent sync <push|pull> <server> <source> <destination>');
     process.exitCode = 1;
     return;
   }
 
-  if (!requireCommand('rsync', 'ssh-manager sync')) {
+  if (!requireCommand('rsync', 'ssh4agent sync')) {
     process.exitCode = 1;
     return;
   }
@@ -290,7 +290,7 @@ export function cmd_sync(
 // ── cmd_ssh: quick interactive SSH connection ─────────────────────────────────
 export function cmd_ssh(server: string): void {
   if (!server) {
-    print_error('Usage: ssh-manager ssh <server>');
+    print_error('Usage: ssh4agent ssh <server>');
     process.exitCode = 1;
     return;
   }
@@ -322,11 +322,11 @@ export function cmd_tunnel(action: string, ...rest: string[]): void {
     const ports = rest[2];
 
     if (!server || !type || !ports) {
-      print_error('Usage: ssh-manager tunnel create <server> <local|remote|dynamic> <ports>');
+      print_error('Usage: ssh4agent tunnel create <server> <local|remote|dynamic> <ports>');
       print_info('Examples:');
-      print_info('  Local:   ssh-manager tunnel create prod1 local 3307:localhost:3306');
-      print_info('  Remote:  ssh-manager tunnel create prod1 remote 8080:localhost:8080');
-      print_info('  Dynamic: ssh-manager tunnel create prod1 dynamic 1080');
+      print_info('  Local:   ssh4agent tunnel create prod1 local 3307:localhost:3306');
+      print_info('  Remote:  ssh4agent tunnel create prod1 remote 8080:localhost:8080');
+      print_info('  Dynamic: ssh4agent tunnel create prod1 dynamic 1080');
       process.exitCode = 1;
       return;
     }
@@ -596,10 +596,10 @@ export async function interactive_mode(): Promise<void> {
       process.stdout.write('\n');
       const cc = await question('Choose [0-3]: ');
       if (cc === '1') {
-        await editFileWithEditor(SSH_MANAGER_CONFIG);
+        await editFileWithEditor(SSH4AGENT_CONFIG);
       } else if (cc === '2') {
-        if (fs.existsSync(SSH_MANAGER_CONFIG)) {
-          process.stdout.write(fs.readFileSync(SSH_MANAGER_CONFIG, 'utf8'));
+        if (fs.existsSync(SSH4AGENT_CONFIG)) {
+          process.stdout.write(fs.readFileSync(SSH4AGENT_CONFIG, 'utf8'));
         }
         await pause();
       } else if (cc === '3') {
@@ -686,12 +686,12 @@ async function main(): Promise<void> {
       case 'config': {
         const sub = rest[0];
         if (sub === 'edit') {
-          await editFileWithEditor(SSH_MANAGER_CONFIG);
+          await editFileWithEditor(SSH4AGENT_CONFIG);
         } else if (sub === 'show') {
-          if (fs.existsSync(SSH_MANAGER_CONFIG)) {
-            process.stdout.write(fs.readFileSync(SSH_MANAGER_CONFIG, 'utf8'));
+          if (fs.existsSync(SSH4AGENT_CONFIG)) {
+            process.stdout.write(fs.readFileSync(SSH4AGENT_CONFIG, 'utf8'));
           } else {
-            print_error(`Configuration file not found: ${SSH_MANAGER_CONFIG}`);
+            print_error(`Configuration file not found: ${SSH4AGENT_CONFIG}`);
           }
         } else if (sub === 'init') {
           init_config();
@@ -709,7 +709,7 @@ async function main(): Promise<void> {
         break;
       default:
         print_error(`Unknown command: ${command}`);
-        process.stdout.write("Run 'ssh-manager --help' for usage information\n");
+        process.stdout.write("Run 'ssh4agent --help' for usage information\n");
         process.exit(1);
     }
   } finally {

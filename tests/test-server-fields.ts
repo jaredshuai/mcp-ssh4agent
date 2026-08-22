@@ -187,9 +187,9 @@ async function roundTrip(): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'server-fields-rt-'));
   const envPath = path.join(dir, '.env');
 
-  // Point the CLI's module-level SSH_MANAGER_ENV at the temp file BEFORE
+  // Point the CLI's module-level SSH4AGENT_ENV at the temp file BEFORE
   // importing cli/lib/config.ts (it resolves the path at import time).
-  process.env.SSH_MANAGER_ENV = envPath;
+  process.env.SSH4AGENT_ENV = envPath;
   const cli = await import('../cli/lib/config.ts');
 
   for (const pw of NASTY_PASSWORDS) {

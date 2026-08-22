@@ -1,5 +1,5 @@
 /**
- * Health Monitor for MCP SSH Manager
+ * Health Monitor for MCP SSH4Agent
  * Provides system health checks, service monitoring, and process management
  */
 
@@ -320,8 +320,10 @@ export function createAlertConfig(thresholds) {
 
 /**
  * Build command to save alert config
+ * BREAKING (unreleased): the pre-rebrand path /etc/ssh-manager-alerts.json is
+ * no longer read or written; re-run ssh_alert_setup on existing hosts.
  */
-export function buildSaveAlertConfigCommand(config, configPath = '/etc/ssh-manager-alerts.json') {
+export function buildSaveAlertConfigCommand(config, configPath = '/etc/ssh4agent-alerts.json') {
   const jsonData = JSON.stringify(config, null, 2);
   const escapedJson = jsonData.replace(/'/g, "'\\''");
   return `echo '${escapedJson}' > "${configPath}"`;
@@ -330,7 +332,7 @@ export function buildSaveAlertConfigCommand(config, configPath = '/etc/ssh-manag
 /**
  * Build command to load alert config
  */
-export function buildLoadAlertConfigCommand(configPath = '/etc/ssh-manager-alerts.json') {
+export function buildLoadAlertConfigCommand(configPath = '/etc/ssh4agent-alerts.json') {
   return `cat "${configPath}" 2>/dev/null || echo '{}'`;
 }
 

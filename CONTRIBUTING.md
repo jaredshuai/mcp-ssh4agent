@@ -1,6 +1,6 @@
-# Contributing to MCP SSH Manager
+# Contributing to MCP SSH4Agent
 
-First off, thank you for considering contributing to MCP SSH Manager! It's people like you that make this tool better for everyone.
+First off, thank you for considering contributing to MCP SSH4Agent! It's people like you that make this tool better for everyone.
 
 ## Code of Conduct
 
@@ -41,8 +41,8 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 1. Clone your fork:
    ```bash
-   git clone https://github.com/your-username/mcp-ssh-manager.git
-   cd mcp-ssh-manager
+   git clone https://github.com/your-username/mcp-ssh4agent.git
+   cd mcp-ssh4agent
    ```
 
 2. Install dependencies:

@@ -1,4 +1,4 @@
-// Interactive menu library for ssh-manager CLI.
+// Interactive menu library for ssh4agent CLI.
 //
 // Cross-platform TypeScript port of cli/lib/menu.sh. Menus and wizards are
 // async because the prompt primitives (node:readline) are async.
@@ -50,8 +50,8 @@ import {
 } from './colors.ts';
 
 import {
-  SSH_MANAGER_ENV,
-  SSH_MANAGER_CONFIG,
+  SSH4AGENT_ENV,
+  SSH4AGENT_CONFIG,
   PROJECT_ROOT,
   get_server_config,
   add_server_to_env,
@@ -80,7 +80,7 @@ function version(): string {
 // ── Main menu ─────────────────────────────────────────────────────────────────
 export function show_main_menu(): void {
   clear_screen();
-  print_header(`SSH Manager CLI v${version()}`);
+  print_header(`SSH4Agent CLI v${version()}`);
   process.stdout.write('\n');
   process.stdout.write(`  ${CYAN}1)${NC} ${SERVER} Server Management\n`);
   process.stdout.write('     Add, list, test, and manage SSH servers\n\n');
@@ -315,7 +315,7 @@ export async function wizard_add_server(): Promise<void> {
       extra.push(`SSH_SERVER_${nameUpper}_FORWARD_AGENT=true`);
     }
     if (extra.length) {
-      fs.appendFileSync(SSH_MANAGER_ENV, extra.join('\n') + '\n', 'utf8');
+      fs.appendFileSync(SSH4AGENT_ENV, extra.join('\n') + '\n', 'utf8');
     }
 
     process.stdout.write('\n');
@@ -329,9 +329,9 @@ export async function wizard_add_server(): Promise<void> {
 
     process.stdout.write('\n');
     print_info(`Quick commands for '${serverName}':`);
-    process.stdout.write(`  • Connect: ssh-manager ssh ${serverName}\n`);
-    process.stdout.write(`  • Test:    ssh-manager server test ${serverName}\n`);
-    process.stdout.write(`  • Execute: ssh-manager exec ${serverName} "command"\n`);
+    process.stdout.write(`  • Connect: ssh4agent ssh ${serverName}\n`);
+    process.stdout.write(`  • Test:    ssh4agent server test ${serverName}\n`);
+    process.stdout.write(`  • Execute: ssh4agent exec ${serverName} "command"\n`);
 
     process.stdout.write('\n');
     await pause();

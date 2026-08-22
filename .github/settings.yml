@@ -2,9 +2,9 @@
 # These topics will appear on the repository and improve search results
 
 repository:
-  name: mcp-ssh-manager
+  name: mcp-ssh4agent
   description: "MCP SSH Manager: Model Context Protocol server for SSH remote server management from Claude Code and OpenAI Codex"
-  homepage: https://github.com/bvisible/mcp-ssh-manager
+  homepage: https://github.com/jaredshuai/mcp-ssh4agent
 
   topics:
     # Core MCP SSH keywords for maximum visibility
@@ -14,7 +14,7 @@ repository:
     - ssh-mcp
     - model-context-protocol
     - ssh
-    - ssh-manager
+    - ssh4agent
     - ssh-automation
 
     # AI Assistant integrations

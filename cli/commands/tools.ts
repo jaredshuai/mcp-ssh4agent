@@ -1,4 +1,4 @@
-// Tool management commands for ssh-manager CLI.
+// Tool management commands for ssh4agent CLI.
 //
 // Cross-platform TypeScript port of cli/commands/tools.sh. Replaces all `jq`
 // invocations with native JSON.parse / JSON.stringify — no external JSON tool
@@ -28,8 +28,15 @@ import {
   question,
 } from '../lib/colors.ts';
 
-// Tool configuration file location — matches bash ($HOME/.ssh-manager/...).
-const TOOLS_CONFIG = path.join(os.homedir(), '.ssh-manager', 'tools-config.json');
+// Tool configuration file location — matches bash ($HOME/.ssh4agent/...).
+// Read fallback: a pre-rebrand ~/.ssh-manager config keeps loading until the
+// new file exists (writes via `tools configure` always target the new path).
+const TOOLS_CONFIG_NEW = path.join(os.homedir(), '.ssh4agent', 'tools-config.json');
+const TOOLS_CONFIG_LEGACY = path.join(os.homedir(), '.ssh-manager', 'tools-config.json');
+const TOOLS_CONFIG =
+  !fs.existsSync(TOOLS_CONFIG_NEW) && fs.existsSync(TOOLS_CONFIG_LEGACY)
+    ? TOOLS_CONFIG_LEGACY
+    : TOOLS_CONFIG_NEW;
 
 const GROUPS = ['core', 'sessions', 'monitoring', 'backup', 'database', 'advanced'] as const;
 type Group = (typeof GROUPS)[number];
@@ -127,7 +134,7 @@ export async function cmd_tools(action?: string, ...rest: string[]): Promise<voi
     case '':
       print_error('Missing action');
       process.stdout.write('\n');
-      process.stdout.write('Usage: ssh-manager tools <action>\n');
+      process.stdout.write('Usage: ssh4agent tools <action>\n');
       process.stdout.write('\n');
       process.stdout.write('Actions:\n');
       process.stdout.write('  list              Show all tools and their status\n');
@@ -157,7 +164,7 @@ export function cmd_tools_list(): void {
     process.stdout.write('\n');
     process.stdout.write(`${GRAY}Default: All 37 tools enabled${NC}\n`);
     process.stdout.write('\n');
-    print_info(`Run ${CYAN}ssh-manager tools configure${NC} to customize and reduce context usage`);
+    print_info(`Run ${CYAN}ssh4agent tools configure${NC} to customize and reduce context usage`);
     return;
   }
 
@@ -240,12 +247,12 @@ export function cmd_tools_list(): void {
     print_info(
       `${LIGHTBULB} Tip: Switch to ${CYAN}minimal${NC} mode to reduce context usage by 92%`
     );
-    process.stdout.write(`        Run: ${CYAN}ssh-manager tools configure${NC}\n`);
+    process.stdout.write(`        Run: ${CYAN}ssh4agent tools configure${NC}\n`);
   } else if (mode === 'minimal') {
     print_success(`${CHECK} Optimized! Using only 5 core tools (saves ~40k tokens in Claude Code)`);
     process.stdout.write('\n');
     process.stdout.write(
-      `        To enable more tools: ${CYAN}ssh-manager tools enable <group>${NC}\n`
+      `        To enable more tools: ${CYAN}ssh4agent tools enable <group>${NC}\n`
     );
   }
 
@@ -257,7 +264,7 @@ export function cmd_tools_show(): void {
   if (!fs.existsSync(TOOLS_CONFIG)) {
     print_error('No configuration file found');
     process.stdout.write('\n');
-    process.stdout.write(`Run ${CYAN}ssh-manager tools configure${NC} to create one\n`);
+    process.stdout.write(`Run ${CYAN}ssh4agent tools configure${NC} to create one\n`);
     process.exitCode = 1;
     return;
   }
@@ -276,7 +283,7 @@ export function cmd_tools_show(): void {
 // ── cmd_tools_enable ──────────────────────────────────────────────────────────
 export function cmd_tools_enable(group?: string): void {
   if (!group) {
-    print_error('Usage: ssh-manager tools enable <group>');
+    print_error('Usage: ssh4agent tools enable <group>');
     process.stdout.write('\n');
     process.stdout.write(
       'Available groups: core, sessions, monitoring, backup, database, advanced\n'
@@ -308,7 +315,7 @@ export function cmd_tools_enable(group?: string): void {
         advanced: { enabled: false },
       },
       tools: {},
-      _comment: 'Tool configuration created by ssh-manager tools enable',
+      _comment: 'Tool configuration created by ssh4agent tools enable',
     };
   } else {
     config = readToolsConfig() ?? { mode: 'all', groups: {} };
@@ -338,7 +345,7 @@ export function cmd_tools_enable(group?: string): void {
 // ── cmd_tools_disable ─────────────────────────────────────────────────────────
 export function cmd_tools_disable(group?: string): void {
   if (!group) {
-    print_error('Usage: ssh-manager tools disable <group>');
+    print_error('Usage: ssh4agent tools disable <group>');
     process.stdout.write('\n');
     process.stdout.write('Available groups: sessions, monitoring, backup, database, advanced\n');
     process.stdout.write(`${GRAY}Note: 'core' group cannot be disabled${NC}\n`);
@@ -372,7 +379,7 @@ export function cmd_tools_disable(group?: string): void {
         advanced: { enabled: true },
       },
       tools: {},
-      _comment: 'Tool configuration created by ssh-manager tools disable',
+      _comment: 'Tool configuration created by ssh4agent tools disable',
     };
   } else {
     config = readToolsConfig() ?? { mode: 'all', groups: {} };
@@ -419,7 +426,7 @@ export async function cmd_tools_configure(): Promise<void> {
 
   process.stdout.write('\n');
   process.stdout.write(
-    `MCP SSH Manager has ${BOLD}37 tools${NC} organized into ${BOLD}6 groups${NC}:\n`
+    `MCP SSH4Agent has ${BOLD}37 tools${NC} organized into ${BOLD}6 groups${NC}:\n`
   );
   process.stdout.write('\n');
 
@@ -575,7 +582,7 @@ export function cmd_tools_export_claude(): void {
   if (!fs.existsSync(TOOLS_CONFIG)) {
     print_error('No tool configuration found');
     process.stdout.write('\n');
-    process.stdout.write(`Run ${CYAN}ssh-manager tools configure${NC} first\n`);
+    process.stdout.write(`Run ${CYAN}ssh4agent tools configure${NC} first\n`);
     process.exitCode = 1;
     return;
   }
@@ -686,7 +693,7 @@ export function cmd_tools_export_claude(): void {
   process.stdout.write('    "tools": [\n');
   for (let i = 0; i < tools.length; i++) {
     if (i > 0) process.stdout.write(',\n');
-    process.stdout.write(`      "mcp__ssh-manager__${tools[i]}"`);
+    process.stdout.write(`      "mcp__ssh4agent__${tools[i]}"`);
   }
   process.stdout.write('\n');
   process.stdout.write('    ]\n');

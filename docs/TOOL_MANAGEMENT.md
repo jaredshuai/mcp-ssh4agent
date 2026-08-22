@@ -2,7 +2,7 @@
 
 ## Overview
 
-MCP SSH Manager provides **37 tools** organized into **6 functional groups**. You can enable or disable tool groups to customize your experience and reduce context usage in Claude Code.
+MCP SSH4Agent provides **37 tools** organized into **6 functional groups**. You can enable or disable tool groups to customize your experience and reduce context usage in Claude Code.
 
 ### Why Manage Tools?
 
@@ -16,13 +16,13 @@ MCP SSH Manager provides **37 tools** organized into **6 functional groups**. Yo
 ### View Current Configuration
 
 ```bash
-ssh-manager tools list
+ssh4agent tools list
 ```
 
 ### Interactive Configuration Wizard
 
 ```bash
-ssh-manager tools configure
+ssh4agent tools configure
 ```
 
 Choose from three modes:
@@ -34,22 +34,22 @@ Choose from three modes:
 
 ```bash
 # Enable a group
-ssh-manager tools enable monitoring
+ssh4agent tools enable monitoring
 
 # Disable a group
-ssh-manager tools disable backup
+ssh4agent tools disable backup
 ```
 
 ### Reset to Defaults
 
 ```bash
-ssh-manager tools reset
+ssh4agent tools reset
 ```
 
 ### Export Auto-Approval Configuration
 
 ```bash
-ssh-manager tools export-claude
+ssh4agent tools export-claude
 ```
 
 This generates configuration for Claude Code to auto-approve your enabled tools.
@@ -206,7 +206,7 @@ Advanced features for power users:
 
 ### Location
 
-- **User-global**: `~/.ssh-manager/tools-config.json`
+- **User-global**: `~/.ssh4agent/tools-config.json`
 
 ### Structure
 
@@ -225,7 +225,7 @@ Advanced features for power users:
   "tools": {
     "ssh_session_start": true  // Individual tool override
   },
-  "_comment": "Tool configuration for MCP SSH Manager"
+  "_comment": "Tool configuration for MCP SSH4Agent"
 }
 ```
 
@@ -254,8 +254,8 @@ You can override group settings for specific tools:
 **Recommended**: Minimal mode + monitoring
 
 ```bash
-ssh-manager tools configure  # Choose "2) Minimal"
-ssh-manager tools enable monitoring
+ssh4agent tools configure  # Choose "2) Minimal"
+ssh4agent tools enable monitoring
 ```
 
 **Result**: 11 tools (5 core + 6 monitoring) = ~7k tokens
@@ -267,7 +267,7 @@ ssh-manager tools enable monitoring
 **Recommended**: All tools mode
 
 ```bash
-ssh-manager tools configure  # Choose "1) All tools"
+ssh4agent tools configure  # Choose "1) All tools"
 ```
 
 **Result**: 37 tools = ~43.5k tokens
@@ -279,7 +279,7 @@ ssh-manager tools configure  # Choose "1) All tools"
 **Recommended**: Custom mode
 
 ```bash
-ssh-manager tools configure  # Choose "3) Custom"
+ssh4agent tools configure  # Choose "3) Custom"
 # Enable: monitoring, backup, database
 ```
 
@@ -292,7 +292,7 @@ ssh-manager tools configure  # Choose "3) Custom"
 **Recommended**: Minimal mode only
 
 ```bash
-ssh-manager tools configure  # Choose "2) Minimal"
+ssh4agent tools configure  # Choose "2) Minimal"
 ```
 
 **Result**: 5 tools = ~3.5k tokens (minimum possible)
@@ -304,7 +304,7 @@ ssh-manager tools configure  # Choose "2) Minimal"
 After configuring your tools, export the auto-approval configuration:
 
 ```bash
-ssh-manager tools export-claude
+ssh4agent tools export-claude
 ```
 
 This generates a JSON snippet like:
@@ -313,11 +313,11 @@ This generates a JSON snippet like:
 {
   "autoApprove": {
     "tools": [
-      "mcp__ssh-manager__ssh_list_servers",
-      "mcp__ssh-manager__ssh_execute",
-      "mcp__ssh-manager__ssh_upload",
-      "mcp__ssh-manager__ssh_download",
-      "mcp__ssh-manager__ssh_sync"
+      "mcp__ssh4agent__ssh_list_servers",
+      "mcp__ssh4agent__ssh_execute",
+      "mcp__ssh4agent__ssh_upload",
+      "mcp__ssh4agent__ssh_download",
+      "mcp__ssh4agent__ssh_sync"
     ]
   }
 }
@@ -334,18 +334,18 @@ Example complete config:
 ```json
 {
   "mcpServers": {
-    "ssh-manager": {
+    "ssh4agent": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-ssh-manager/src/index.ts"]
+      "args": ["/absolute/path/to/mcp-ssh4agent/src/index.ts"]
     }
   },
   "autoApprove": {
     "tools": [
-      "mcp__ssh-manager__ssh_list_servers",
-      "mcp__ssh-manager__ssh_execute",
-      "mcp__ssh-manager__ssh_upload",
-      "mcp__ssh-manager__ssh_download",
-      "mcp__ssh-manager__ssh_sync"
+      "mcp__ssh4agent__ssh_list_servers",
+      "mcp__ssh4agent__ssh_execute",
+      "mcp__ssh4agent__ssh_upload",
+      "mcp__ssh4agent__ssh_download",
+      "mcp__ssh4agent__ssh_sync"
     ]
   }
 }
@@ -363,7 +363,7 @@ Example complete config:
 
 **Cause**: No configuration file exists yet
 
-**Solution**: Run `ssh-manager tools configure` to create one
+**Solution**: Run `ssh4agent tools configure` to create one
 
 ### Can't Disable Core Group
 
@@ -378,7 +378,7 @@ Example complete config:
 **Solution**:
 1. Restart Claude Code
 2. Or use Claude Code's MCP server management commands
-3. Verify with `ssh-manager tools list`
+3. Verify with `ssh4agent tools list`
 
 ## Best Practices
 
@@ -387,9 +387,9 @@ Example complete config:
 Begin with minimal mode and enable groups as you discover you need them:
 
 ```bash
-ssh-manager tools configure  # Choose minimal
+ssh4agent tools configure  # Choose minimal
 # ... later when you need monitoring ...
-ssh-manager tools enable monitoring
+ssh4agent tools enable monitoring
 ```
 
 ### 2. Use Tool List Regularly
@@ -397,12 +397,12 @@ ssh-manager tools enable monitoring
 Check what's enabled before starting work:
 
 ```bash
-ssh-manager tools list
+ssh4agent tools list
 ```
 
 ### 3. Different Configs for Different Projects
 
-While MCP SSH Manager uses a single user-global config, you can:
+While MCP SSH4Agent uses a single user-global config, you can:
 - Create shell aliases for different profiles
 - Manually switch configs for different projects
 - Use the CLI to quickly enable/disable groups
@@ -412,8 +412,8 @@ While MCP SSH Manager uses a single user-global config, you can:
 Whenever you modify tool configuration, update your Claude Code auto-approval:
 
 ```bash
-ssh-manager tools enable backup
-ssh-manager tools export-claude
+ssh4agent tools enable backup
+ssh4agent tools export-claude
 # Copy the output to claude_code_config.json
 ```
 
@@ -447,7 +447,7 @@ Add comments to your config file to remember why you enabled specific groups:
 
 ### Q: Does this affect the Node.js API?
 
-**A**: Only if you're using the MCP server. Direct use of the Node.js SSH Manager class is unaffected.
+**A**: Only if you're using the MCP server. Direct use of the Node.js SSH4Agent class is unaffected.
 
 ### Q: How much does minimal mode actually save?
 
@@ -457,13 +457,13 @@ Add comments to your config file to remember why you enabled specific groups:
 
 | Command | Description |
 |---------|-------------|
-| `ssh-manager tools list` | Show all tools and their current status |
-| `ssh-manager tools configure` | Interactive configuration wizard |
-| `ssh-manager tools enable <group>` | Enable a tool group |
-| `ssh-manager tools disable <group>` | Disable a tool group |
-| `ssh-manager tools reset` | Reset to defaults (all tools enabled) |
-| `ssh-manager tools show` | Display raw configuration file |
-| `ssh-manager tools export-claude` | Generate Claude Code auto-approval config |
+| `ssh4agent tools list` | Show all tools and their current status |
+| `ssh4agent tools configure` | Interactive configuration wizard |
+| `ssh4agent tools enable <group>` | Enable a tool group |
+| `ssh4agent tools disable <group>` | Disable a tool group |
+| `ssh4agent tools reset` | Reset to defaults (all tools enabled) |
+| `ssh4agent tools show` | Display raw configuration file |
+| `ssh4agent tools export-claude` | Generate Claude Code auto-approval config |
 
 ## See Also
 

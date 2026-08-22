@@ -1,5 +1,5 @@
 /**
- * Logger module for MCP SSH Manager
+ * Logger module for MCP SSH4Agent
  * Provides structured logging with levels and optional verbose mode
  */
 
@@ -62,7 +62,7 @@ class Logger {
     this.verbose = process.env.SSH_VERBOSE === 'true';
 
     // Log file path
-    this.logFile = process.env.SSH_LOG_FILE || path.join(__dirname, '..', '.ssh-manager.log');
+    this.logFile = process.env.SSH_LOG_FILE || path.join(__dirname, '..', '.ssh4agent.log');
 
     // Command history file
     this.historyFile = path.join(__dirname, '..', '.ssh-command-history.json');

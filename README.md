@@ -1,23 +1,23 @@
-# MCP SSH Manager - SSH Remote Server Management via Model Context Protocol 🚀
+# MCP SSH4Agent - SSH Remote Server Management via Model Context Protocol 🚀
 
 A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI Codex** to manage multiple SSH connections. Execute commands, transfer files, manage databases, create backups, monitor health, and automate DevOps tasks across your servers — directly from your AI assistant.
 
 <div align="center">
 
-[![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.8.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.8.0)
+[![npm version](https://img.shields.io/npm/v/mcp-ssh4agent.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh4agent)
+[![npm downloads](https://img.shields.io/npm/dt/mcp-ssh4agent.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh4agent)
+[![Version](https://img.shields.io/badge/Version-3.8.0-brightgreen?style=for-the-badge)](https://github.com/jaredshuai/mcp-ssh4agent/releases/tag/v3.8.0)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fbvisible%2Fmcp-ssh-manager.svg)](https://mcptoplist.com/server/glama%2Fbvisible%2Fmcp-ssh-manager)
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fjaredshuai%2Fmcp-ssh4agent.svg)](https://mcptoplist.com/server/glama%2Fjaredshuai%2Fmcp-ssh4agent)
 
 </div>
 
 <p align="center">
-  <img src="docs/images/ssh-manager-cli-menu.png" alt="ssh-manager interactive CLI menu" width="900">
+  <img src="docs/images/ssh4agent-cli-menu.png" alt="ssh4agent interactive CLI menu" width="900">
 </p>
 
 ---
@@ -26,8 +26,8 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 **👥 Groups that live in your config, `ssh_sync` fixed on Windows, and a crash that took the whole server down** (Released: August 14, 2026)
 
-- **New optional `group` field per server** ([#56](https://github.com/bvisible/mcp-ssh-manager/pull/56) — contributed by [@ice616](https://github.com/ice616), requested in [#55](https://github.com/bvisible/mcp-ssh-manager/issues/55)) — tag a server with `group = "production"` and it *is* in that group: `ssh_execute_group` and `ssh_group_manage list` resolve members straight from your `.env`/TOML, so there is no `.server-groups.json` to maintain and the grouping travels with the config when you export it to another tool. Membership is the **union** of both sources, so groups you already store keep working untouched.
-- **🪟 `ssh_sync` works from a Windows host** ([#59](https://github.com/bvisible/mcp-ssh-manager/pull/59) — contributed by [@2836603852](https://github.com/2836603852)) — a local path like `C:\project` reached MSYS2 rsync unchanged, which read `C:` as a remote host and tried to SSH into a machine named `c`. Drive-letter, UNC and extended-length paths are now converted for the rsync argument only, while Node keeps the native path for its filesystem checks.
+- **New optional `group` field per server** ([#56](https://github.com/jaredshuai/mcp-ssh4agent/pull/56) — contributed by [@ice616](https://github.com/ice616), requested in [#55](https://github.com/jaredshuai/mcp-ssh4agent/issues/55)) — tag a server with `group = "production"` and it *is* in that group: `ssh_execute_group` and `ssh_group_manage list` resolve members straight from your `.env`/TOML, so there is no `.server-groups.json` to maintain and the grouping travels with the config when you export it to another tool. Membership is the **union** of both sources, so groups you already store keep working untouched.
+- **🪟 `ssh_sync` works from a Windows host** ([#59](https://github.com/jaredshuai/mcp-ssh4agent/pull/59) — contributed by [@2836603852](https://github.com/2836603852)) — a local path like `C:\project` reached MSYS2 rsync unchanged, which read `C:` as a remote host and tried to SSH into a machine named `c`. Drive-letter, UNC and extended-length paths are now converted for the rsync argument only, while Node keeps the native path for its filesystem checks.
 - **💥 A tunnel on a busy port no longer kills the MCP server** — `ssh_tunnel_create` on an already-bound port hit an unhandled `'error'` event and took the entire process down with it, dropping every pooled SSH connection and open session. It now returns a normal error.
 - **🔒 Security: `@modelcontextprotocol/sdk` floor raised to `^1.30.0`** — the previous range still allowed versions carrying three published advisories, one of them high. `npm audit` is clean, and the `uuid` dependency is gone in favour of Node's built-in `crypto.randomUUID()`.
 - **🧪 JSDoc type-checking in CI** (`npm run typecheck`) — TypeScript now runs as a static checker over the plain JavaScript. **No build step, no `dist/`, nothing changes for users**; it found two of the bugs above on the day it landed.
@@ -47,19 +47,19 @@ SSH_SERVER_WEB1_GROUP=production
 
 ### v3.7.0 - Per-server SSH agent forwarding (July 13, 2026)
 
-- **🔗 New opt-in `FORWARD_AGENT` / `forward_agent` option** ([#53](https://github.com/bvisible/mcp-ssh-manager/pull/53) — requested by [@raphaelbahat](https://github.com/raphaelbahat) in [#52](https://github.com/bvisible/mcp-ssh-manager/issues/52)) — the equivalent of OpenSSH's `ForwardAgent yes`, per server: processes on the remote host authenticate to *other* SSH hosts with the keys in your local `ssh-agent`, without copying any private key. Requires a running agent and defaults to `false`. [Full changelog →](CHANGELOG.md#370---2026-07-13)
+- **🔗 New opt-in `FORWARD_AGENT` / `forward_agent` option** ([#53](https://github.com/jaredshuai/mcp-ssh4agent/pull/53) — requested by [@raphaelbahat](https://github.com/raphaelbahat) in [#52](https://github.com/jaredshuai/mcp-ssh4agent/issues/52)) — the equivalent of OpenSSH's `ForwardAgent yes`, per server: processes on the remote host authenticate to *other* SSH hosts with the keys in your local `ssh-agent`, without copying any private key. Requires a running agent and defaults to `false`. [Full changelog →](CHANGELOG.md#370---2026-07-13)
 
 ### v3.6.7 - Security: command injection fix in the database helpers (July 11, 2026)
 
-- **🔒 Every `ssh_db_*` argument is now shell-quoted** ([#51](https://github.com/bvisible/mcp-ssh-manager/pull/51) — responsibly disclosed by **Ugur Ozer, Aeon AI Risk Management** (http://airiskmanagement.ca), see [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48)) — caller-controlled values (`ssh_db_list` most notably, which stayed allowed in `readonly`/`restricted` modes) were interpolated into shell-evaluated strings, allowing arbitrary command execution on the SSH target. A centralized `shellQuote()` now wraps every value across all 15 builders, guarded by a 648-combination injection test. [Full changelog →](CHANGELOG.md#367---2026-07-11)
+- **🔒 Every `ssh_db_*` argument is now shell-quoted** ([#51](https://github.com/jaredshuai/mcp-ssh4agent/pull/51) — responsibly disclosed by **Ugur Ozer, Aeon AI Risk Management** (http://airiskmanagement.ca), see [#48](https://github.com/jaredshuai/mcp-ssh4agent/issues/48)) — caller-controlled values (`ssh_db_list` most notably, which stayed allowed in `readonly`/`restricted` modes) were interpolated into shell-evaluated strings, allowing arbitrary command execution on the SSH target. A centralized `shellQuote()` now wraps every value across all 15 builders, guarded by a 648-combination injection test. [Full changelog →](CHANGELOG.md#367---2026-07-11)
 
 ### v3.6.6 - `SUDO_PASSWORD` / `DEFAULT_DIR` / `ssh_sync` key auth work again (July 11, 2026)
 
-- **🔑 camelCase config field reads** ([#50](https://github.com/bvisible/mcp-ssh-manager/pull/50) — thanks [@egoan82](https://github.com/egoan82)) — since the v3.0.0 ConfigLoader refactor, `ssh_execute_sudo` ignored `SUDO_PASSWORD`, `DEFAULT_DIR` was ignored by `ssh_execute`/`ssh_group_execute`/`ssh_list_servers`, and `ssh_sync` never passed the configured SSH key to rsync. All aligned with the loader's camelCase fields, with a regression test locking the loader output shape. [Full changelog →](CHANGELOG.md#366---2026-07-11)
+- **🔑 camelCase config field reads** ([#50](https://github.com/jaredshuai/mcp-ssh4agent/pull/50) — thanks [@egoan82](https://github.com/egoan82)) — since the v3.0.0 ConfigLoader refactor, `ssh_execute_sudo` ignored `SUDO_PASSWORD`, `DEFAULT_DIR` was ignored by `ssh_execute`/`ssh_group_execute`/`ssh_list_servers`, and `ssh_sync` never passed the configured SSH key to rsync. All aligned with the loader's camelCase fields, with a regression test locking the loader output shape. [Full changelog →](CHANGELOG.md#366---2026-07-11)
 
 ### v3.6.5 - `ssh_db_query` shell-injection security fix + real row_count (June 30, 2026)
 
-- **🔒 Queries are delivered on stdin via a single-quoted heredoc** ([#44](https://github.com/bvisible/mcp-ssh-manager/pull/44), [#45](https://github.com/bvisible/mcp-ssh-manager/pull/45) — thanks [@technophile77](https://github.com/technophile77)) — the remote shell no longer parses backticks/`$(…)` inside queries (which corrupted backtick identifiers **and** let the "SELECT-only" tool run arbitrary shell commands), and `row_count` now reflects each engine's real output instead of counting wrapper lines. [Full changelog →](CHANGELOG.md#365---2026-06-30)
+- **🔒 Queries are delivered on stdin via a single-quoted heredoc** ([#44](https://github.com/jaredshuai/mcp-ssh4agent/pull/44), [#45](https://github.com/jaredshuai/mcp-ssh4agent/pull/45) — thanks [@technophile77](https://github.com/technophile77)) — the remote shell no longer parses backticks/`$(…)` inside queries (which corrupted backtick identifiers **and** let the "SELECT-only" tool run arbitrary shell commands), and `row_count` now reflects each engine's real output instead of counting wrapper lines. [Full changelog →](CHANGELOG.md#365---2026-06-30)
 
 ### v3.6.4 - Internal cleanup + a dead-code quality gate (June 18, 2026)
 
@@ -67,7 +67,7 @@ SSH_SERVER_WEB1_GROUP=production
 
 ### v3.6.3 - `ssh_sync` reports the real transfer count (June 18, 2026)
 
-- **📊 No more false "No files needed to be transferred"** ([#42](https://github.com/bvisible/mcp-ssh-manager/pull/42) — thanks [@MakksSh](https://github.com/MakksSh)) — fixed rsync `--stats` parsing: `--stats` is always passed now, and rsync 2.x/3.x wording, openrsync's `B` suffix, and locale separators are all handled. [Full changelog →](CHANGELOG.md#363---2026-06-18)
+- **📊 No more false "No files needed to be transferred"** ([#42](https://github.com/jaredshuai/mcp-ssh4agent/pull/42) — thanks [@MakksSh](https://github.com/MakksSh)) — fixed rsync `--stats` parsing: `--stats` is always passed now, and rsync 2.x/3.x wording, openrsync's `B` suffix, and locale separators are all handled. [Full changelog →](CHANGELOG.md#363---2026-06-18)
 
 ### v3.6.2 - Richer tool descriptions (June 9, 2026)
 
@@ -75,16 +75,16 @@ SSH_SERVER_WEB1_GROUP=production
 
 ### v3.6.1 - Teardown hygiene follow-up (June 9, 2026)
 
-- **🔌 Module-level timers no longer pin the event loop** (follow-up to [#41](https://github.com/bvisible/mcp-ssh-manager/pull/41)) — `tunnel-manager.js` and `session-manager.js` registered module-level `setInterval`s that were never `unref()`'d, so importing either module kept Node's event loop alive. Both are now `unref()`'d. [Full changelog →](CHANGELOG.md#361---2026-06-09)
+- **🔌 Module-level timers no longer pin the event loop** (follow-up to [#41](https://github.com/jaredshuai/mcp-ssh4agent/pull/41)) — `tunnel-manager.js` and `session-manager.js` registered module-level `setInterval`s that were never `unref()`'d, so importing either module kept Node's event loop alive. Both are now `unref()`'d. [Full changelog →](CHANGELOG.md#361---2026-06-09)
 
 ### v3.6.0 - Live config hot reload + stdio lifecycle fix (June 9, 2026)
 
-- **♻️ Configuration hot reload** ([#40](https://github.com/bvisible/mcp-ssh-manager/pull/40) — thanks [@EnjoySR](https://github.com/EnjoySR)) — add or edit a server in your `.env`/TOML and the running MCP server picks it up on the next call, no restart. A `ServerConfigManager` reloads lazily on file-signature change (path + `mtime` + size); a failed reload keeps the last known-good config; real `process.env` vars keep top priority. No watcher, no polling.
-- **🔌 No more orphaned stdio processes** ([#41](https://github.com/bvisible/mcp-ssh-manager/pull/41) — thanks [@LegendaryGatz](https://github.com/LegendaryGatz)) — a stdio MCP server is torn down by stdin EOF / SIGTERM, not SIGINT; with only a `SIGINT` handler every session leaked a ~83 MB node process. Shutdown is now idempotent across `SIGINT`/`SIGTERM`/`SIGHUP`/stdin-close, timers are `unref()`'d, and the process exits **~10 ms** after teardown instead of never. [Full changelog →](CHANGELOG.md#360---2026-06-09)
+- **♻️ Configuration hot reload** ([#40](https://github.com/jaredshuai/mcp-ssh4agent/pull/40) — thanks [@EnjoySR](https://github.com/EnjoySR)) — add or edit a server in your `.env`/TOML and the running MCP server picks it up on the next call, no restart. A `ServerConfigManager` reloads lazily on file-signature change (path + `mtime` + size); a failed reload keeps the last known-good config; real `process.env` vars keep top priority. No watcher, no polling.
+- **🔌 No more orphaned stdio processes** ([#41](https://github.com/jaredshuai/mcp-ssh4agent/pull/41) — thanks [@LegendaryGatz](https://github.com/LegendaryGatz)) — a stdio MCP server is torn down by stdin EOF / SIGTERM, not SIGINT; with only a `SIGINT` handler every session leaked a ~83 MB node process. Shutdown is now idempotent across `SIGINT`/`SIGTERM`/`SIGHUP`/stdin-close, timers are `unref()`'d, and the process exits **~10 ms** after teardown instead of never. [Full changelog →](CHANGELOG.md#360---2026-06-09)
 
 ### v3.5.1 - Robust SSH ping health-check on Windows/OpenSSH (May 26, 2026)
 
-- **🪟 Healthy Windows sessions no longer reported as `Dead`** ([#39](https://github.com/bvisible/mcp-ssh-manager/pull/39) — thanks [@username77](https://github.com/username77)) — the liveness probe ran `echo "ping"` and `cmd.exe` echoed the quotes literally, failing a strict `=== 'ping'` check and needlessly rebuilding live connections. Now uses `echo ping` parsed by a null-safe `isPingAlive(stdout)` helper (CRLF/quote/case-normalized), covered by `tests/test-ssh-ping.js`. [Full changelog →](CHANGELOG.md#351---2026-05-26)
+- **🪟 Healthy Windows sessions no longer reported as `Dead`** ([#39](https://github.com/jaredshuai/mcp-ssh4agent/pull/39) — thanks [@username77](https://github.com/username77)) — the liveness probe ran `echo "ping"` and `cmd.exe` echoed the quotes literally, failing a strict `=== 'ping'` check and needlessly rebuilding live connections. Now uses `echo ping` parsed by a null-safe `isPingAlive(stdout)` helper (CRLF/quote/case-normalized), covered by `tests/test-ssh-ping.js`. [Full changelog →](CHANGELOG.md#351---2026-05-26)
 
 ### v3.5.0 - Per-server security modes — `readonly` / `restricted` + audit log (May 18, 2026)
 
@@ -96,11 +96,11 @@ A second authorization layer that filters tool invocations **inside the MCP serv
   - **`restricted`** — every command must match at least one `ALLOW_PATTERNS` regex AND no `DENY_PATTERNS` regex. **DENY wins**. With no `ALLOW_PATTERNS` everything is refused (fail-closed).
 - **📝 Audit log** — opt-in JSONL per server (`SSH_SERVER_<N>_AUDIT_LOG=/path/to/audit.jsonl`). Records `ts`, `server`, `tool`, args, `allowed`, `reason` on denial, `exitCode`/`success` on execution. Sensitive arg fields (`password`, `passphrase`, `sudoPassword`, `token`, `secret`, `apikey`) are replaced with `***`.
 - **🪄 Command aliases expanded BEFORE policy evaluation** — a `DENY` pattern can't be bypassed via an alias.
-- **♻️ Backward-compatible by design** — a v3.4.x `.env` or TOML loads identically. No `MODE` field → zero behavior change. The interactive wizard (`ssh-manager server add`) defaults all three new prompts to skip. All 13 pre-existing tests pass unmodified. New `tests/test-policy.js` adds 26 tests covering modes, DENY > ALLOW precedence, invalid-regex handling, redaction, and the backward-compat fast path. [Full reference →](docs/SECURITY_MODES.md)
+- **♻️ Backward-compatible by design** — a v3.4.x `.env` or TOML loads identically. No `MODE` field → zero behavior change. The interactive wizard (`ssh4agent server add`) defaults all three new prompts to skip. All 13 pre-existing tests pass unmodified. New `tests/test-policy.js` adds 26 tests covering modes, DENY > ALLOW precedence, invalid-regex handling, redaction, and the backward-compat fast path. [Full reference →](docs/SECURITY_MODES.md)
 
 ### v3.4.1 - Modern OpenSSH 9.x compatibility (May 16, 2026)
 
-- **🔐 Expanded SSH algorithm list — handshake against OpenSSH 9.x out of the box** ([#32](https://github.com/bvisible/mcp-ssh-manager/pull/32))
+- **🔐 Expanded SSH algorithm list — handshake against OpenSSH 9.x out of the box** ([#32](https://github.com/jaredshuai/mcp-ssh4agent/pull/32))
   - **KEX**: `curve25519-sha256` (+`@libssh.org`), `diffie-hellman-group15-sha512`, `diffie-hellman-group16-sha512`
   - **Server host key**: `rsa-sha2-512`, `rsa-sha2-256` (RFC 8332)
   - **Cipher**: `aes128-gcm@openssh.com`, `aes256-gcm@openssh.com`
@@ -109,63 +109,63 @@ A second authorization layer that filters tool invocations **inside the MCP serv
 
 ### v3.4.0 - Windows OpenSSH support + shell-agnostic session sync (May 7, 2026)
 
-- **🪟 Windows OpenSSH encoding & syntax fixes** — UTF-16LE base64 PowerShell payloads (Ansible-style) + `Set-Location` replacing `cd && ` ([#31](https://github.com/bvisible/mcp-ssh-manager/pull/31), thanks [@WenKingSu](https://github.com/WenKingSu))
-- **🎯 Marker-based SSH session sync** — UUID v4 protocol boundaries with `ECHO: 0` PTY, real `$?` exit codes, no more "Timeout waiting for shell prompt" on custom/slow/AIX shells ([#30](https://github.com/bvisible/mcp-ssh-manager/pull/30), thanks [@MakksSh](https://github.com/MakksSh))
+- **🪟 Windows OpenSSH encoding & syntax fixes** — UTF-16LE base64 PowerShell payloads (Ansible-style) + `Set-Location` replacing `cd && ` ([#31](https://github.com/jaredshuai/mcp-ssh4agent/pull/31), thanks [@WenKingSu](https://github.com/WenKingSu))
+- **🎯 Marker-based SSH session sync** — UUID v4 protocol boundaries with `ECHO: 0` PTY, real `$?` exit codes, no more "Timeout waiting for shell prompt" on custom/slow/AIX shells ([#30](https://github.com/jaredshuai/mcp-ssh4agent/pull/30), thanks [@MakksSh](https://github.com/MakksSh))
 
 ### v3.3.0 - ProxyCommand & Critical Fixes (May 2, 2026)
 
-- **🔌 ProxyCommand support** for SOCKS5 / custom proxy commands ([#24](https://github.com/bvisible/mcp-ssh-manager/pull/24))
-- **⏱️ `ssh_execute` timeout silently capped at 30 s** — fixed ([#28](https://github.com/bvisible/mcp-ssh-manager/issues/28), [#29](https://github.com/bvisible/mcp-ssh-manager/pull/29))
-- **🪟 Windows global install `/bin/bash` shim error** — fixed ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22), [#23](https://github.com/bvisible/mcp-ssh-manager/pull/23))
-- **🔧 `server add` blocked by missing `rsync`** — `rsync` now optional ([#26](https://github.com/bvisible/mcp-ssh-manager/pull/26))
-- **🔡 Hyphenated server names silently dropped** — validation hardened ([#25](https://github.com/bvisible/mcp-ssh-manager/issues/25), [#27](https://github.com/bvisible/mcp-ssh-manager/pull/27))
+- **🔌 ProxyCommand support** for SOCKS5 / custom proxy commands ([#24](https://github.com/jaredshuai/mcp-ssh4agent/pull/24))
+- **⏱️ `ssh_execute` timeout silently capped at 30 s** — fixed ([#28](https://github.com/jaredshuai/mcp-ssh4agent/issues/28), [#29](https://github.com/jaredshuai/mcp-ssh4agent/pull/29))
+- **🪟 Windows global install `/bin/bash` shim error** — fixed ([#22](https://github.com/jaredshuai/mcp-ssh4agent/issues/22), [#23](https://github.com/jaredshuai/mcp-ssh4agent/pull/23))
+- **🔧 `server add` blocked by missing `rsync`** — `rsync` now optional ([#26](https://github.com/jaredshuai/mcp-ssh4agent/pull/26))
+- **🔡 Hyphenated server names silently dropped** — validation hardened ([#25](https://github.com/jaredshuai/mcp-ssh4agent/issues/25), [#27](https://github.com/jaredshuai/mcp-ssh4agent/pull/27))
 
 ### v3.2.2 - Global Install Fix & CLI Binary (April 7, 2026)
 
-- **🔧 Global install fixed**: `.env` path resolution now uses a fallback chain instead of hardcoded `__dirname` — works correctly with `npm install -g` ([#16](https://github.com/bvisible/mcp-ssh-manager/issues/16), [#19](https://github.com/bvisible/mcp-ssh-manager/issues/19))
-  - Fallback chain: `~/.ssh-manager/.env` → `cwd/.env` → `~/.env` → project `.env`
-  - Auto-creates `~/.ssh-manager/.env` on first `ssh-manager server add`
-- **📦 `ssh-manager` CLI registered as binary**: `npm install -g` now creates both `mcp-ssh-manager` and `ssh-manager` commands ([#18](https://github.com/bvisible/mcp-ssh-manager/issues/18))
+- **🔧 Global install fixed**: `.env` path resolution now uses a fallback chain instead of hardcoded `__dirname` — works correctly with `npm install -g` ([#16](https://github.com/jaredshuai/mcp-ssh4agent/issues/16), [#19](https://github.com/jaredshuai/mcp-ssh4agent/issues/19))
+  - Fallback chain: `~/.ssh4agent/.env` → `cwd/.env` → `~/.env` → project `.env`
+  - Auto-creates `~/.ssh4agent/.env` on first `ssh4agent server add`
+- **📦 `ssh4agent` CLI registered as binary**: `npm install -g` now creates both `mcp-ssh4agent` and `ssh4agent` commands ([#18](https://github.com/jaredshuai/mcp-ssh4agent/issues/18))
 - **⚡ Race condition fix**: Server config is now fully loaded before the MCP server accepts requests
 
 ### v3.2.0 - ProxyJump / Bastion Host Support (March 18, 2026)
 
-- **🔀 ProxyJump support**: Connect to servers behind bastion/jump hosts with a simple `PROXYJUMP` config field ([#15](https://github.com/bvisible/mcp-ssh-manager/issues/15))
+- **🔀 ProxyJump support**: Connect to servers behind bastion/jump hosts with a simple `PROXYJUMP` config field ([#15](https://github.com/jaredshuai/mcp-ssh4agent/issues/15))
   - Chain multiple jumps (A → B → C) via recursive connections
   - Circular dependency detection prevents infinite loops
   - All tools work transparently through jump hosts
-- **📦 npx support fixed**: `npx mcp-ssh-manager` now works correctly ([#14](https://github.com/bvisible/mcp-ssh-manager/issues/14))
+- **📦 npx support fixed**: `npx mcp-ssh4agent` now works correctly ([#14](https://github.com/jaredshuai/mcp-ssh4agent/issues/14))
 
 ### v3.1.5 - SSH Agent & Passphrase Support (March 5, 2026)
 
 - **🔑 SSH Agent support**: Automatically uses `ssh-agent` when `SSH_AUTH_SOCK` is available — passphrase-protected keys work transparently
 - **🔐 Passphrase configuration**: New `passphrase` field for both `.env` and TOML formats
 
-Thanks to [@snjax](https://github.com/snjax) for the original contribution ([#12](https://github.com/bvisible/mcp-ssh-manager/pull/12)).
+Thanks to [@snjax](https://github.com/snjax) for the original contribution ([#12](https://github.com/jaredshuai/mcp-ssh4agent/pull/12)).
 
 ### v3.1.4 - Windows SSH Host Support (February 22, 2026)
 
-- **🪟 Windows SSH host fix**: Commands no longer fail on Windows hosts running OpenSSH ([#10](https://github.com/bvisible/mcp-ssh-manager/issues/10))
+- **🪟 Windows SSH host fix**: Commands no longer fail on Windows hosts running OpenSSH ([#10](https://github.com/jaredshuai/mcp-ssh4agent/issues/10))
 - New per-server `platform` config field (`SSH_SERVER_FOO_PLATFORM=windows` or `platform = "windows"` in TOML)
 - When `platform=windows`, the Linux `timeout`/`sh -c` command wrapper is skipped and the SSH library's native timeout is used instead
 - All tools (`ssh_execute`, `ssh_tail`, `ssh_monitor`, `ssh_deploy`, `ssh_execute_sudo`, `ssh_group_execute`) are platform-aware
 
 ### v3.1.2 - Windows Compatibility Fix (February 9, 2026)
 
-- **🪟 Windows support**: Fixed crash on Windows where `process.env.HOME` is undefined ([#8](https://github.com/bvisible/mcp-ssh-manager/issues/8))
+- **🪟 Windows support**: Fixed crash on Windows where `process.env.HOME` is undefined ([#8](https://github.com/jaredshuai/mcp-ssh4agent/issues/8))
 - Now uses `os.homedir()` for cross-platform compatibility (Linux, macOS, Windows)
 
 ### v3.1.0 - Tool Activation System (November 15, 2025)
 
 ### 🎯 Context Usage Optimization
 - **92% context reduction**: Enable only the tools you need (minimal mode: 5 tools vs all 37)
-- **Tool management CLI**: `ssh-manager tools list/configure/enable/disable`
+- **Tool management CLI**: `ssh4agent tools list/configure/enable/disable`
 - **6 tool groups**: Core, Sessions, Monitoring, Backup, Database, Advanced
 - **Auto-approval export**: Generate Claude Code auto-approval configs
 
 ### v3.0.0 - Enterprise DevOps Platform (October 1, 2025)
 
-This release adds **12 new MCP tools** transforming SSH Manager into a comprehensive DevOps automation platform:
+This release adds **12 new MCP tools** transforming SSH4Agent into a comprehensive DevOps automation platform:
 
 ### 💾 Backup & Restore System (4 tools)
 - **Automated backups** for MySQL, PostgreSQL, MongoDB, and file systems
@@ -249,20 +249,20 @@ This release adds **12 new MCP tools** transforming SSH Manager into a comprehen
 
 **NEW in v3.1**: Reduce Claude Code context usage by 92% with tool activation management!
 
-MCP SSH Manager includes **37 tools** organized into **6 groups**. By default, all tools are enabled, but you can optimize for your specific workflow:
+MCP SSH4Agent includes **37 tools** organized into **6 groups**. By default, all tools are enabled, but you can optimize for your specific workflow:
 
 ### Quick Setup
 
 ```bash
 # Interactive configuration wizard
-ssh-manager tools configure
+ssh4agent tools configure
 
 # View current configuration
-ssh-manager tools list
+ssh4agent tools list
 
 # Enable/disable specific groups
-ssh-manager tools enable monitoring
-ssh-manager tools disable backup
+ssh4agent tools enable monitoring
+ssh4agent tools disable backup
 ```
 
 ### Configuration Modes
@@ -309,7 +309,7 @@ ssh-manager tools disable backup
 
 > **Requires Node.js ≥ 20** for the npm package (`npx -y mcp-ssh4agent` — it ships as compiled JS). Working from the sources instead requires Node ≥ 23.6 (native TypeScript type stripping, no build step).
 
-### 1. Install MCP SSH Manager
+### 1. Install MCP SSH4Agent
 
 **Option A: Run from npm with npx (recommended — nothing to install)**
 
@@ -329,27 +329,27 @@ git clone https://github.com/jaredshuai/mcp-ssh4agent.git
 cd mcp-ssh4agent
 npm install
 
-# Install the ssh-manager CLI globally (optional — uses npm link)
+# Install the ssh4agent CLI globally (optional — uses npm link)
 npm run install-cli
 
 # Configure your first server
-ssh-manager server add
+ssh4agent server add
 ```
 
 ### 2. Install to Claude Code
 
 ```bash
 # For personal use (current user only) — npx form, no local checkout needed
-claude mcp add ssh-manager -- npx -y mcp-ssh4agent
+claude mcp add ssh4agent -- npx -y mcp-ssh4agent
 
 # For team sharing (creates .mcp.json in project)
-claude mcp add ssh-manager --scope project -- npx -y mcp-ssh4agent
+claude mcp add ssh4agent --scope project -- npx -y mcp-ssh4agent
 
 # For all your projects
-claude mcp add ssh-manager --scope user -- npx -y mcp-ssh4agent
+claude mcp add ssh4agent --scope user -- npx -y mcp-ssh4agent
 
 # From a local checkout instead:
-claude mcp add ssh-manager node /path/to/mcp-ssh4agent/src/index.ts
+claude mcp add ssh4agent node /path/to/mcp-ssh4agent/src/index.ts
 ```
 
 **Other MCP clients** (Cursor, Cline, etc.): point the client at
@@ -367,16 +367,16 @@ Edit `~/.config/claude-code/claude_code_config.json`:
 ```json
 {
   "mcpServers": {
-    "ssh-manager": {
+    "ssh4agent": {
       "command": "node",
-      "args": ["/path/to/mcp-ssh-manager/src/index.ts"],
+      "args": ["/path/to/mcp-ssh4agent/src/index.ts"],
       "autoApprove": [
-        "mcp__ssh-manager__ssh_execute",
-        "mcp__ssh-manager__ssh_list_servers",
-        "mcp__ssh-manager__ssh_upload",
-        "mcp__ssh-manager__ssh_download",
-        "mcp__ssh-manager__ssh_sync",
-        "mcp__ssh-manager__ssh_alias"
+        "mcp__ssh4agent__ssh_execute",
+        "mcp__ssh4agent__ssh_list_servers",
+        "mcp__ssh4agent__ssh_upload",
+        "mcp__ssh4agent__ssh_download",
+        "mcp__ssh4agent__ssh_sync",
+        "mcp__ssh4agent__ssh_alias"
       ]
     }
   }
@@ -398,7 +398,7 @@ SSH_SERVER_CLIENT_PROD_USER=consultant
 SSH_SERVER_CLIENT_PROD_KEYPATH=~/.ssh/consultant_ed25519
 
 SSH_SERVER_CLIENT_PROD_MODE=readonly                          # unrestricted | readonly | restricted
-SSH_SERVER_CLIENT_PROD_AUDIT_LOG=~/.ssh-manager/audit.jsonl   # opt-in JSONL audit trail
+SSH_SERVER_CLIENT_PROD_AUDIT_LOG=~/.ssh4agent/audit.jsonl   # opt-in JSONL audit trail
 # For mode=restricted, provide an allowlist of regex (DENY wins over ALLOW):
 # SSH_SERVER_CI_ALLOW_PATTERNS="^docker (ps|logs);^kubectl get "
 ```
@@ -430,19 +430,19 @@ If you set `/var/www/html` as default for production, these commands are equival
 
 ## 🚀 Quick Start - OpenAI Codex
 
-### 1. Install MCP SSH Manager
+### 1. Install MCP SSH4Agent
 
 Same installation as Claude Code (see above), then configure for Codex:
 
 ```bash
 # Set up Codex integration
-ssh-manager codex setup
+ssh4agent codex setup
 
 # Migrate existing servers to TOML format (if you have .env servers)
-ssh-manager codex migrate
+ssh4agent codex migrate
 
 # Test the integration
-ssh-manager codex test
+ssh4agent codex test
 ```
 
 ### 2. Manual Configuration (Optional)
@@ -450,9 +450,9 @@ ssh-manager codex test
 If you prefer manual setup, add to `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.ssh-manager]
+[mcp_servers.ssh4agent]
 command = "node"
-args = ["/absolute/path/to/mcp-ssh-manager/src/index.ts"]
+args = ["/absolute/path/to/mcp-ssh4agent/src/index.ts"]
 env = { SSH_CONFIG_PATH = "/Users/you/.codex/ssh-config.toml" }
 startup_timeout_ms = 20000
 ```
@@ -521,10 +521,10 @@ Switch easily between Claude Code (.env) and Codex (TOML):
 
 ```bash
 # Convert .env to TOML (for Codex)
-ssh-manager codex convert to-toml
+ssh4agent codex convert to-toml
 
 # Convert TOML back to .env (for Claude Code)
-ssh-manager codex convert to-env
+ssh4agent codex convert to-env
 ```
 
 Both formats can coexist! The system supports both simultaneously.
@@ -672,11 +672,11 @@ Manage configuration profiles for different project types.
 
 ### Profiles
 
-SSH Manager uses profiles to configure aliases and hooks for different project types:
+SSH4Agent uses profiles to configure aliases and hooks for different project types:
 
 1. **Set active profile**: 
-   - Environment variable: `export SSH_MANAGER_PROFILE=frappe`
-   - Configuration file: Create `.ssh-manager-profile` with profile name
+   - Environment variable: `export SSH4AGENT_PROFILE=frappe`
+   - Configuration file: Create `.ssh4agent-profile` with profile name
    - Default: Uses `default` profile if not specified
 
 2. **Available profiles**:
@@ -737,19 +737,19 @@ SSH_SERVER_INTERNAL_DESCRIPTION=Private server behind bastion
 
 ### Server Management CLI
 
-The `ssh-manager` CLI (TypeScript, run natively via Node type stripping — see [cli/README.md](cli/README.md)) provides:
+The `ssh4agent` CLI (TypeScript, run natively via Node type stripping — see [cli/README.md](cli/README.md)) provides:
 
-1. **List servers** - `ssh-manager server list`
-2. **Add server** - `ssh-manager server add` (interactive wizard)
-3. **Test connection** - `ssh-manager server test <name>`
-4. **Remove server** - `ssh-manager server remove <name>`
-5. **Show details** - `ssh-manager server show <name>`
-6. **Tool management** - `ssh-manager tools list` / `configure` / `enable` / `disable`
+1. **List servers** - `ssh4agent server list`
+2. **Add server** - `ssh4agent server add` (interactive wizard)
+3. **Test connection** - `ssh4agent server test <name>`
+4. **Remove server** - `ssh4agent server remove <name>`
+5. **Show details** - `ssh4agent server show <name>`
+6. **Tool management** - `ssh4agent tools list` / `configure` / `enable` / `disable`
 
 ## 📁 Project Structure
 
 ```
-mcp-ssh-manager/
+mcp-ssh4agent/
 ├── src/
 │   ├── index.ts              # Main MCP server (37 tools)
 │   ├── ssh-manager.ts        # SSH connection handling
@@ -777,7 +777,7 @@ mcp-ssh-manager/
 ### Test Server Connection
 
 ```bash
-ssh-manager server test production
+ssh4agent server test production
 ```
 
 ### Verify MCP Installation
@@ -801,11 +801,11 @@ claude mcp list
 
 ### 🔑 Passphrase-Protected SSH Keys
 
-MCP SSH Manager supports passphrase-protected SSH keys in two ways:
+MCP SSH4Agent supports passphrase-protected SSH keys in two ways:
 
 **Option 1: SSH Agent (recommended)**
 
-If your SSH key is loaded into `ssh-agent`, MCP SSH Manager will use it automatically — no configuration changes needed:
+If your SSH key is loaded into `ssh-agent`, MCP SSH4Agent will use it automatically — no configuration changes needed:
 
 ```bash
 # Add your key to the agent (enter passphrase once)
@@ -1002,7 +1002,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for complete guide.
 
 ### Connection Failed
 
-1. Test connection: `ssh-manager server test [server_name]`
+1. Test connection: `ssh4agent server test [server_name]`
 2. Verify network connectivity
 3. Check firewall rules
 4. Ensure SSH service is running on remote server
@@ -1031,20 +1031,20 @@ For detailed backup examples, see [examples/backup-workflow.js](examples/backup-
 
 ```bash
 # Basic server management
-ssh-manager server list
-ssh-manager server add
-ssh-manager ssh prod1
+ssh4agent server list
+ssh4agent server add
+ssh4agent ssh prod1
 
 # File synchronization
-ssh-manager sync push prod1 ./app /var/www/
-ssh-manager sync pull prod1 /var/log/app.log ./
+ssh4agent sync push prod1 ./app /var/www/
+ssh4agent sync pull prod1 /var/log/app.log ./
 
 # SSH tunnels
-ssh-manager tunnel create prod1 local 3307:localhost:3306
-ssh-manager tunnel list
+ssh4agent tunnel create prod1 local 3307:localhost:3306
+ssh4agent tunnel list
 
 # Execute commands
-ssh-manager exec prod1 "docker ps"
+ssh4agent exec prod1 "docker ps"
 ```
 
 ### Using in Claude Code or OpenAI Codex
@@ -1130,7 +1130,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📧 Support
 
 For issues, questions, or suggestions:
-- Open an issue on [GitHub Issues](https://github.com/bvisible/mcp-ssh-manager/issues)
+- Open an issue on [GitHub Issues](https://github.com/jaredshuai/mcp-ssh4agent/issues)
 - Check existing issues before creating new ones
 
 ---
@@ -1141,8 +1141,8 @@ Made with ❤️ for the Claude Code community
 
 <br/><br/>
 
-<a href="https://glama.ai/mcp/servers/@bvisible/mcp-ssh-manager">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@bvisible/mcp-ssh-manager/badge" alt="SSH Manager MCP server" />
+<a href="https://glama.ai/mcp/servers/@jaredshuai/mcp-ssh4agent">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@jaredshuai/mcp-ssh4agent/badge" alt="SSH4Agent MCP server" />
 </a>
 
 </div>

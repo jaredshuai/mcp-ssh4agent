@@ -1,5 +1,5 @@
 /**
- * Database Manager for MCP SSH Manager
+ * Database Manager for MCP SSH4Agent
  * Provides database operations for MySQL, PostgreSQL, and MongoDB
  */
 

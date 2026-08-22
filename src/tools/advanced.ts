@@ -952,7 +952,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     'ssh_profile',
     {
       description:
-        'Manages SSH Manager profiles that bundle command aliases and hooks for different project types, affecting local configuration only with no remote side effects. The action selects behavior: list shows available profiles and the active one, current shows the active profile details, and switch activates a named profile and requires the profile argument. A successful switch reports that Claude Code must be restarted before the new profile takes effect.',
+        'Manages SSH4Agent profiles that bundle command aliases and hooks for different project types, affecting local configuration only with no remote side effects. The action selects behavior: list shows available profiles and the active one, current shows the active profile details, and switch activates a named profile and requires the profile argument. A successful switch reports that Claude Code must be restarted before the new profile takes effect.',
       inputSchema: {
         action: z.enum(['list', 'switch', 'current']).describe('Action to perform'),
         profile: z.string().optional().describe('Profile name (for switch)'),

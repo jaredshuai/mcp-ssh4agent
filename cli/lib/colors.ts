@@ -1,4 +1,4 @@
-// Colors and formatting library for ssh-manager CLI.
+// Colors and formatting library for ssh4agent CLI.
 //
 // Cross-platform TypeScript port of cli/lib/colors.sh. Uses ANSI escape codes
 // (natively supported on Windows 10+ terminals) and node:readline for prompts.

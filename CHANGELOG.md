@@ -1,9 +1,15 @@
 # Changelog
 
-All notable changes to MCP SSH Manager will be documented in this file.
+All notable changes to MCP SSH4Agent will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [4.0.0] - Unreleased
+
+### Changed
+
+- **BREAKING — full rebrand from `ssh-manager` / `mcp-ssh-manager` to `ssh4agent` / `mcp-ssh4agent`.** Bin commands are now `ssh4agent` and `mcp-ssh4agent`; the MCP server registers as `ssh4agent` (re-add it in your agent — auto-approval patterns become `mcp__ssh4agent__*`); the config directory is `~/.ssh4agent` (existing `~/.ssh-manager` keeps loading until the new directory exists); `SSH_MANAGER_*` env vars are now `SSH4AGENT_*`; the log file is `.ssh4agent.log`. Remote-side paths changed with **no migration** (the package had no published release): alert configs live at `/etc/ssh4agent-alerts.json`, backups under `/var/backups/ssh4agent`, scheduled scripts at `/usr/local/bin/ssh4agent-backup-*` — re-run `ssh_alert_setup` and `ssh_backup_schedule` on hosts configured with earlier code.
 
 ## [3.8.0] - 2026-08-14
 

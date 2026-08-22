@@ -1,6 +1,6 @@
 # Backup & Restore Guide
 
-Complete guide for using the MCP SSH Manager backup and restore system.
+Complete guide for using the MCP SSH4Agent backup and restore system.
 
 ## 🎯 Overview
 
@@ -30,7 +30,7 @@ Create a one-time backup of a database or files.
 - `dbPort` (number, optional) - Database port
 - `paths` (array, optional*) - File paths to backup (*required for files type)
 - `exclude` (array, optional) - Patterns to exclude from backup
-- `backupDir` (string, optional) - Backup directory (default: `/var/backups/ssh-manager`)
+- `backupDir` (string, optional) - Backup directory (default: `/var/backups/ssh4agent`)
 - `retention` (number, optional) - Retention period in days (default: 7)
 - `compress` (boolean, optional) - Compress backup (default: true)
 
@@ -42,8 +42,8 @@ Create a one-time backup of a database or files.
   "type": "mysql",
   "size": 52428800,
   "size_human": "50.00 MB",
-  "location": "/var/backups/ssh-manager/mysql_production_2025-10-01T10-30-45-000Z_abc123de.gz",
-  "metadata_path": "/var/backups/ssh-manager/mysql_production_2025-10-01T10-30-45-000Z_abc123de.meta.json",
+  "location": "/var/backups/ssh4agent/mysql_production_2025-10-01T10-30-45-000Z_abc123de.gz",
+  "metadata_path": "/var/backups/ssh4agent/mysql_production_2025-10-01T10-30-45-000Z_abc123de.meta.json",
   "created_at": "2025-10-01T10:30:45.000Z",
   "retention_days": 7
 }
@@ -56,7 +56,7 @@ List all available backups on a server.
 **Parameters:**
 - `server` (string, required) - Server name
 - `type` (enum, optional) - Filter by type: `mysql`, `postgresql`, `mongodb`, `files`
-- `backupDir` (string, optional) - Backup directory (default: `/var/backups/ssh-manager`)
+- `backupDir` (string, optional) - Backup directory (default: `/var/backups/ssh4agent`)
 
 **Returns:**
 ```json
@@ -131,7 +131,7 @@ Schedule recurring backups using cron.
   "database": "myapp_prod",
   "paths": [],
   "retention_days": 7,
-  "script_path": "/usr/local/bin/ssh-manager-backup-production.sh",
+  "script_path": "/usr/local/bin/ssh4agent-backup-production.sh",
   "next_run": "Use crontab -l to see next run time"
 }
 ```
@@ -325,7 +325,7 @@ The backup system integrates with the hooks system:
 
 ### Example Hook: Slack Notification
 
-Create `.ssh-manager/hooks/post-backup.sh`:
+Create `.ssh4agent/hooks/post-backup.sh`:
 
 ```bash
 #!/bin/bash
@@ -344,7 +344,7 @@ fi
 
 - **Never store passwords in code** - Use environment variables or `.env` files
 - **Use SSH keys** for automated backups instead of passwords
-- **Restrict backup directory permissions**: `chmod 700 /var/backups/ssh-manager`
+- **Restrict backup directory permissions**: `chmod 700 /var/backups/ssh4agent`
 - **Encrypt sensitive backups** - Add GPG encryption for critical data
 
 ### 2. Retention
@@ -382,9 +382,9 @@ fi
 **Solution:** Ensure backup directory exists and is writable
 
 ```bash
-sudo mkdir -p /var/backups/ssh-manager
-sudo chown $(whoami):$(whoami) /var/backups/ssh-manager
-sudo chmod 700 /var/backups/ssh-manager
+sudo mkdir -p /var/backups/ssh4agent
+sudo chown $(whoami):$(whoami) /var/backups/ssh4agent
+sudo chmod 700 /var/backups/ssh4agent
 ```
 
 ### MySQL Backup Shows "Access Denied"
@@ -413,10 +413,10 @@ CREATE DATABASE myapp_restored CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 sudo tail -f /var/log/syslog | grep CRON
 
 # Check if script is executable
-ls -la /usr/local/bin/ssh-manager-backup-*.sh
+ls -la /usr/local/bin/ssh4agent-backup-*.sh
 
 # Test script manually
-sudo /usr/local/bin/ssh-manager-backup-production.sh
+sudo /usr/local/bin/ssh4agent-backup-production.sh
 ```
 
 ### Backup Size Too Large
@@ -450,7 +450,7 @@ sudo /usr/local/bin/ssh-manager-backup-production.sh
 ### Calculate Total Backup Size
 
 ```
-"Execute 'du -sh /var/backups/ssh-manager' on production"
+"Execute 'du -sh /var/backups/ssh4agent' on production"
 ```
 
 ## 🔗 Related Documentation
@@ -497,4 +497,4 @@ sudo /usr/local/bin/ssh-manager-backup-production.sh
 
 ---
 
-**Need help?** Open an issue on [GitHub](https://github.com/bvisible/mcp-ssh-manager/issues)
+**Need help?** Open an issue on [GitHub](https://github.com/jaredshuai/mcp-ssh4agent/issues)

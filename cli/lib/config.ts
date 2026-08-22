@@ -1,4 +1,4 @@
-// Configuration management library for ssh-manager CLI.
+// Configuration management library for ssh4agent CLI.
 //
 // Cross-platform TypeScript port of cli/lib/config.sh. Parses the .env file
 // itself (does not import src/ runtime modules — the CLI stays independent of
@@ -32,24 +32,38 @@ function envLineFor(
 const _HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PROJECT_ROOT = path.dirname(path.dirname(_HERE));
 
-export const SSH_MANAGER_HOME: string =
-  process.env.SSH_MANAGER_HOME || path.join(os.homedir(), '.ssh-manager');
+// Where fresh installs write: the post-rebrand config dir.
+export const SSH4AGENT_HOME: string =
+  process.env.SSH4AGENT_HOME || path.join(os.homedir(), '.ssh4agent');
 
-export const SSH_MANAGER_CONFIG: string = path.join(SSH_MANAGER_HOME, 'config.json');
+// Pre-rebrand dir; keeps loading existing setups until ~/.ssh4agent exists.
+const LEGACY_HOME: string = path.join(os.homedir(), '.ssh-manager');
 
-export const SSH_MANAGER_ALIASES: string = path.join(SSH_MANAGER_HOME, 'aliases.json');
+function resolveConfigHome(): string {
+  if (!process.env.SSH4AGENT_HOME && !fs.existsSync(SSH4AGENT_HOME) && fs.existsSync(LEGACY_HOME)) {
+    print_info(`Using legacy config directory ${LEGACY_HOME} — move it to ${SSH4AGENT_HOME}`);
+    return LEGACY_HOME;
+  }
+  return SSH4AGENT_HOME;
+}
+
+const CONFIG_HOME: string = resolveConfigHome();
+
+export const SSH4AGENT_CONFIG: string = path.join(CONFIG_HOME, 'config.json');
+
+export const SSH4AGENT_ALIASES: string = path.join(CONFIG_HOME, 'aliases.json');
 
 // Resolve .env path with the same fallback chain as config.sh (and src/index.ts):
-// 1. SSH_MANAGER_ENV env var (explicit override)
-// 2. ~/.ssh-manager/.env
+// 1. SSH4AGENT_ENV env var (explicit override)
+// 2. <config home>/.env (new dir, or legacy dir while the new one is absent)
 // 3. $PWD/.env
 // 4. ~/.env
 // 5. <project-root>/.env
-// 6. default ~/.ssh-manager/.env (created on first server add)
+// 6. default <config home>/.env (created on first server add)
 function resolveEnvPath(): string {
-  if (process.env.SSH_MANAGER_ENV) return process.env.SSH_MANAGER_ENV;
+  if (process.env.SSH4AGENT_ENV) return process.env.SSH4AGENT_ENV;
   const candidates = [
-    path.join(SSH_MANAGER_HOME, '.env'),
+    path.join(CONFIG_HOME, '.env'),
     path.join(process.cwd(), '.env'),
     path.join(os.homedir(), '.env'),
     path.join(PROJECT_ROOT, '.env'),
@@ -57,38 +71,38 @@ function resolveEnvPath(): string {
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
   }
-  return path.join(SSH_MANAGER_HOME, '.env');
+  return path.join(CONFIG_HOME, '.env');
 }
 
-export const SSH_MANAGER_ENV: string = resolveEnvPath();
+export const SSH4AGENT_ENV: string = resolveEnvPath();
 
 // ── init_config: ensure config dir + default config.json exist ──────────────
 export function init_config(): void {
-  if (!fs.existsSync(SSH_MANAGER_HOME)) {
-    fs.mkdirSync(SSH_MANAGER_HOME, { recursive: true });
-    print_info(`Created config directory: ${SSH_MANAGER_HOME}`);
+  if (!fs.existsSync(CONFIG_HOME)) {
+    fs.mkdirSync(CONFIG_HOME, { recursive: true });
+    print_info(`Created config directory: ${CONFIG_HOME}`);
   }
-  if (!fs.existsSync(SSH_MANAGER_CONFIG)) {
+  if (!fs.existsSync(SSH4AGENT_CONFIG)) {
     const defaultEditor = process.env.EDITOR || 'nano';
     const defaultShell = process.env.SHELL || '/bin/bash';
     const defaultConfig = {
       default_editor: defaultEditor,
       default_shell: defaultShell,
-      history_file: path.join(SSH_MANAGER_HOME, 'history'),
+      history_file: path.join(CONFIG_HOME, 'history'),
       log_level: 'info',
       color_output: true,
     };
     // Match the bash layout: simple 2-space JSON.
-    fs.writeFileSync(SSH_MANAGER_CONFIG, JSON.stringify(defaultConfig, null, 2) + '\n', 'utf8');
-    print_info(`Created default config: ${SSH_MANAGER_CONFIG}`);
+    fs.writeFileSync(SSH4AGENT_CONFIG, JSON.stringify(defaultConfig, null, 2) + '\n', 'utf8');
+    print_info(`Created default config: ${SSH4AGENT_CONFIG}`);
   }
 }
 
 // ── get_config / set_config (no jq — native JSON) ───────────────────────────
 export function get_config(key: string, def?: string): string {
-  if (!fs.existsSync(SSH_MANAGER_CONFIG)) return def ?? '';
+  if (!fs.existsSync(SSH4AGENT_CONFIG)) return def ?? '';
   try {
-    const data = JSON.parse(fs.readFileSync(SSH_MANAGER_CONFIG, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(SSH4AGENT_CONFIG, 'utf8'));
     const v = data[key];
     return v === undefined || v === null ? (def ?? '') : String(v);
   } catch {
@@ -97,15 +111,15 @@ export function get_config(key: string, def?: string): string {
 }
 
 export function set_config(key: string, value: string): boolean {
-  if (!fs.existsSync(SSH_MANAGER_CONFIG)) {
+  if (!fs.existsSync(SSH4AGENT_CONFIG)) {
     print_error('Configuration file not found');
     return false;
   }
   try {
-    const data = JSON.parse(fs.readFileSync(SSH_MANAGER_CONFIG, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(SSH4AGENT_CONFIG, 'utf8'));
     data[key] = value;
     // Backup before write (config.sh used a temp + mv; we just write atomically-ish).
-    fs.writeFileSync(SSH_MANAGER_CONFIG, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(SSH4AGENT_CONFIG, JSON.stringify(data, null, 2) + '\n', 'utf8');
     print_success(`Updated config: ${key} = ${value}`);
     return true;
   } catch (e) {
@@ -118,8 +132,8 @@ export function set_config(key: string, value: string): boolean {
 
 // Read .env lines, or [] if missing.
 function readEnvLines(): string[] {
-  if (!fs.existsSync(SSH_MANAGER_ENV)) return [];
-  return fs.readFileSync(SSH_MANAGER_ENV, 'utf8').split(/\r?\n/);
+  if (!fs.existsSync(SSH4AGENT_ENV)) return [];
+  return fs.readFileSync(SSH4AGENT_ENV, 'utf8').split(/\r?\n/);
 }
 
 // Match `^SSH_SERVER_(.+)_HOST=` and return the captured NAME (upper-case as
@@ -141,7 +155,7 @@ export function load_servers(): string[] {
 // surrounding double-quotes stripped (preserves internal quotes). Matches the
 // config.sh regex `^"(.*)"$`. Returns null when the key is absent / empty.
 export function get_server_config(server: string, field: string): string | null {
-  if (!fs.existsSync(SSH_MANAGER_ENV)) return null;
+  if (!fs.existsSync(SSH4AGENT_ENV)) return null;
   const serverUpper = server.toUpperCase();
   const fieldUpper = field.toUpperCase();
   const key = `SSH_SERVER_${serverUpper}_${fieldUpper}`;
@@ -181,7 +195,7 @@ export function add_server_to_env(
   const nameUpper = name.toUpperCase();
 
   // Check if server already exists
-  if (fs.existsSync(SSH_MANAGER_ENV)) {
+  if (fs.existsSync(SSH4AGENT_ENV)) {
     const existing = readEnvLines();
     const marker = `SSH_SERVER_${nameUpper}_HOST=`;
     if (existing.some((l) => l.startsWith(marker))) {
@@ -191,12 +205,12 @@ export function add_server_to_env(
   }
 
   // Ensure parent dir + .env file exist
-  fs.mkdirSync(path.dirname(SSH_MANAGER_ENV), { recursive: true });
-  if (!fs.existsSync(SSH_MANAGER_ENV)) fs.writeFileSync(SSH_MANAGER_ENV, '', 'utf8');
+  fs.mkdirSync(path.dirname(SSH4AGENT_ENV), { recursive: true });
+  if (!fs.existsSync(SSH4AGENT_ENV)) fs.writeFileSync(SSH4AGENT_ENV, '', 'utf8');
 
   // Backup .env file
   try {
-    fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`);
+    fs.copyFileSync(SSH4AGENT_ENV, `${SSH4AGENT_ENV}.bak`);
   } catch {
     /* ignore backup failures */
   }
@@ -229,7 +243,7 @@ export function add_server_to_env(
     lines.push(envLineFor(nameUpper, 'auditLog', auditLog));
   }
 
-  fs.appendFileSync(SSH_MANAGER_ENV, lines.join('\n') + '\n', 'utf8');
+  fs.appendFileSync(SSH4AGENT_ENV, lines.join('\n') + '\n', 'utf8');
   print_success(`Server '${name}' added successfully`);
   return true;
 }
@@ -248,14 +262,14 @@ export function update_server_in_env(
   const nameUpper = name.toUpperCase();
   const marker = `SSH_SERVER_${nameUpper}_HOST=`;
 
-  if (!fs.existsSync(SSH_MANAGER_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
+  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
     print_error(`Server '${name}' not found`);
     return false;
   }
 
   // Backup
   try {
-    fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`);
+    fs.copyFileSync(SSH4AGENT_ENV, `${SSH4AGENT_ENV}.bak`);
   } catch {
     /* ignore */
   }
@@ -284,7 +298,7 @@ export function update_server_in_env(
     append.push(envLineFor(nameUpper, 'defaultDir', defaultDir));
   }
 
-  fs.writeFileSync(SSH_MANAGER_ENV, kept.join('\n') + '\n' + append.join('\n') + '\n', 'utf8');
+  fs.writeFileSync(SSH4AGENT_ENV, kept.join('\n') + '\n' + append.join('\n') + '\n', 'utf8');
   print_success(`Server '${name}' updated successfully`);
   return true;
 }
@@ -295,18 +309,18 @@ export function update_server_in_env(
 export function remove_server_from_env(name: string): boolean {
   const nameUpper = name.toUpperCase();
   const marker = `SSH_SERVER_${nameUpper}_HOST=`;
-  if (!fs.existsSync(SSH_MANAGER_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
+  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
     print_error(`Server '${name}' not found`);
     return false;
   }
   try {
-    fs.copyFileSync(SSH_MANAGER_ENV, `${SSH_MANAGER_ENV}.bak`);
+    fs.copyFileSync(SSH4AGENT_ENV, `${SSH4AGENT_ENV}.bak`);
   } catch {
     /* ignore */
   }
   const lineRe = new RegExp(`^SSH_SERVER_${nameUpper}_`);
   const kept = readEnvLines().filter((l) => !lineRe.test(l));
-  fs.writeFileSync(SSH_MANAGER_ENV, kept.join('\n') + '\n', 'utf8');
+  fs.writeFileSync(SSH4AGENT_ENV, kept.join('\n') + '\n', 'utf8');
   print_success(`Server '${name}' removed successfully`);
   return true;
 }
@@ -354,7 +368,7 @@ export function test_ssh_connection(server: string): boolean {
   }
 
   print_error('Connection failed');
-  if (process.env.SSH_MANAGER_DEBUG) {
+  if (process.env.SSH4AGENT_DEBUG) {
     print_warning('Debug output:');
     const out =
       (result.stdout ? result.stdout.toString() : '') +
@@ -362,7 +376,7 @@ export function test_ssh_connection(server: string): boolean {
     process.stdout.write(out.replace(/^/gm, '  '));
     if (!out.endsWith('\n')) process.stdout.write('\n');
   } else {
-    print_info('Set SSH_MANAGER_DEBUG=1 to see detailed error output');
+    print_info('Set SSH4AGENT_DEBUG=1 to see detailed error output');
   }
   return false;
 }
@@ -440,7 +454,7 @@ export function check_dependencies(): boolean {
 
   if (optional.length > 0) {
     print_warning(`Missing optional dependencies: ${optional.join(' ')}`);
-    print_info("Some features may not work without them (rsync is needed for 'ssh-manager sync')");
+    print_info("Some features may not work without them (rsync is needed for 'ssh4agent sync')");
   }
 
   return true;

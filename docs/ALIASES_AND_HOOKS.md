@@ -2,7 +2,7 @@
 
 ## Profiles System
 
-SSH Manager uses profiles to provide project-specific configurations. Profiles define command aliases and hooks tailored to different project types.
+SSH4Agent uses profiles to provide project-specific configurations. Profiles define command aliases and hooks tailored to different project types.
 
 ### Available Profiles
 
@@ -15,11 +15,11 @@ SSH Manager uses profiles to provide project-specific configurations. Profiles d
 
 1. **Environment Variable**:
 ```bash
-export SSH_MANAGER_PROFILE=frappe
+export SSH4AGENT_PROFILE=frappe
 ```
 
 2. **Configuration File**:
-Create `.ssh-manager-profile` in project root:
+Create `.ssh4agent-profile` in project root:
 ```
 frappe
 ```
@@ -146,7 +146,7 @@ Each profile defines relevant hooks:
 ## Configuration Files
 
 ### Profile Selection
-- Location: `.ssh-manager-profile`
+- Location: `.ssh4agent-profile`
 - Contains the active profile name
 
 ### Custom Command Aliases

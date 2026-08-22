@@ -1,8 +1,8 @@
-# SSH Manager Deployment Guide 🚀
+# SSH4Agent Deployment Guide 🚀
 
 ## Overview
 
-The MCP SSH Manager now includes advanced deployment features that solve common deployment challenges:
+The MCP SSH4Agent now includes advanced deployment features that solve common deployment challenges:
 
 - ✅ Automatic permission handling
 - ✅ Secure sudo execution

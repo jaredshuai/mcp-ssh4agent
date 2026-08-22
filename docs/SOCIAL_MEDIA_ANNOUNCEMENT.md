@@ -2,7 +2,7 @@
 
 ## Twitter/X Post
 
-🚀 NEW: MCP SSH Manager v3.1.0 - Tool Activation System!
+🚀 NEW: MCP SSH4Agent v3.1.0 - Tool Activation System!
 
 Reduce context usage by 92% with intelligent tool activation. Enable only what you need:
 
@@ -11,9 +11,9 @@ Reduce context usage by 92% with intelligent tool activation. Enable only what y
 ✅ Compatible with Claude Code & OpenAI Codex
 ✅ Auto-approval config export
 
-Install: `npm i -g mcp-ssh-manager`
+Install: `npm i -g mcp-ssh4agent`
 
-📦 https://github.com/bvisible/mcp-ssh-manager
+📦 https://github.com/jaredshuai/mcp-ssh4agent
 🌟 Star if useful!
 
 #MCP #ClaudeCode #DevOps #SSH #AI #Automation
@@ -22,11 +22,11 @@ Install: `npm i -g mcp-ssh-manager`
 
 ## Reddit Post (r/ClaudeAI)
 
-**Title:** MCP SSH Manager v3.1.0 - Comprehensive SSH automation with 92% context reduction
+**Title:** MCP SSH4Agent v3.1.0 - Comprehensive SSH automation with 92% context reduction
 
 **Body:**
 
-I've been working on MCP SSH Manager, a Model Context Protocol server that brings comprehensive SSH management to Claude Code (and OpenAI Codex).
+I've been working on MCP SSH4Agent, a Model Context Protocol server that brings comprehensive SSH management to Claude Code (and OpenAI Codex).
 
 **What is it?**
 
@@ -45,7 +45,7 @@ Tool activation system - reduce context usage by **92%**!
 
 - Enable only the tools you need (minimal mode: 5 tools vs all 37)
 - 6 tool groups: Core, Sessions, Monitoring, Backup, Database, Advanced
-- CLI: `ssh-manager tools configure` for interactive setup
+- CLI: `ssh4agent tools configure` for interactive setup
 - Export auto-approval configs for Claude Code
 
 **Why build this?**
@@ -55,7 +55,7 @@ Existing MCP SSH tools offer 2-4 basic operations. I needed enterprise DevOps fe
 **Installation:**
 
 ```bash
-npm install -g mcp-ssh-manager
+npm install -g mcp-ssh4agent
 ```
 
 **Configuration:**
@@ -64,9 +64,9 @@ Claude Code:
 ```json
 {
   "mcpServers": {
-    "ssh-manager": {
+    "ssh4agent": {
       "command": "node",
-      "args": ["/path/to/mcp-ssh-manager/src/index.ts"]
+      "args": ["/path/to/mcp-ssh4agent/src/index.ts"]
     }
   }
 }
@@ -74,14 +74,14 @@ Claude Code:
 
 OpenAI Codex:
 ```bash
-ssh-manager codex setup
+ssh4agent codex setup
 ```
 
 **Links:**
 
-- GitHub: https://github.com/bvisible/mcp-ssh-manager
-- NPM: https://www.npmjs.com/package/mcp-ssh-manager
-- Glama.ai: https://glama.ai/mcp/servers/@bvisible/mcp-ssh-manager
+- GitHub: https://github.com/jaredshuai/mcp-ssh4agent
+- NPM: https://www.npmjs.com/package/mcp-ssh4agent
+- Glama.ai: https://glama.ai/mcp/servers/@jaredshuai/mcp-ssh4agent
 - Documentation: Full guides for all features
 
 **Features I'm proud of:**
@@ -99,11 +99,11 @@ Would love feedback! Star on GitHub if you find it useful ⭐
 
 ## Hacker News Post (Show HN)
 
-**Title:** Show HN: MCP SSH Manager – 37 DevOps tools for Claude Code with 92% context reduction
+**Title:** Show HN: MCP SSH4Agent – 37 DevOps tools for Claude Code with 92% context reduction
 
 **Body:**
 
-Hi HN! I built MCP SSH Manager, a comprehensive Model Context Protocol server for SSH automation with Claude Code and OpenAI Codex.
+Hi HN! I built MCP SSH4Agent, a comprehensive Model Context Protocol server for SSH automation with Claude Code and OpenAI Codex.
 
 **The problem:** Existing MCP SSH tools offer 2-4 basic operations (execute, upload, download). I needed enterprise DevOps features like automated backups, health monitoring, and database management - directly accessible from my AI assistant.
 
@@ -123,7 +123,7 @@ The biggest challenge was context usage - 37 tools consume ~43.5k tokens. Soluti
 
 - Users can enable only needed tool groups
 - Minimal mode: 5 tools (~3.5k tokens) = 92% reduction
-- Interactive CLI: `ssh-manager tools configure`
+- Interactive CLI: `ssh4agent tools configure`
 - Export auto-approval configs for Claude Code
 
 **Technical details:**
@@ -150,9 +150,9 @@ The biggest challenge was context usage - 37 tools consume ~43.5k tokens. Soluti
 
 **Links:**
 
-- Repo: https://github.com/bvisible/mcp-ssh-manager
-- NPM: https://www.npmjs.com/package/mcp-ssh-manager
-- Docs: https://github.com/bvisible/mcp-ssh-manager#readme
+- Repo: https://github.com/jaredshuai/mcp-ssh4agent
+- NPM: https://www.npmjs.com/package/mcp-ssh4agent
+- Docs: https://github.com/jaredshuai/mcp-ssh4agent#readme
 
 Would love HN's feedback! What other DevOps automation would you want accessible from your AI assistant?
 
@@ -160,7 +160,7 @@ Would love HN's feedback! What other DevOps automation would you want accessible
 
 ## LinkedIn Post
 
-🚀 Excited to announce MCP SSH Manager v3.1.0!
+🚀 Excited to announce MCP SSH4Agent v3.1.0!
 
 After months of development, I'm releasing a comprehensive Model Context Protocol server that brings enterprise DevOps automation to Claude Code and OpenAI Codex.
 
@@ -182,7 +182,7 @@ Tool activation system reduces AI context usage by 92%. Enable only the tools yo
 
 **Why this matters:**
 
-DevOps teams spend hours on repetitive SSH tasks. With MCP SSH Manager, you can ask Claude Code:
+DevOps teams spend hours on repetitive SSH tasks. With MCP SSH4Agent, you can ask Claude Code:
 
 "Deploy the app to production, backup the database first, and monitor the health metrics"
 
@@ -196,7 +196,7 @@ And it handles everything - safely and automatically.
 - Comprehensive audit logging
 - Security-first design
 
-Check it out: https://github.com/bvisible/mcp-ssh-manager
+Check it out: https://github.com/jaredshuai/mcp-ssh4agent
 
 #DevOps #AI #Automation #ClaudeCode #SSH #EnterpriseIT #CloudComputing
 
@@ -204,7 +204,7 @@ Check it out: https://github.com/bvisible/mcp-ssh-manager
 
 ## Dev.to / Medium Article Outline
 
-**Title:** "Building an Enterprise DevOps Platform with Model Context Protocol: Lessons from MCP SSH Manager"
+**Title:** "Building an Enterprise DevOps Platform with Model Context Protocol: Lessons from MCP SSH4Agent"
 
 **Sections:**
 
@@ -257,7 +257,7 @@ Check it out: https://github.com/bvisible/mcp-ssh-manager
 
 ## YouTube Video Script Outline
 
-**Title:** "MCP SSH Manager v3.1.0 - Automate DevOps with Claude Code (92% Context Reduction)"
+**Title:** "MCP SSH4Agent v3.1.0 - Automate DevOps with Claude Code (92% Context Reduction)"
 
 **Duration:** 8-10 minutes
 
@@ -279,7 +279,7 @@ Check it out: https://github.com/bvisible/mcp-ssh-manager
 
 4. **Demo: Tool Activation (2 min)**
    - Show all 37 tools
-   - Run `ssh-manager tools configure`
+   - Run `ssh4agent tools configure`
    - Compare context usage
 
 5. **Demo: Real DevOps Workflow (3 min)**
@@ -310,7 +310,7 @@ Check it out: https://github.com/bvisible/mcp-ssh-manager
 
 2. **Carousel: "From Manual SSH to AI-Powered DevOps"**
    - Slide 1: Old way (terminal commands)
-   - Slide 2: MCP SSH Manager way (Claude Code)
+   - Slide 2: MCP SSH4Agent way (Claude Code)
    - Slide 3: Results (time saved, errors reduced)
    - Slide 4: Get started (GitHub link)
 
@@ -379,7 +379,7 @@ Check it out: https://github.com/bvisible/mcp-ssh-manager
 ## Call to Action Options
 
 1. **For developers:** "Star on GitHub if you find it useful!"
-2. **For users:** "Try it now: `npm install -g mcp-ssh-manager`"
+2. **For users:** "Try it now: `npm install -g mcp-ssh4agent`"
 3. **For contributors:** "Issues and PRs welcome!"
 4. **For feedback:** "What DevOps features would you like to see next?"
 5. **For community:** "Join the discussion on GitHub Discussions"

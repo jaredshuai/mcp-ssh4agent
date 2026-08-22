@@ -4,7 +4,7 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## Project Overview
 
-MCP SSH Manager is a Model Context Protocol server that enables any MCP-compatible AI agent to manage multiple SSH connections. It provides tools for executing commands, transferring files, and managing deployments across remote servers.
+MCP SSH4Agent is a Model Context Protocol server that enables any MCP-compatible AI agent to manage multiple SSH connections. It provides tools for executing commands, transferring files, and managing deployments across remote servers.
 
 ## Architecture
 
@@ -31,37 +31,37 @@ The system consists of three main components:
 ```bash
 npm install                                    # Install Node.js dependencies
 npm run setup-hooks                           # Install git pre-commit hooks (cross-platform TS, no Python)
-npm run install-cli                           # Install ssh-manager CLI globally (npm link)
+npm run install-cli                           # Install ssh4agent CLI globally (npm link)
 ```
 
-> **Cross-platform**: all scripts run via plain `node` on native type stripping (no Bash, no Python, no build step). The `ssh-manager` CLI is TypeScript at `cli/ssh-manager.ts` (node shebang); it runs natively on Windows, macOS, and Linux with no Git Bash/WSL requirement.
+> **Cross-platform**: all scripts run via plain `node` on native type stripping (no Bash, no Python, no build step). The `ssh4agent` CLI is TypeScript at `cli/ssh-manager.ts` (node shebang); it runs natively on Windows, macOS, and Linux with no Git Bash/WSL requirement.
 
 ### Server Management (TypeScript CLI)
 ```bash
-ssh-manager server add                        # Add a new server
-ssh-manager server list                       # List configured servers
-ssh-manager server test SERVER                # Test connection to specific server
-ssh-manager server remove SERVER              # Remove a server
-ssh-manager server show SERVER                 # Show server details
+ssh4agent server add                        # Add a new server
+ssh4agent server list                       # List configured servers
+ssh4agent server test SERVER                # Test connection to specific server
+ssh4agent server remove SERVER              # Remove a server
+ssh4agent server show SERVER                 # Show server details
 ```
 
 ### OpenAI Codex Integration
 ```bash
-ssh-manager codex setup                       # Configure for Codex
-ssh-manager codex migrate                     # Convert servers to TOML
-ssh-manager codex test                        # Test Codex integration
-ssh-manager codex convert to-toml            # Convert .env to TOML
-ssh-manager codex convert to-env             # Convert TOML to .env
+ssh4agent codex setup                       # Configure for Codex
+ssh4agent codex migrate                     # Convert servers to TOML
+ssh4agent codex test                        # Test Codex integration
+ssh4agent codex convert to-toml            # Convert .env to TOML
+ssh4agent codex convert to-env             # Convert TOML to .env
 ```
 
 ### Tool Management (NEW in v3.1)
 ```bash
-ssh-manager tools list                        # Show all tools and status
-ssh-manager tools configure                   # Interactive configuration wizard
-ssh-manager tools enable <group>              # Enable a tool group
-ssh-manager tools disable <group>             # Disable a tool group
-ssh-manager tools reset                       # Reset to defaults (all tools)
-ssh-manager tools export-claude               # Export auto-approval config
+ssh4agent tools list                        # Show all tools and status
+ssh4agent tools configure                   # Interactive configuration wizard
+ssh4agent tools enable <group>              # Enable a tool group
+ssh4agent tools disable <group>             # Disable a tool group
+ssh4agent tools reset                       # Reset to defaults (all tools)
+ssh4agent tools export-claude               # Export auto-approval config
 ```
 
 **Tool Groups**: core (5), sessions (4), monitoring (6), backup (4), database (4), advanced (14)
@@ -146,7 +146,7 @@ The server exposes these tools to any MCP-compatible AI agent (Claude Code, Code
 
 ### Configuration Formats
 
-MCP SSH Manager supports two configuration formats:
+MCP SSH4Agent supports two configuration formats:
 
 1. **Environment Variables (.env)** - Traditional format, widely supported across agents
 2. **TOML** - Modern format (used by OpenAI Codex; also readable by other agents)
@@ -155,7 +155,7 @@ MCP SSH Manager supports two configuration formats:
 
 The system loads configurations in this order (highest to lowest priority):
 1. Environment variables (process.env)
-2. `.env` file (resolved via a fallback chain: `SSH_ENV_PATH` env var → `~/.ssh-manager/.env` → `cwd/.env` → `~/.env` → `<project-root>/.env`)
+2. `.env` file (resolved via a fallback chain: `SSH_ENV_PATH` env var → `~/.ssh4agent/.env` → `cwd/.env` → `~/.env` → `<project-root>/.env`)
 3. TOML file (specified by `SSH_CONFIG_PATH` or `~/.codex/ssh-config.toml`)
 
 ### .env Format
@@ -236,14 +236,14 @@ This server is MCP-compatible, so any agent that speaks MCP can drive it. Each a
 **Claude Code:**
 ```bash
 # Users: published package via npx (nothing to clone)
-claude mcp add ssh-manager -- npx -y mcp-ssh4agent
+claude mcp add ssh4agent -- npx -y mcp-ssh4agent
 
 # Developers: local checkout
-claude mcp add ssh-manager node /absolute/path/to/mcp-ssh4agent/src/index.ts
+claude mcp add ssh4agent node /absolute/path/to/mcp-ssh4agent/src/index.ts
 ```
 Config stored at `~/.config/claude-code/claude_code_config.json`
 
-**OpenAI Codex:** run `ssh-manager codex setup` (writes TOML to `~/.codex/ssh-config.toml`).
+**OpenAI Codex:** run `ssh4agent codex setup` (writes TOML to `~/.codex/ssh-config.toml`).
 
 **Other agents (Cursor, Cline, etc.):** point their MCP client at `{ "command": "npx", "args": ["-y", "mcp-ssh4agent"] }` (users) or `node /absolute/path/to/mcp-ssh4agent/src/index.ts` (developers), and pass servers via `.env` or `SSH_CONFIG_PATH`.
 

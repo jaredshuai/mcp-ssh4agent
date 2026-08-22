@@ -60,8 +60,11 @@ id_ed25519*
 *.bak
 .server-aliases.json
 
-# SSH Manager logs and history
-.ssh-manager.log
+# ssh4agent logs and history
+.ssh4agent.log
 .ssh-command-history.json
 .server-groups.json
 archived/
+
+# Agent tooling
+.qoder/

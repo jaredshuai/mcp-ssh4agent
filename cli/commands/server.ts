@@ -1,4 +1,4 @@
-// Server management commands for ssh-manager CLI.
+// Server management commands for ssh4agent CLI.
 //
 // Cross-platform TypeScript port of cli/commands/server.sh. The interactive
 // add/test/remove paths are async (prompts); list/show/edit_file are sync.
@@ -22,7 +22,7 @@ import {
 } from '../lib/colors.ts';
 
 import {
-  SSH_MANAGER_ENV,
+  SSH4AGENT_ENV,
   get_server_config,
   add_server_to_env,
   remove_server_from_env,
@@ -136,7 +136,7 @@ export function cmd_server_list(): void {
   const servers = load_servers();
   if (servers.length === 0) {
     print_warning('No servers configured');
-    print_info("Use 'ssh-manager server add' to add a server");
+    print_info("Use 'ssh4agent server add' to add a server");
     return;
   }
 
@@ -176,7 +176,7 @@ export function cmd_server_list(): void {
     );
     print_info(`Affected: ${invalidNames.join(' ')}`);
     print_info(
-      "Fix: 'ssh-manager server remove <name>' then re-add with a valid name (e.g. replace '-' with '_')"
+      "Fix: 'ssh4agent server remove <name>' then re-add with a valid name (e.g. replace '-' with '_')"
     );
   }
 }
@@ -255,13 +255,13 @@ export function cmd_server_edit_file(): void {
   const editor =
     process.env.EDITOR || configured || (process.platform === 'win32' ? 'notepad' : 'nano');
 
-  if (!existsSync(SSH_MANAGER_ENV)) {
-    print_error(`Configuration file not found: ${SSH_MANAGER_ENV}`);
+  if (!existsSync(SSH4AGENT_ENV)) {
+    print_error(`Configuration file not found: ${SSH4AGENT_ENV}`);
     return;
   }
 
   print_info(`Opening configuration in ${editor}...`);
-  const result = spawnSync(editor, [SSH_MANAGER_ENV], {
+  const result = spawnSync(editor, [SSH4AGENT_ENV], {
     stdio: 'inherit',
     shell: process.platform === 'win32',
   });

@@ -1,12 +1,12 @@
 # MCP SSH - Complete Guide to SSH Management via Model Context Protocol
 
-This is the comprehensive guide for **MCP SSH Manager**, the leading Model Context Protocol (MCP) server for SSH remote server management.
+This is the comprehensive guide for **MCP SSH4Agent**, the leading Model Context Protocol (MCP) server for SSH remote server management.
 
 ## What is MCP SSH?
 
-**MCP SSH Manager** is a complete **Model Context Protocol (MCP) server** that enables SSH remote server management directly from AI assistants like **Claude Code** and **OpenAI Codex**. It's the most comprehensive **SSH MCP** solution available, offering 37+ MCP tools for complete remote server control.
+**MCP SSH4Agent** is a complete **Model Context Protocol (MCP) server** that enables SSH remote server management directly from AI assistants like **Claude Code** and **OpenAI Codex**. It's the most comprehensive **SSH MCP** solution available, offering 37+ MCP tools for complete remote server control.
 
-### Why MCP SSH Manager?
+### Why MCP SSH4Agent?
 
 If you're searching for:
 - **MCP SSH** server
@@ -17,11 +17,11 @@ If you're searching for:
 - **Remote SSH MCP** server
 - **SSH automation with AI**
 
-Then **MCP SSH Manager** is exactly what you need! 🎯
+Then **MCP SSH4Agent** is exactly what you need! 🎯
 
 ## MCP SSH vs Traditional SSH
 
-Traditional SSH requires manual terminal commands and script writing. With **MCP SSH Manager**, you can:
+Traditional SSH requires manual terminal commands and script writing. With **MCP SSH4Agent**, you can:
 
 1. **Natural Language Control**: "Deploy my app to production" instead of writing deployment scripts
 2. **AI-Powered Automation**: Let Claude Code or Codex handle complex SSH operations
@@ -34,10 +34,10 @@ Traditional SSH requires manual terminal commands and script writing. With **MCP
 ### Quick Installation
 
 ```bash
-git clone https://github.com/bvisible/mcp-ssh-manager.git
-cd mcp-ssh-manager
+git clone https://github.com/jaredshuai/mcp-ssh4agent.git
+cd mcp-ssh4agent
 npm install
-claude mcp add ssh-manager node /path/to/mcp-ssh-manager/src/index.ts
+claude mcp add ssh4agent node /path/to/mcp-ssh4agent/src/index.ts
 ```
 
 ### Natural Language SSH Commands
@@ -56,16 +56,16 @@ Once installed, simply ask Claude Code:
 ### Codex Integration
 
 ```bash
-ssh-manager codex setup
-ssh-manager codex migrate
+ssh4agent codex setup
+ssh4agent codex migrate
 ```
 
 Configure in `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.ssh-manager]
+[mcp_servers.ssh4agent]
 command = "node"
-args = ["/path/to/mcp-ssh-manager/src/index.ts"]
+args = ["/path/to/mcp-ssh4agent/src/index.ts"]
 env = { SSH_CONFIG_PATH = "/Users/you/.codex/ssh-config.toml" }
 ```
 
@@ -106,7 +106,7 @@ env = { SSH_CONFIG_PATH = "/Users/you/.codex/ssh-config.toml" }
 
 ## Model Context Protocol (MCP) for SSH
 
-The **Model Context Protocol (MCP)** is a standardized way for AI assistants to interact with external tools and services. **MCP SSH Manager** implements the MCP specification to provide:
+The **Model Context Protocol (MCP)** is a standardized way for AI assistants to interact with external tools and services. **MCP SSH4Agent** implements the MCP specification to provide:
 
 - **37+ MCP Tools** for SSH operations
 - **Type-safe** SSH operations via MCP schemas
@@ -181,7 +181,7 @@ key_path = "~/.ssh/prod_key"
 
 ## MCP SSH Security
 
-**MCP SSH Manager** implements multiple security layers:
+**MCP SSH4Agent** implements multiple security layers:
 
 1. **Credential Protection** - Never exposes SSH credentials to AI
 2. **Command Validation** - Validates all SSH commands before execution
@@ -202,7 +202,7 @@ If "mcp ssh" searches don't show this project:
 
 ### MCP SSH Connection Issues
 
-1. Test connection: `ssh-manager server test [name]`
+1. Test connection: `ssh4agent server test [name]`
 2. Verify SSH credentials
 3. Check firewall rules
 4. Review MCP server logs
@@ -218,17 +218,17 @@ If "mcp ssh" searches don't show this project:
 
 ### Contributing to MCP SSH
 
-We welcome contributions to **MCP SSH Manager**! See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
+We welcome contributions to **MCP SSH4Agent**! See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 ### MCP SSH Support
 
-- GitHub Issues: [Report bugs](https://github.com/bvisible/mcp-ssh-manager/issues)
+- GitHub Issues: [Report bugs](https://github.com/jaredshuai/mcp-ssh4agent/issues)
 - Documentation: [Full docs](../README.md)
 - Examples: [Example workflows](../examples/)
 
 ## MCP SSH Alternatives
 
-While there are other SSH tools and MCP servers, **MCP SSH Manager** offers:
+While there are other SSH tools and MCP servers, **MCP SSH4Agent** offers:
 
 - ✅ Most comprehensive SSH MCP tool collection (37+ tools)
 - ✅ Both Claude Code AND OpenAI Codex support
@@ -239,12 +239,12 @@ While there are other SSH tools and MCP servers, **MCP SSH Manager** offers:
 
 ## Conclusion
 
-**MCP SSH Manager** is the definitive **Model Context Protocol** solution for **SSH remote server management**. Whether you're using **Claude Code** or **OpenAI Codex**, this **MCP SSH** server provides everything you need for AI-powered SSH automation.
+**MCP SSH4Agent** is the definitive **Model Context Protocol** solution for **SSH remote server management**. Whether you're using **Claude Code** or **OpenAI Codex**, this **MCP SSH** server provides everything you need for AI-powered SSH automation.
 
 **Get started today:**
 ```bash
-git clone https://github.com/bvisible/mcp-ssh-manager.git
-cd mcp-ssh-manager
+git clone https://github.com/jaredshuai/mcp-ssh4agent.git
+cd mcp-ssh4agent
 npm install
 ```
 
@@ -252,6 +252,6 @@ npm install
 
 ## Keywords for Search
 
-This document covers: MCP SSH, SSH MCP, Model Context Protocol SSH, MCP SSH Manager, Claude Code SSH, OpenAI Codex SSH, SSH MCP Server, Remote SSH MCP, MCP Server SSH, SSH automation MCP, AI SSH tools, SSH Model Context Protocol, MCP SSH integration, SSH management MCP, MCP remote server, SSH DevOps MCP, MCP SSH backup, MCP SSH monitoring, MCP SSH database, SSH orchestration MCP.
+This document covers: MCP SSH, SSH MCP, Model Context Protocol SSH, MCP SSH4Agent, Claude Code SSH, OpenAI Codex SSH, SSH MCP Server, Remote SSH MCP, MCP Server SSH, SSH automation MCP, AI SSH tools, SSH Model Context Protocol, MCP SSH integration, SSH management MCP, MCP remote server, SSH DevOps MCP, MCP SSH backup, MCP SSH monitoring, MCP SSH database, SSH orchestration MCP.
 
-**Repository**: [https://github.com/bvisible/mcp-ssh-manager](https://github.com/bvisible/mcp-ssh-manager)
+**Repository**: [https://github.com/jaredshuai/mcp-ssh4agent](https://github.com/jaredshuai/mcp-ssh4agent)

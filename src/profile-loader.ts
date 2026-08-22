@@ -1,5 +1,5 @@
 /**
- * Profile Loader for SSH Manager
+ * Profile Loader for SSH4Agent
  * Loads configuration profiles for different project types
  */
 
@@ -11,21 +11,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
-const PROFILE_CONFIG_FILE = path.join(__dirname, '..', '.ssh-manager-profile');
+const PROFILE_CONFIG_FILE = path.join(__dirname, '..', '.ssh4agent-profile');
+// Pre-rebrand location; kept as a read-only fallback.
+const LEGACY_PROFILE_CONFIG_FILE = path.join(__dirname, '..', '.ssh-manager-profile');
 
 /**
  * Get the active profile name
  */
 export function getActiveProfileName() {
   // 1. Check environment variable
-  if (process.env.SSH_MANAGER_PROFILE) {
-    return process.env.SSH_MANAGER_PROFILE;
+  if (process.env.SSH4AGENT_PROFILE) {
+    return process.env.SSH4AGENT_PROFILE;
   }
 
-  // 2. Check configuration file
-  if (fs.existsSync(PROFILE_CONFIG_FILE)) {
+  // 2. Check configuration file (new name, with fallback to the legacy one)
+  const profileFile =
+    !fs.existsSync(PROFILE_CONFIG_FILE) && fs.existsSync(LEGACY_PROFILE_CONFIG_FILE)
+      ? LEGACY_PROFILE_CONFIG_FILE
+      : PROFILE_CONFIG_FILE;
+  if (fs.existsSync(profileFile)) {
     try {
-      const profileName = fs.readFileSync(PROFILE_CONFIG_FILE, 'utf8').trim();
+      const profileName = fs.readFileSync(profileFile, 'utf8').trim();
       if (profileName) {
         return profileName;
       }

@@ -1,5 +1,5 @@
 /**
- * Backup Manager for MCP SSH Manager
+ * Backup Manager for MCP SSH4Agent
  * Handles creation, listing, restoration, and scheduling of backups
  * Supports databases (MySQL, PostgreSQL, MongoDB) and file backups
  */
@@ -17,8 +17,10 @@ export const BACKUP_TYPES = {
   FULL: 'full',
 };
 
-// Default backup directory
-export const DEFAULT_BACKUP_DIR = '/var/backups/ssh-manager';
+// Default backup directory.
+// BREAKING (unreleased): backups under the pre-rebrand /var/backups/ssh-manager
+// are no longer discovered; re-create backup jobs on existing hosts.
+export const DEFAULT_BACKUP_DIR = '/var/backups/ssh4agent';
 
 /**
  * Generate unique backup ID

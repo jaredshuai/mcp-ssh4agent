@@ -604,7 +604,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
     'ssh_backup_schedule',
     {
       description:
-        'Schedules a recurring backup on the remote server by writing an executable bash script to /usr/local/bin/ssh-manager-backup-NAME.sh and installing a crontab entry for the given cron expression. Mutates the remote filesystem and crontab, and typically needs root to write that path. Supports mysql, postgresql, mongodb, and files; the generated script also deletes backups older than retention days (default 7).',
+        'Schedules a recurring backup on the remote server by writing an executable bash script to /usr/local/bin/ssh4agent-backup-NAME.sh and installing a crontab entry for the given cron expression. Mutates the remote filesystem and crontab, and typically needs root to write that path. Supports mysql, postgresql, mongodb, and files; the generated script also deletes backups older than retention days (default 7).',
       inputSchema: {
         server: z.string().describe('Server name'),
         schedule: z.string().describe('Cron schedule (e.g., "0 2 * * *" for daily at 2 AM)'),
@@ -628,13 +628,15 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
       try {
         const ssh = await getConnection(serverName);
 
-        // Build backup script path
-        const scriptPath = `/usr/local/bin/ssh-manager-backup-${name}.sh`;
+        // Build backup script path.
+        // BREAKING (unreleased): pre-rebrand /usr/local/bin/ssh-manager-backup-*
+        // scripts are no longer managed; re-schedule on existing hosts.
+        const scriptPath = `/usr/local/bin/ssh4agent-backup-${name}.sh`;
         const backupDirectory = DEFAULT_BACKUP_DIR;
 
         // Create backup script
         let scriptContent = '#!/bin/bash\n\n';
-        scriptContent += `# SSH Manager automated backup: ${name}\n`;
+        scriptContent += `# ssh4agent automated backup: ${name}\n`;
         scriptContent += `# Type: ${type}\n`;
         scriptContent += `# Created: ${new Date().toISOString()}\n\n`;
 
@@ -674,7 +676,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         );
 
         // Add to crontab
-        const cronComment = `ssh-manager-backup-${name}`;
+        const cronComment = `ssh4agent-backup-${name}`;
         const cronCommand = buildCronScheduleCommand(schedule, scriptPath, cronComment);
         const cronResult = await ssh.execCommand(cronCommand);
 

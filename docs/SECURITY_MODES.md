@@ -1,6 +1,6 @@
 # Security Modes (v3.5.0+)
 
-`mcp-ssh-manager` lets you declare a **per-server security mode** to constrain
+`mcp-ssh4agent` lets you declare a **per-server security mode** to constrain
 what an AI agent can do once it's been granted access to the MCP server.
 This is **opt-in** — servers without a `MODE` field behave exactly like they
 did in v3.4.x.
@@ -78,7 +78,7 @@ Secrets (`password`, `passphrase`, `sudoPassword`, `token`, `secret`, `apikey`)
 are redacted to `***` before being written, even if a tool somehow passed them
 through args.
 
-Log rotation is not handled by `mcp-ssh-manager` — use `logrotate`, `vector`,
+Log rotation is not handled by `mcp-ssh4agent` — use `logrotate`, `vector`,
 or your log shipper of choice. v3.5.0 audits cover the gated tool set:
 `ssh_execute`, `ssh_upload`, `ssh_execute_sudo`, plus denials on every other
 mutating tool. Pure read tools (`ssh_health_check`, `ssh_db_query`, `ssh_tail`…)
@@ -96,7 +96,7 @@ SSH_SERVER_PROD_HOST=prod.example.com
 SSH_SERVER_PROD_USER=observer
 SSH_SERVER_PROD_KEYPATH=~/.ssh/observer_ed25519
 SSH_SERVER_PROD_MODE=readonly
-SSH_SERVER_PROD_AUDIT_LOG=~/.ssh-manager/audit/prod.jsonl
+SSH_SERVER_PROD_AUDIT_LOG=~/.ssh4agent/audit/prod.jsonl
 ```
 
 The agent can run `ls`, `cat`, `df`, `ps`, `journalctl`, `docker ps`,
@@ -134,7 +134,7 @@ SSH_SERVER_CLIENT_PROD_HOST=client-prod.example.com
 SSH_SERVER_CLIENT_PROD_USER=consultant
 SSH_SERVER_CLIENT_PROD_KEYPATH=~/.ssh/consultant_ed25519
 SSH_SERVER_CLIENT_PROD_MODE=readonly
-SSH_SERVER_CLIENT_PROD_AUDIT_LOG=~/.ssh-manager/audit/client-prod.jsonl
+SSH_SERVER_CLIENT_PROD_AUDIT_LOG=~/.ssh4agent/audit/client-prod.jsonl
 ```
 
 ## What gets gated, what doesn't
@@ -179,7 +179,7 @@ A v3.4.x `.env` or TOML loads identically under v3.5.0:
   `{ allowed: true }`. Not a single regex is compiled, not a single byte is
   written to disk.
 - `AUDIT_LOG` is opt-in — no log file is created until you set it.
-- The interactive wizard (`ssh-manager server add`) defaults all three new
+- The interactive wizard (`ssh4agent server add`) defaults all three new
   prompts to "skip" (press Enter and the resulting `.env` block is identical
   to v3.4.x).
 - Tool auto-approval (`autoApprove` in `claude_code_config.json`) keeps

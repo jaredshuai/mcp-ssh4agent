@@ -35,6 +35,6 @@ Create a JSON file in this directory with your custom configuration:
 ## Loading Profiles
 
 Profiles can be loaded via:
-1. Environment variable: `SSH_MANAGER_PROFILE=frappe`
-2. Configuration file: `.ssh-manager-profile` in project root
+1. Environment variable: `SSH4AGENT_PROFILE=frappe`
+2. Configuration file: `.ssh4agent-profile` in project root
 3. Default: Uses `default.json` if no profile specified

@@ -20,7 +20,7 @@ const fail = (m: string) => console.log(`${RED}❌${NC} ${m}`);
 const _HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.dirname(_HERE);
 
-console.log('🔧 Testing MCP SSH Manager for Claude Code');
+console.log('🔧 Testing MCP SSH4Agent for Claude Code');
 console.log('===========================================');
 console.log('');
 
@@ -60,13 +60,13 @@ const claudeConfig = path.join(os.homedir(), '.config', 'claude-code', 'claude_c
 if (fs.existsSync(claudeConfig)) {
   ok('Claude Code config found');
   const cfgText = fs.readFileSync(claudeConfig, 'utf8');
-  if (cfgText.includes('ssh-manager')) {
-    ok('SSH Manager is configured in Claude Code');
+  if (cfgText.includes('ssh4agent')) {
+    ok('SSH4Agent is configured in Claude Code');
   } else {
-    fail('SSH Manager not found in Claude Code config');
+    fail('SSH4Agent not found in Claude Code config');
     console.log('   Register it with:');
     console.log(
-      '   claude mcp add ssh-manager node ' +
+      '   claude mcp add ssh4agent node ' +
         path.join(PROJECT_ROOT, 'src', 'index.ts').replace(/\\/g, '/')
     );
   }

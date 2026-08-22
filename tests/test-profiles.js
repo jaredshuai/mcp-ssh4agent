@@ -81,7 +81,7 @@ try {
 
 // Test 5: Switch profiles
 console.log('Test 5: Switch profiles');
-const testProfileFile = path.join(__dirname, '..', '.ssh-manager-profile');
+const testProfileFile = path.join(__dirname, '..', '.ssh4agent-profile');
 const originalProfile = fs.existsSync(testProfileFile)
   ? fs.readFileSync(testProfileFile, 'utf8').trim()
   : null;

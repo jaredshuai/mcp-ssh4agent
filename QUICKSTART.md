@@ -1,4 +1,4 @@
-# Quick Start Guide - MCP SSH Manager
+# Quick Start Guide - MCP SSH4Agent
 
 Get up and running in 5 minutes! 🚀
 
@@ -15,7 +15,7 @@ npm run install-cli
 
 ```bash
 # Launch interactive menu
-ssh-manager
+ssh4agent
 ```
 
 Choose: `1) Server Management` → `1) Add New Server`
@@ -30,7 +30,7 @@ Enter:
 ## 3️⃣ Install to Claude Code (1 minute)
 
 ```bash
-claude mcp add ssh-manager node $(pwd)/src/index.ts
+claude mcp add ssh4agent node $(pwd)/src/index.ts
 ```
 
 ## 4️⃣ Test It! (1 minute)
@@ -54,24 +54,24 @@ You're now connected to your server through Claude Code!
 ## 📝 Common Commands
 
 ```bash
-ssh-manager                    # Interactive menu
-ssh-manager server list        # List servers
-ssh-manager ssh myserver       # Quick SSH
-ssh-manager server test        # Test connections
-ssh-manager sync push myserver ./app /var/www/  # Upload files
+ssh4agent                    # Interactive menu
+ssh4agent server list        # List servers
+ssh4agent ssh myserver       # Quick SSH
+ssh4agent server test        # Test connections
+ssh4agent sync push myserver ./app /var/www/  # Upload files
 ```
 
 ## 💡 Pro Tips
 
 1. **Set environment variable** in `~/.bashrc` or `~/.zshrc`:
    ```bash
-   export SSH_MANAGER_ENV="/path/to/your/.env"
+   export SSH4AGENT_ENV="/path/to/your/.env"
    ```
 
 2. **Create shortcuts**:
    ```bash
-   alias ssm="ssh-manager"
-   alias ssm-list="ssh-manager server list"
+   alias ssm="ssh4agent"
+   alias ssm-list="ssh4agent server list"
    ```
 
-Need help? Run `ssh-manager --help`
+Need help? Run `ssh4agent --help`

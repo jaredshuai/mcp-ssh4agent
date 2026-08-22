@@ -1,4 +1,4 @@
-// Interactive demo preview for the ssh-manager CLI (replaces cli/demo.sh).
+// Interactive demo preview for the ssh4agent CLI (replaces cli/demo.sh).
 // Run via: `npm run demo` → `node scripts/demo.ts`
 //
 // Pure Node.js, no shell-isms. Cross-platform clear screen via ANSI codes.
@@ -17,11 +17,11 @@ const clearScreen = () => process.stdout.write('\x1b[2J\x1b[H');
 
 clearScreen();
 console.log(`${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
-console.log(`${CYAN}         SSH Manager CLI - Interactive Demo${RESET}`);
+console.log(`${CYAN}         SSH4Agent CLI - Interactive Demo${RESET}`);
 console.log(`${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
 console.log('');
 
-console.log(`${GREEN}✨ Welcome to SSH Manager CLI!${RESET}`);
+console.log(`${GREEN}✨ Welcome to SSH4Agent CLI!${RESET}`);
 console.log('');
 console.log('This demo will show you the key features of the interactive interface.');
 console.log('');
@@ -38,9 +38,9 @@ console.log('');
 
 console.log(`${YELLOW}🚀 To start the interactive mode, run:${RESET}`);
 console.log('');
-console.log('    ssh-manager');
-console.log('    ssh-manager -i');
-console.log('    ssh-manager --interactive');
+console.log('    ssh4agent');
+console.log('    ssh4agent -i');
+console.log('    ssh4agent --interactive');
 console.log('');
 
 console.log(`${YELLOW}📝 The interactive mode will show you:${RESET}`);
@@ -83,7 +83,7 @@ if (process.stdin.isTTY) {
 
 const menu = [
   '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-  '           SSH Manager CLI v3.8.0',
+  '           SSH4Agent CLI v3.8.0',
   '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
   '',
   '  1) 🖥️  Server Management',
@@ -120,5 +120,5 @@ console.log(menu);
 
 console.log(`${GREEN}✅ Ready to try it yourself!${RESET}`);
 console.log('');
-console.log('Run: ssh-manager');
+console.log('Run: ssh4agent');
 console.log('');
