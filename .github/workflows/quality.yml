@@ -45,9 +45,10 @@ jobs:
     - name: Run Biome lint
       run: npx @biomejs/biome lint .
 
-    # Type-checks the JSDoc annotations over plain JS (no build, nothing emitted).
+    # Type-checks the all-TypeScript codebase plus the plain-JS tests via
+    # checkJs (no build, nothing emitted).
     # Not continue-on-error: this gate is only useful if it can fail the build.
-    - name: Typecheck (JSDoc via tsc)
+    - name: Typecheck (tsc, no emit)
       run: npm run typecheck
 
     - name: Run knip (dead code & unused dependencies)

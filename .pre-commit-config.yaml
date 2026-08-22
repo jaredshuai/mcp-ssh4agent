@@ -74,21 +74,21 @@ repos:
         entry: node tests/test-profiles.js
         language: system
         pass_filenames: false
-        files: 'profiles/.*\.json$|src/profile-loader\.js$'
+        files: 'profiles/.*\.json$|src/profile-loader\.ts$'
         
       - id: test-aliases
         name: Test Command Aliases
         entry: node tests/test-command-aliases.js
         language: system
         pass_filenames: false
-        files: 'src/command-aliases\.js$'
+        files: 'src/command-aliases\.ts$'
         
       - id: test-hooks
         name: Test Hooks System
         entry: node tests/test-hooks.js
         language: system
         pass_filenames: false
-        files: 'src/hooks-system\.js$'
+        files: 'src/hooks-system\.ts$'
         
       - id: validate-all-profiles
         name: Validate all profile JSON files

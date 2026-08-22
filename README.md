@@ -1078,7 +1078,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 ### Code Quality
 
 This project uses automated quality checks:
-- **TypeScript typecheck** (tsc in `checkJs`/`noEmit` mode) over JS + TS source
+- **TypeScript typecheck** (tsc in `noEmit` mode; `checkJs` covers the plain-JS tests)
 - **Biome** for linting and code formatting
 - **Pre-commit hooks** (`npm run setup-hooks`) for automated validation
 - **`.env` tracking check** to prevent credential leaks
