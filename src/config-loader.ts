@@ -3,6 +3,7 @@ import TOML from '@iarna/toml';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import { logger } from './logger.ts';
 import { VALID_MODES } from './policy.ts';
 import {
@@ -388,6 +389,23 @@ export class ConfigLoader {
   }
 
   /**
+   * Resolve the MCP server entry point written into the Codex config.
+   * Source form (this module runs as src/config-loader.ts under type
+   * stripping): point at the dev-tree entry. Published form (compiled to
+   * <pkg>/dist/src/config-loader.js): point at the compiled entry inside the
+   * installed package, so npm-installed users get a path that exists.
+   */
+  private resolveCodexEntryPath(): string {
+    const here = fileURLToPath(import.meta.url);
+    if (here.endsWith('.js') && here.includes(`${path.sep}dist${path.sep}`)) {
+      // dist/src/config-loader.js → package root is two levels up.
+      const packageRoot = path.resolve(path.dirname(here), '..', '..');
+      return path.join(packageRoot, 'dist', 'src', 'index.js');
+    }
+    return path.join(process.cwd(), 'src', 'index.ts');
+  }
+
+  /**
    * Save configuration to Codex TOML format
    */
   async saveToCodexConfig(codexConfigPath = path.join(os.homedir(), '.codex', 'config.toml')) {
@@ -407,7 +425,7 @@ export class ConfigLoader {
 
     config.mcp_servers['ssh4agent'] = {
       command: 'node',
-      args: [path.join(process.cwd(), 'src', 'index.ts')],
+      args: [this.resolveCodexEntryPath()],
       env: {
         SSH_CONFIG_PATH: path.join(os.homedir(), '.codex', 'ssh-config.toml'),
       },
