@@ -3,7 +3,7 @@
 
 repository:
   name: mcp-ssh4agent
-  description: "MCP SSH Manager: Model Context Protocol server for SSH remote server management from Claude Code and OpenAI Codex"
+  description: "MCP SSH4Agent: Model Context Protocol server for SSH remote server management. Control SSH connections from any MCP-compatible AI agent (Claude Code, Codex, Cursor, Cline, etc.) - execute commands, transfer files, database operations, backups, health monitoring, and DevOps automation. NEW: Tool activation system reduces context usage by 92%"
   homepage: https://github.com/jaredshuai/mcp-ssh4agent
 
   topics:

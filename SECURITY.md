@@ -15,13 +15,12 @@ Please upgrade to the newest version before reporting an issue.
 **Please do not report security vulnerabilities through public GitHub issues,
 discussions, or pull requests.**
 
-Report privately through either channel:
+Report privately through:
 
 - **GitHub Private Vulnerability Reporting** (preferred) — open the
   [**Security** tab](https://github.com/jaredshuai/mcp-ssh4agent/security/advisories)
   of this repository and click **Report a vulnerability**. This keeps the report,
   discussion, and any resulting advisory private until a fix is released.
-- **Email** — <security@bvisible.ch> (or <jeremy@bvisible.ch>).
 
 Please include, as far as you can:
 

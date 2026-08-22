@@ -62,7 +62,6 @@
     "model-context-protocol",
     "remote-server",
     "ssh4agent",
-    "ssh manager mcp",
     "remote-ssh",
     "ssh-automation",
     "deployment",
@@ -83,7 +82,7 @@
     "ai-tools",
     "llm-tools"
   ],
-  "author": "MCP SSH Manager Contributors",
+  "author": "jaredshuai",
   "license": "MIT",
   "repository": {
     "type": "git",

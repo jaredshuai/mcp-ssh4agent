@@ -1,4 +1,4 @@
-# SSH Manager Profiles
+# SSH4Agent Profiles
 
 Profiles allow you to configure command aliases and hooks for specific project types.
 

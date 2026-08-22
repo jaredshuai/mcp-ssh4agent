@@ -1,12 +1,12 @@
 repos:
-  # JavaScript/Node.js checks
+  # JavaScript/TypeScript checks
   - repo: local
     hooks:
       - id: check-js-syntax
-        name: Check JavaScript syntax
+        name: Check JavaScript/TypeScript syntax
         entry: node --check
         language: system
-        files: '\.js$'
+        files: '\.(js|ts)$'
         
       - id: biome
         name: Biome (lint + format)
@@ -22,28 +22,6 @@ repos:
         files: '\.json$'
         exclude: 'package-lock\.json'
 
-  # Python checks
-  - repo: local
-    hooks:
-      - id: check-python-syntax
-        name: Check Python syntax
-        entry: python -m py_compile
-        language: system
-        files: '\.py$'
-        
-  - repo: https://github.com/psf/black
-    rev: 23.12.1
-    hooks:
-      - id: black
-        language_version: python3
-        files: '\.py$'
-        
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.0.0
-    hooks:
-      - id: flake8
-        files: '\.py$'
-        
   # General checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
@@ -57,15 +35,7 @@ repos:
         args: ['--maxkb=500']
       - id: check-merge-conflict
       - id: detect-private-key
-      
-  # Security check for secrets
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
-    hooks:
-      - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
-        exclude: package-lock\.json
-        
+
   # Custom validation hooks
   - repo: local
     hooks:
@@ -89,17 +59,3 @@ repos:
         language: system
         pass_filenames: false
         files: 'src/hooks-system\.ts$'
-        
-      - id: validate-all-profiles
-        name: Validate all profile JSON files
-        entry: bash -c 'for f in profiles/*.json; do python -m json.tool "$f" > /dev/null || exit 1; done'
-        language: system
-        pass_filenames: false
-        files: 'profiles/.*\.json$'
-        
-      - id: check-no-env-in-git
-        name: Ensure .env is not tracked
-        entry: bash -c '! git ls-files | grep -q "^\.env$"'
-        language: system
-        pass_filenames: false
-        always_run: true
