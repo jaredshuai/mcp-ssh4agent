@@ -42,6 +42,11 @@ export interface TunnelableConnection {
     event: 'tcp connection',
     listener: (info: TcpConnectionInfo, accept: () => any) => void
   ): unknown;
+  /** Detach a previously-registered listener (tunnel teardown). Optional. */
+  removeListener?(
+    event: 'tcp connection',
+    listener: (info: TcpConnectionInfo, accept: () => any) => void
+  ): unknown;
 }
 
 /**
@@ -101,6 +106,10 @@ class SSHTunnel {
   // Tunnel config shape varies by type (local/remote/dynamic).
   config: any;
   state: string;
+  // The 'tcp connection' handler registered on the connection (kept so
+  // close() can detach it — a stale handler on a shared SSH connection
+  // would fire on later, unrelated forwards).
+  tcpHandler: ((info: TcpConnectionInfo, accept: () => any) => void) | null;
   createdAt: Date;
   lastActivity: Date;
   connections: Set<net.Socket>;
@@ -121,6 +130,7 @@ class SSHTunnel {
     this.type = config.type;
     this.config = config;
     this.state = TUNNEL_STATES.CONNECTING;
+    this.tcpHandler = null;
     this.createdAt = new Date();
     this.lastActivity = new Date();
     this.connections = new Set();
@@ -264,8 +274,8 @@ class SSHTunnel {
     });
     await forwarded;
 
-    // Handle incoming connections from remote
-    this.ssh.on('tcp connection', (info, accept) => {
+    // Handle incoming connections from remote (handler stored for teardown)
+    this.tcpHandler = (info, accept) => {
       if (info.destPort !== remotePort) return;
 
       this.stats.connectionsTotal++;
@@ -309,7 +319,8 @@ class SSHTunnel {
 
       remoteSocket.on('close', cleanup);
       localSocket.on('close', cleanup);
-    });
+    };
+    this.ssh.on('tcp connection', this.tcpHandler);
 
     logger.info('Remote forwarding established', {
       local: `${localHost}:${localPort}`,
@@ -474,8 +485,18 @@ class SSHTunnel {
       this.server = null;
     }
 
-    // Cancel remote forwarding if needed
+    // Cancel remote forwarding if needed: detach the handler FIRST so a
+    // shared connection never dispatches later 'tcp connection' events to
+    // this dead tunnel, then unforward.
     if (this.type === TUNNEL_TYPES.REMOTE) {
+      if (this.tcpHandler) {
+        try {
+          this.ssh.removeListener?.('tcp connection', this.tcpHandler);
+        } catch {
+          /* optional capability */
+        }
+        this.tcpHandler = null;
+      }
       this.ssh.unforwardIn(this.config.remoteHost, this.config.remotePort);
     }
 

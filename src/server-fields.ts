@@ -233,15 +233,15 @@ function dotenvParse(text: string): Record<string, string> {
     if (eq <= 0) continue;
     const key = line.slice(0, eq).trim();
     let value = line.slice(eq + 1).trim();
-    // Strip ONE surrounding single- or double-quote pair; inline # after an
-    // unquoted value starts a comment (dotenv behavior).
-    if (
-      value.length >= 2 &&
-      ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'")))
-    ) {
-      value = value.slice(1, -1);
+    const quote = value[0];
+    if (quote === '"' || quote === "'") {
+      // Quoted: the value ends at the MATCHING close quote; anything after
+      // (a trailing `# comment`) is ignored — dotenv semantics. Keeping the
+      // old endsWith() check would leave the quotes in the parsed value.
+      const close = value.indexOf(quote, 1);
+      if (close > 0) value = value.slice(1, close);
     } else {
+      // Unquoted: ` #` starts an inline comment.
       const hash = value.indexOf(' #');
       if (hash !== -1) value = value.slice(0, hash).trimEnd();
     }

@@ -24,6 +24,7 @@ import {
 import {
   SSH4AGENT_ENV,
   get_server_config,
+  has_server_entry,
   add_server_to_env,
   remove_server_from_env,
   test_ssh_connection,
@@ -232,14 +233,17 @@ export async function cmd_server_remove(server?: string): Promise<void> {
     }
   }
 
+  // Raw-line check: names invalid in env-var syntax (e.g. `bad-name`) are
+  // listed by load_servers() but invisible to get_server_config — they must
+  // still be removable (remove-and-readd is the documented recovery).
   const host = get_server_config(server, 'HOST');
-  if (!host) {
+  if (!host && !has_server_entry(server)) {
     print_error(`Server '${server}' not found`);
     return;
   }
 
   process.stdout.write('\n');
-  print_warning(`This will remove server '${server}' (${host})`);
+  print_warning(`This will remove server '${server}' (${host ?? 'raw entry'})`);
   if (await prompt_yes_no('Are you sure?', 'n')) {
     remove_server_from_env(server);
   } else {

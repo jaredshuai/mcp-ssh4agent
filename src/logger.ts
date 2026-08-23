@@ -4,7 +4,7 @@
  */
 
 import fs from 'fs';
-import { stateFilePath, readStateFileText, writeStateFileText } from './state-files.ts';
+import { stateDir, stateFilePath, readStateFileText, writeStateFileText } from './state-files.ts';
 
 // Command history lives in the state dir (~/.ssh4agent) — the install
 // directory is read-only under a global npm install (issue #8).
@@ -61,8 +61,17 @@ class Logger {
     // Enable verbose mode from environment
     this.verbose = process.env.SSH_VERBOSE === 'true';
 
-    // Log file path (state dir unless overridden — see src/state-files.ts)
+    // Log file path (state dir unless overridden — see src/state-files.ts).
+    // Ensure the dir exists BEFORE the first append: logger.info() runs at
+    // startup, and appendFileSync to a missing dir would silently drop logs.
     this.logFile = process.env.SSH_LOG_FILE || stateFilePath('.ssh4agent.log');
+    if (!process.env.SSH_LOG_FILE) {
+      try {
+        fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+      } catch {
+        /* logging must never break startup */
+      }
+    }
 
     // Command history file
     this.historyFile = HISTORY_FILE_NAME;

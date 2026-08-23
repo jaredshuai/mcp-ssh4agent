@@ -247,7 +247,7 @@ export class ConnectionPool {
       }
       visited.add(current);
       const next = servers[current]?.proxyJump;
-      current = next ? resolveServer(next, servers)?.name.toLowerCase() ?? null : null;
+      current = next ? (resolveServer(next, servers)?.name.toLowerCase() ?? null) : null;
     }
 
     const jumpSSH = await this.get(jumpName);

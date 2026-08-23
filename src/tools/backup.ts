@@ -548,6 +548,9 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
               }).replace(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"') + '\n';
             break;
           case BACKUP_TYPES.MONGODB: {
+            if (!database) {
+              throw new Error('database parameter required for MongoDB backup');
+            }
             // mongodump --out is a DIRECTORY: dump to a runtime tmp dir via
             // the shared builder, then tar it into $BACKUP_FILE.
             const RUNTIME_TMP = '\x00MONGO_TMP';

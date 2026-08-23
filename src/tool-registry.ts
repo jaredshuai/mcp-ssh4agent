@@ -39,6 +39,11 @@ export interface ToolContext {
   getServerConfig: any;
   /** Kept for tools that own their policy evaluation (gate: 'manual'). */
   applyServerPolicy: any;
+  /**
+   * Success-path audit writer, for manual-gate tools that audit themselves
+   * (e.g. ssh_execute_group, per member). Funnel-gated tools never call it.
+   */
+  auditOk: any;
   cleanupOldConnections: any;
 }
 

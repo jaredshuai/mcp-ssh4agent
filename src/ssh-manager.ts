@@ -567,11 +567,18 @@ class SSHManager {
   }
 
   unforwardIn(remoteAddr: string, remotePort: number) {
+    // Teardown path: the connection may already be gone — nothing to unforward
+    // (and the ssh2 call would throw on a dead client).
+    if (!this.connected) return;
     return this.client.unforwardIn(remoteAddr, remotePort);
   }
 
   on(event: string, listener: (...args: any[]) => void) {
     return this.client.on(event, listener);
+  }
+
+  removeListener(event: string, listener: (...args: any[]) => void) {
+    return this.client.removeListener(event, listener);
   }
 
   async ping() {

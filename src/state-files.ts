@@ -73,8 +73,8 @@ export function readStateFileText(name: string): string | null {
     // Best-effort one-time migration; a read-only state dir still returns
     // the legacy content instead of failing.
     try {
-      fs.mkdirSync(stateDir(), { recursive: true });
-      fs.writeFileSync(target, content, 'utf8');
+      fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(target, content, { encoding: 'utf8', mode: 0o600 });
     } catch {
       /* migration is best-effort */
     }
@@ -92,8 +92,11 @@ export function readStateFileText(name: string): string | null {
  */
 export function writeStateFileText(name: string, content: string): boolean {
   try {
-    fs.mkdirSync(stateDir(), { recursive: true });
-    fs.writeFileSync(stateFilePath(name), content, 'utf8');
+    // 0700/0600: state files (command history especially) can embed
+    // credentials, so neither the dir nor the files may be readable by
+    // other local users.
+    fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(stateFilePath(name), content, { encoding: 'utf8', mode: 0o600 });
     return true;
   } catch (error) {
     console.error(`Error writing state file ${stateFilePath(name)}: ${error.message}`);

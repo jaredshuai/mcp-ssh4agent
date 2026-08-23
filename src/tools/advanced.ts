@@ -56,6 +56,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     loadServerConfig,
     resolveServer,
     applyServerPolicy,
+    auditOk,
     pool,
   } = ctx;
 
@@ -206,29 +207,54 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               const errorText = denied.content?.[0]?.text || 'Policy denied';
               return { stdout: '', stderr: errorText, code: -2, success: false };
             }
-            const ssh = await getConnection(serverName);
 
-            // Build full command with cwd if provided.
-            // Use platform-appropriate syntax: Set-Location for Windows (cmd.exe
-            // does not support `cd && `) vs cd && for Linux/macOS.
-            // resolveServer expands aliases so defaultDir/platform are honored
-            // even when the group member is addressed via alias.
-            const resolved = await resolveServer(serverName);
-            const serverConfig = resolved?.config;
-            const workingDir = cwd || serverConfig?.defaultDir;
-            const platform = serverConfig?.platform || 'linux';
-            const fullCommand = workingDir
-              ? buildCdPrefix(workingDir, platform) + command
-              : command;
+            // manual gate: audit each member's outcome here (denials are
+            // already audited by applyServerPolicy above).
+            try {
+              const ssh = await getConnection(serverName);
 
-            const execResult = await execCommandWithTimeout(ssh, fullCommand, { platform }, 30000);
+              // Build full command with cwd if provided.
+              // Use platform-appropriate syntax: Set-Location for Windows (cmd.exe
+              // does not support `cd && `) vs cd && for Linux/macOS.
+              // resolveServer expands aliases so defaultDir/platform are honored
+              // even when the group member is addressed via alias.
+              const resolved = await resolveServer(serverName);
+              const serverConfig = resolved?.config;
+              const workingDir = cwd || serverConfig?.defaultDir;
+              const platform = serverConfig?.platform || 'linux';
+              const fullCommand = workingDir
+                ? buildCdPrefix(workingDir, platform) + command
+                : command;
 
-            return {
-              stdout: execResult.stdout,
-              stderr: execResult.stderr,
-              code: execResult.code,
-              success: execResult.code === 0,
-            };
+              const execResult = await execCommandWithTimeout(
+                ssh,
+                fullCommand,
+                { platform },
+                30000
+              );
+
+              await auditOk(
+                serverName,
+                'ssh_execute_group',
+                { group: groupName, command, cwd },
+                { success: execResult.code === 0, code: execResult.code }
+              );
+
+              return {
+                stdout: execResult.stdout,
+                stderr: execResult.stderr,
+                code: execResult.code,
+                success: execResult.code === 0,
+              };
+            } catch (error) {
+              await auditOk(
+                serverName,
+                'ssh_execute_group',
+                { group: groupName, command, cwd },
+                { success: false, error: error.message }
+              );
+              throw error;
+            }
           },
           { strategy, delay, stopOnError }
         );

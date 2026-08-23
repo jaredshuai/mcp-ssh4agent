@@ -72,14 +72,16 @@ const DEFAULT_HOOKS = {
 export async function initializeHooks() {
   // Create hooks directory if it doesn't exist
   if (!fs.existsSync(HOOKS_DIR)) {
-    fs.mkdirSync(HOOKS_DIR, { recursive: true });
+    fs.mkdirSync(HOOKS_DIR, { recursive: true, mode: 0o700 });
   }
 
   // Merge profile hooks with defaults
   const mergedHooks = { ...DEFAULT_HOOKS, ...profileHooks };
 
-  // Create hooks configuration if it doesn't exist
-  if (!fs.existsSync(HOOKS_CONFIG_FILE)) {
+  // Read FIRST (reading migrates a legacy install-dir config into the state
+  // dir); only write defaults when nothing exists anywhere. Writing defaults
+  // before reading would strand a legacy custom config.
+  if (!readStateFileText(HOOKS_CONFIG_NAME)) {
     saveHooksConfig(mergedHooks);
   }
 

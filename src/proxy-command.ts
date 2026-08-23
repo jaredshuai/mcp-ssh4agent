@@ -39,6 +39,12 @@ export async function createProxyCommandSocket(
       process.stderr.write(`[proxy-command] ${chunk}`);
     });
 
+    // A ProxyCommand that closes its stdout is done proxying: destroy the
+    // socket so the half-open pair can't leave the child (and the SSH
+    // session waiting on it) running forever. (allowHalfOpen passed via
+    // Duplex.from source data is ignored by Node.)
+    child.stdout.once('end', () => socket.destroy());
+
     let settled = false;
     const settle = (fn, arg) => {
       if (settled) return;

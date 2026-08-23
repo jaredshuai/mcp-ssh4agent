@@ -64,7 +64,23 @@ export const SSH4AGENT_ALIASES: string = path.join(CONFIG_HOME, 'aliases.json');
 // legacy ~/.ssh-manager/.env → $PWD/.env → ~/.env → <package root>/.env →
 // default ~/.ssh4agent/.env. The CLI and the MCP entry point can no longer
 // disagree about which file holds the servers (issue #7).
-export const SSH4AGENT_ENV: string = resolveEnvFilePath();
+//
+// The chain documents the legacy dir as a READ-ONLY fallback, so when it is
+// the resolved file we migrate it into the config home once (copy, then use
+// the new path for reads AND writes) instead of mutating the legacy file.
+let resolvedEnvPath: string = resolveEnvFilePath();
+const homeEnvPath = path.join(SSH4AGENT_HOME, '.env');
+if (resolvedEnvPath !== homeEnvPath && path.dirname(resolvedEnvPath) === LEGACY_HOME) {
+  try {
+    fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
+    fs.copyFileSync(resolvedEnvPath, homeEnvPath);
+    print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
+    resolvedEnvPath = homeEnvPath;
+  } catch {
+    // Best-effort: keep resolving to the legacy file for reads.
+  }
+}
+export const SSH4AGENT_ENV: string = resolvedEnvPath;
 
 // ── init_config: ensure config dir + default config.json exist ──────────────
 export function init_config(): void {
@@ -157,7 +173,20 @@ export function get_server_config(server: string, field: string): string | null 
   if (!spec) return null;
   const value = record[spec.camel];
   if (value === undefined || value === null || value === '') return null;
+  // Pattern lists (ALLOW/DENY_PATTERNS) keep their .env `;`-separated wire
+  // format — String([]) would join with commas and break round-tripping.
+  if (Array.isArray(value)) return value.join(';');
   return String(value);
+}
+
+// Raw-line existence check that ALSO sees names the MCP loader silently
+// drops (e.g. `bad-name` — invalid in env-var syntax). load_servers() lists
+// those entries, so remove flows must recognize them too for the
+// documented remove-and-readd recovery to work.
+export function has_server_entry(server: string): boolean {
+  if (!fs.existsSync(SSH4AGENT_ENV)) return false;
+  const marker = `SSH_SERVER_${server.toUpperCase()}_HOST=`;
+  return readEnvLines().some((l) => l.startsWith(marker));
 }
 
 // The SSH dial coordinates every CLI ssh/rsync/tunnel invocation needs.
