@@ -159,7 +159,11 @@ async function safeAudit(
   try {
     await deps.auditOk(server, toolName, args, result);
   } catch (error) {
-    console.error(`audit write failed for ${toolName} on ${server}: ${error.message}`);
+    // Normalize the rejection: auditOk is a seam (tests/plugins may reject
+    // with non-Error values), and reading .message on one would throw HERE
+    // and defeat the swallow this wrapper exists for.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`audit write failed for ${toolName} on ${server}: ${message}`);
   }
 }
 

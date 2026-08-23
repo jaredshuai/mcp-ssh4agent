@@ -26,6 +26,7 @@ import {
   serverFromEnvRecord,
   serverFromTomlRecord,
   canonicalTomlKey,
+  parseEnvServersText,
 } from '../src/server-fields.ts';
 import { ConfigLoader } from '../src/config-loader.ts';
 
@@ -126,6 +127,32 @@ test('pattern lists join with ; inside quotes', () => {
     serverEnvLine('S', spec('allowPatterns'), ['^ls', '^cat']),
     'SSH_SERVER_S_ALLOW_PATTERNS="^ls;^cat"'
   );
+});
+
+// The CLI read path (get_server_config → parseEnvServersText) does NOT use
+// the dotenv library — these tests lock its local parser to the same
+// semantics for the writer's unescaped-interior-quote format (PR #9).
+test('parseEnvServersText keeps interior quotes in fully-quoted values', () => {
+  const lines = [
+    serverEnvLine('Q', spec('host'), '203.0.113.10'),
+    serverEnvLine('Q', spec('password'), 'Jx"ds$2016'),
+    serverEnvLine('Q', spec('sudoPassword'), "pa';ss"),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('q');
+  assert.ok(record, 'server must parse from the HOST anchor');
+  assert.equal(record.host, '203.0.113.10');
+  assert.equal(record.password, 'Jx"ds$2016', 'double quote inside a password must survive');
+  assert.equal(record.sudoPassword, "pa';ss", 'apostrophe inside a password must survive');
+});
+
+test('parseEnvServersText stops at the first close quote before trailing content', () => {
+  const lines = [
+    serverEnvLine('C', spec('host'), '198.51.100.2'),
+    'SSH_SERVER_C_DESCRIPTION="a description" # trailing comment',
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('c');
+  assert.ok(record);
+  assert.equal(record.description, 'a description', 'comment after the close quote is ignored');
 });
 
 // ── coercion ─────────────────────────────────────────────────────────────────

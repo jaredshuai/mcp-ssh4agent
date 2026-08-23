@@ -158,6 +158,28 @@ async function main() {
     ok('auditOk throwing is swallowed: outcome and original error preserved');
   }
 
+  // ── a NON-Error audit rejection is swallowed too (PR #9) ──────────────
+  {
+    const deps = {
+      applyServerPolicy: async () => null,
+      auditOk: async () => {
+        // Reading `.message` on this rejection would TypeError inside
+        // safeAudit and mask the tool result — the exact case the
+        // normalization guards.
+        throw null;
+      },
+    };
+    const handler = wrapWithPolicy(
+      'ssh_upload',
+      async () => ({ content: [], marker: 'ok' }),
+      {},
+      deps
+    );
+    const resp = await handler({ server: 'prod' });
+    assert.strictEqual(resp.marker, 'ok', 'tool result preserved on non-Error rejection');
+    ok('auditOk rejecting with a non-Error value is still swallowed');
+  }
+
   // ── commandArg + expandAlias ───────────────────────────────────────────
   {
     const { calls, deps } = makeDeps();

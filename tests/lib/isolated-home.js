@@ -13,3 +13,14 @@ import path from 'node:path';
 
 export const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh4agent-test-'));
 process.env.SSH4AGENT_HOME = TEST_HOME;
+
+// Remove the throwaway home when the test process exits — without this,
+// every run leaks an ssh4agent-test-* dir in the OS temp dir (the module
+// is evaluated once per process, so the handler is registered once).
+process.on('exit', () => {
+  try {
+    fs.rmSync(TEST_HOME, { recursive: true, force: true });
+  } catch {
+    /* best-effort */
+  }
+});

@@ -235,11 +235,20 @@ function dotenvParse(text: string): Record<string, string> {
     let value = line.slice(eq + 1).trim();
     const quote = value[0];
     if (quote === '"' || quote === "'") {
-      // Quoted: the value ends at the MATCHING close quote; anything after
-      // (a trailing `# comment`) is ignored — dotenv semantics. Keeping the
-      // old endsWith() check would leave the quotes in the parsed value.
-      const close = value.indexOf(quote, 1);
-      if (close > 0) value = value.slice(1, close);
+      if (value.length >= 2 && value.endsWith(quote)) {
+        // Fully quoted: strip the OUTER pair — interior quotes are data.
+        // serverEnvLine does not escape them, so a password like a"b is
+        // written as "a"b" and must round-trip; stopping at the first
+        // close quote would silently truncate the credential (PR #9
+        // review). Greedy strip matches dotenv's own regex semantics.
+        value = value.slice(1, -1);
+      } else {
+        // Quote with trailing content (`"a" # comment`): the value ends
+        // at the FIRST close quote; the rest is ignored — dotenv
+        // semantics.
+        const close = value.indexOf(quote, 1);
+        if (close > 0) value = value.slice(1, close);
+      }
     } else {
       // Unquoted: ` #` starts an inline comment.
       const hash = value.indexOf(' #');

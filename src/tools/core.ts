@@ -244,6 +244,7 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
               text: `❌ Download error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
