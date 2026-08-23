@@ -11,6 +11,49 @@ import { logger } from './logger.ts';
 const tunnels = new Map();
 
 /**
+ * The seam between SSHTunnel and whatever SSH connection drives it.
+ *
+ * Signatures follow ssh2's Client (`forwardIn` / `unforwardIn` /
+ * 'tcp connection'), not invented: before this interface existed the field
+ * was `any`, so the remote-tunnel path called `forwardIn` on the SSHManager
+ * wrapper — which never implemented it — and crashed at runtime with
+ * `TypeError: forwardIn is not a function` (issue #2).
+ *
+ * Two implementations make the seam real: SSHManager (forwards to its
+ * internal ssh2 Client) and the in-memory fake used by
+ * tests/test-tunnel-remote.js.
+ */
+/** Payload of an incoming remote-forwarded connection. Not exported:
+ * tunnel-manager-internal (knip). */
+interface TcpConnectionInfo {
+  destIP: string;
+  destPort: number;
+  srcIP: string;
+  srcPort: number;
+}
+
+export interface TunnelableConnection {
+  /** Local/dynamic forwarding: open a channel to dstAddr:dstPort. */
+  forwardOut(srcAddr: string, srcPort: number, dstAddr: string, dstPort: number): Promise<any>;
+  /** Remote forwarding: ask the server to listen on remoteAddr:remotePort. */
+  forwardIn(remoteAddr: string, remotePort: number, callback?: (err?: Error) => void): unknown;
+  /** Remove a remote forwarding request. */
+  unforwardIn(remoteAddr: string, remotePort: number): unknown;
+  /** Incoming remote-forwarded connections. */
+  on(
+    event: 'tcp connection',
+    listener: (info: TcpConnectionInfo, accept: () => any) => void
+  ): unknown;
+  /** Detach a previously-registered listener (tunnel teardown /
+   * re-registration on reconnect). MANDATORY: an adapter without it cannot
+   * stop a closed tunnel from receiving later 'tcp connection' events. */
+  removeListener(
+    event: 'tcp connection',
+    listener: (info: TcpConnectionInfo, accept: () => any) => void
+  ): unknown;
+}
+
+/**
  * Bind a local server, rejecting when the bind fails.
  *
  * `net.Server#listen` does NOT pass an error to its callback — the callback
@@ -61,12 +104,16 @@ const TUNNEL_STATES = {
 class SSHTunnel {
   id: string;
   serverName: string;
-  // ssh2 Client; the library ships no bundled types, keep it loose.
-  ssh: any;
+  // Anything that can drive tunnels: SSHManager wrapping ssh2, or the test fake.
+  ssh: TunnelableConnection;
   type: string;
   // Tunnel config shape varies by type (local/remote/dynamic).
   config: any;
   state: string;
+  // The 'tcp connection' handler registered on the connection (kept so
+  // close() can detach it — a stale handler on a shared SSH connection
+  // would fire on later, unrelated forwards).
+  tcpHandler: ((info: TcpConnectionInfo, accept: () => any) => void) | null;
   createdAt: Date;
   lastActivity: Date;
   connections: Set<net.Socket>;
@@ -87,6 +134,7 @@ class SSHTunnel {
     this.type = config.type;
     this.config = config;
     this.state = TUNNEL_STATES.CONNECTING;
+    this.tcpHandler = null;
     this.createdAt = new Date();
     this.lastActivity = new Date();
     this.connections = new Set();
@@ -184,8 +232,14 @@ class SSHTunnel {
           this.lastActivity = new Date();
         });
 
-        // Handle disconnection
+        // Handle disconnection — idempotent: error-then-close fires this
+        // up to four times (close+error on BOTH sockets); without the
+        // guard, connectionsActive undercounts or goes negative
+        // (PR #9 r6).
+        let cleaned = false;
         const cleanup = () => {
+          if (cleaned) return;
+          cleaned = true;
           this.stats.connectionsActive--;
           this.connections.delete(localSocket);
           localSocket.destroy();
@@ -202,6 +256,9 @@ class SSHTunnel {
           tunnel: this.id,
           error: error.message,
         });
+        // forwardOut failed: the increment above must not leak.
+        this.stats.connectionsActive--;
+        this.connections.delete(localSocket);
         localSocket.destroy();
       }
     });
@@ -230,8 +287,16 @@ class SSHTunnel {
     });
     await forwarded;
 
-    // Handle incoming connections from remote
-    this.ssh.on('tcp connection', (info, accept) => {
+    // Handle incoming connections from remote (handler stored for teardown).
+    // A reconnect runs start() → here again on the SAME emitter: detach the
+    // handler a previous run registered first, or listeners accumulate and
+    // every forwarded connection is dispatched (and accept()ed) once per
+    // stale handler — close() could only ever detach the latest one
+    // (PR #9 review).
+    if (this.tcpHandler) {
+      this.ssh.removeListener('tcp connection', this.tcpHandler);
+    }
+    this.tcpHandler = (info, accept) => {
       if (info.destPort !== remotePort) return;
 
       this.stats.connectionsTotal++;
@@ -257,9 +322,21 @@ class SSHTunnel {
         });
       });
 
-      // Handle errors and cleanup
+      // Track both sockets so close() can terminate ESTABLISHED remote
+      // forwards too — without this, closing the tunnel only cancelled
+      // future forwards while live channels kept proxying traffic
+      // (PR #9 review, round 4).
+      this.connections.add(remoteSocket);
+      this.connections.add(localSocket);
+
+      // Handle errors and cleanup — idempotent: both 'close' events fire.
+      let cleaned = false;
       const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         this.stats.connectionsActive--;
+        this.connections.delete(remoteSocket);
+        this.connections.delete(localSocket);
         remoteSocket.destroy();
         localSocket.destroy();
       };
@@ -275,7 +352,8 @@ class SSHTunnel {
 
       remoteSocket.on('close', cleanup);
       localSocket.on('close', cleanup);
-    });
+    };
+    this.ssh.on('tcp connection', this.tcpHandler);
 
     logger.info('Remote forwarding established', {
       local: `${localHost}:${localPort}`,
@@ -375,18 +453,23 @@ class SSHTunnel {
         }
       });
 
-      // Cleanup on disconnect
-      localSocket.on('close', () => {
+      // Cleanup on disconnect — idempotent: an error emits 'error' AND
+      // 'close', and both handlers decremented, driving connectionsActive
+      // negative over time (PR #9 r6).
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         this.stats.connectionsActive--;
         this.connections.delete(localSocket);
         if (stream) stream.destroy();
-      });
+      };
+
+      localSocket.on('close', cleanup);
 
       localSocket.on('error', () => {
         this.stats.errors++;
-        this.stats.connectionsActive--;
-        this.connections.delete(localSocket);
-        if (stream) stream.destroy();
+        cleanup();
       });
     });
 
@@ -416,7 +499,10 @@ class SSHTunnel {
       stats: this.stats,
       created: this.createdAt,
       lastActivity: this.lastActivity,
-      activeConnections: this.connections.size,
+      // Logical connection count (one forwarded connection = 1). The
+      // socket set is for teardown only and holds BOTH ends of each
+      // connection — reporting its size double-counted (PR #9 r5).
+      activeConnections: this.stats.connectionsActive,
     };
   }
 
@@ -440,8 +526,16 @@ class SSHTunnel {
       this.server = null;
     }
 
-    // Cancel remote forwarding if needed
+    // Cancel remote forwarding if needed: detach the handler FIRST so a
+    // shared connection never dispatches later 'tcp connection' events to
+    // this dead tunnel, then unforward. removeListener is mandatory on
+    // TunnelableConnection — a silent skip would leave a closed tunnel
+    // live on the emitter.
     if (this.type === TUNNEL_TYPES.REMOTE) {
+      if (this.tcpHandler) {
+        this.ssh.removeListener('tcp connection', this.tcpHandler);
+        this.tcpHandler = null;
+      }
       this.ssh.unforwardIn(this.config.remoteHost, this.config.remotePort);
     }
 
@@ -486,7 +580,7 @@ class SSHTunnel {
 /**
  * Create a new SSH tunnel
  */
-export async function createTunnel(serverName, ssh, config) {
+export async function createTunnel(serverName: string, ssh: TunnelableConnection, config: any) {
   const tunnelId = `tunnel_${Date.now()}_${randomUUID().substring(0, 8)}`;
 
   // Validate config

@@ -15,24 +15,162 @@
  * args (mirrors the original registerToolConditional JSDoc that lived in
  * src/index.js before the split). The infrastructure members are loosely
  * typed; their definition sites in src/index.ts carry the real types.
+ *
+ * Pooling state is reachable ONLY through the ConnectionPool instance
+ * (issue #3) — no raw Maps leak through this interface anymore. Tools take
+ * just the members they use; nobody destructures a 15-line checklist.
  */
 export interface ToolContext {
   /** Register a tool unless disabled in tool config. */
-  register: (toolName: string, schema: any, handler: (args: any, extra?: any) => any) => void;
+  register: (
+    toolName: string,
+    schema: any,
+    handler: (args: any, extra?: any) => any,
+    policy?: ToolPolicy
+  ) => void;
+  /** The connection pool: get/close/invalidate/status/sweep/... (src/connection-pool.ts). */
+  pool: any;
   getConnection: any;
   closeConnection: any;
   execCommandWithTimeout: any;
   loadServerConfig: any;
+  /** Single resolution path: name-or-alias → { name, config } (alias expanded). */
+  resolveServer: any;
   getServerConfig: any;
+  /** Kept for tools that own their policy evaluation (gate: 'manual'). */
   applyServerPolicy: any;
+  /**
+   * Success-path audit writer, for manual-gate tools that audit themselves
+   * (e.g. ssh_execute_group, per member). Funnel-gated tools never call it.
+   */
   auditOk: any;
-  isConnectionValid: any;
   cleanupOldConnections: any;
-  connections: any;
-  connectionTimestamps: any;
-  keepaliveIntervals: any;
-  CONNECTION_TIMEOUT: number;
-  KEEPALIVE_INTERVAL: number;
+}
+
+/**
+ * Policy declaration for a tool registration (issue #6).
+ *
+ * The registration funnel enforces the per-server security policy and writes
+ * the audit trail from ONE place, based on this declaration — a mutating tool
+ * can no longer ship without a gate, and "intentionally exempt" is visibly
+ * different from "forgot".
+ *
+ *  - gate 'server' (default): evaluate the policy for `args.server` (or the
+ *    value returned by `serverFrom`) before the handler runs, then audit the
+ *    outcome on both the success and failure paths.
+ *  - gate 'exempt': explicitly no policy, no funnel audit (e.g. ssh_download,
+ *    which must stay usable on readonly servers).
+ *  - gate 'manual': the handler owns policy/audit itself (e.g. ssh_execute_group
+ *    evaluates each group member independently, best-effort).
+ *
+ *  - commandArg: name of the argument carrying the command to match against
+ *    readonly/restricted patterns (command-bearing tools).
+ *  - expandAlias: run the command through expandCommandAlias before matching,
+ *    so a destructive command cannot hide behind an alias (ssh_execute).
+ *  - when: restrict the gate to matching invocations (e.g. only the `kill`
+ *    action of ssh_process_manager); non-matching calls skip the policy
+ *    evaluation but are still audited.
+ */
+export interface ToolPolicy {
+  gate?: 'server' | 'exempt' | 'manual';
+  commandArg?: string;
+  expandAlias?: boolean;
+  when?: (args: any) => boolean;
+  /** Derive the policy subject when it is not `args.server` (e.g. a session's server). */
+  serverFrom?: (args: any) => any;
+}
+
+/** Dependencies the policy funnel needs, injected by the entry point.
+ * Not exported: funnel-internal contract (knip). */
+interface PolicyFunnelDeps {
+  applyServerPolicy: (server: string, tool: string, args: any, command?: string) => Promise<any>;
+  auditOk: (server: string, tool: string, args: any, result: any) => Promise<void>;
+  expandCommandAlias?: (command: string) => string;
+}
+
+/**
+ * Wrap a tool handler with the declared policy gate and audit trail.
+ *
+ * Pure orchestration — no imports from the entry point, fully unit-testable
+ * via injected deps. Returns the original handler untouched for exempt/manual
+ * gates so their behavior is explicitly owned by the tool itself.
+ */
+export function wrapWithPolicy(
+  toolName: string,
+  handler: (args: any, extra?: any) => any,
+  policyDecl: ToolPolicy | undefined,
+  deps: PolicyFunnelDeps
+): (args: any, extra?: any) => any {
+  const gate = policyDecl?.gate ?? 'server';
+  if (gate === 'exempt' || gate === 'manual') return handler;
+
+  return async (args, extra) => {
+    const server = policyDecl?.serverFrom ? await policyDecl.serverFrom(args) : args?.server;
+    const gateApplies = !policyDecl?.when || policyDecl.when(args);
+
+    if (server && gateApplies) {
+      let command: string | undefined;
+      if (policyDecl?.commandArg && typeof args?.[policyDecl.commandArg] === 'string') {
+        command = args[policyDecl.commandArg];
+        if (policyDecl.expandAlias && typeof deps.expandCommandAlias === 'function') {
+          command = deps.expandCommandAlias(command);
+        }
+      }
+      const denied = await deps.applyServerPolicy(server, toolName, args, command);
+      if (denied) return denied;
+    }
+
+    try {
+      const response = await handler(args, extra);
+      if (server) {
+        // Failure is derived from BOTH signals: the handler's isError flag
+        // (error responses) and a nonzero exitCode (command-bearing tools
+        // report the command's exit status) — either means the audit entry
+        // must not claim success.
+        const failed =
+          response?.isError === true ||
+          (typeof response?.exitCode === 'number' && response.exitCode !== 0);
+        await safeAudit(deps, server, toolName, args, {
+          success: !failed,
+          code: response?.exitCode,
+        });
+      }
+      return response;
+    } catch (error) {
+      if (server) {
+        // Same normalization as safeAudit: handlers are seams that may
+        // reject with non-Error values — reading .message on one would
+        // throw HERE, mask the handler's original error and skip the
+        // failure audit entry entirely.
+        const message = error instanceof Error ? error.message : String(error);
+        await safeAudit(deps, server, toolName, args, { success: false, error: message });
+      }
+      throw error;
+    }
+  };
+}
+
+/**
+ * Auditing must never alter the tool's outcome: if the audit sink itself
+ * throws (unwritable path, full disk), log it and swallow it — otherwise it
+ * would mask the handler's real result or replace its original error.
+ */
+async function safeAudit(
+  deps: PolicyFunnelDeps,
+  server: string,
+  toolName: string,
+  args: any,
+  result: { success: boolean; code?: number; error?: string }
+): Promise<void> {
+  try {
+    await deps.auditOk(server, toolName, args, result);
+  } catch (error) {
+    // Normalize the rejection: auditOk is a seam (tests/plugins may reject
+    // with non-Error values), and reading .message on one would throw HERE
+    // and defeat the swallow this wrapper exists for.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`audit write failed for ${toolName} on ${server}: ${message}`);
+  }
 }
 
 /**

@@ -6,7 +6,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { print_error, print_info } from './colors.ts';
-import { get_server_config } from './config.ts';
+import { resolveServerToSshArgs } from './config.ts';
 
 export interface SshProcess {
   pid: number | null;
@@ -74,21 +74,18 @@ export function listSshProcesses(filter: 'tunnels' | 'all'): SshProcess[] {
 // (stdio inherit). Returns true when ssh exited cleanly. Shared by `cmd_ssh`
 // (quick connect) and `session start`.
 export function spawnInteractiveSsh(server: string): boolean {
-  const host = get_server_config(server, 'HOST');
-  const user = get_server_config(server, 'USER');
-  let port = get_server_config(server, 'PORT');
-  const keypath = get_server_config(server, 'KEYPATH');
-  port = port || '22';
-
-  if (!host || !user) {
+  const target = resolveServerToSshArgs(server);
+  if (!target) {
     print_error(`Server '${server}' not found`);
     return false;
   }
 
-  const sshArgs: string[] = ['-p', port];
-  if (keypath) sshArgs.push('-i', keypath);
+  const sshArgs: string[] = ['-p', target.port];
+  if (target.keypath) sshArgs.push('-i', target.keypath);
 
   print_info(`Connecting to ${server}...`);
-  const r = spawnSync('ssh', [...sshArgs, `${user}@${host}`], { stdio: 'inherit' });
+  const r = spawnSync('ssh', [...sshArgs, `${target.user}@${target.host}`], {
+    stdio: 'inherit',
+  });
   return r.status === 0;
 }

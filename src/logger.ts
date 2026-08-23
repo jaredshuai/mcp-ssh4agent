@@ -4,11 +4,18 @@
  */
 
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import {
+  stateDir,
+  stateFilePath,
+  legacyStateFilePath,
+  tightenPermissions,
+  readStateFileText,
+  writeStateFileText,
+} from './state-files.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Command history lives in the state dir (~/.ssh4agent) — the install
+// directory is read-only under a global npm install (issue #8).
+const HISTORY_FILE_NAME = '.ssh-command-history.json';
 
 // Log levels (module-internal since debug/test-logger.js was removed).
 const LOG_LEVELS = {
@@ -61,23 +68,47 @@ class Logger {
     // Enable verbose mode from environment
     this.verbose = process.env.SSH_VERBOSE === 'true';
 
-    // Log file path
-    this.logFile = process.env.SSH_LOG_FILE || path.join(__dirname, '..', '.ssh4agent.log');
+    // Log file path (state dir unless overridden — see src/state-files.ts).
+    // Ensure the dir exists BEFORE the first append: logger.info() runs at
+    // startup, and appendFileSync to a missing dir would silently drop logs.
+    this.logFile = process.env.SSH_LOG_FILE || stateFilePath('.ssh4agent.log');
+    if (!process.env.SSH_LOG_FILE) {
+      try {
+        fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+        // One-time migration: the log is append-only and never went through
+        // readStateFileText, so a legacy install-root .ssh4agent.log would
+        // otherwise be stranded while new entries land in the state dir —
+        // operational history split across two files (PR #9 review, r4).
+        // copyFileSync inherits the SOURCE's permission bits — typically
+        // 0644 for a legacy install-root file — so re-tighten like every
+        // other migration path (verbose logs embed full commands, r5).
+        const legacyLog = legacyStateFilePath('.ssh4agent.log');
+        if (fs.existsSync(legacyLog) && !fs.existsSync(this.logFile)) {
+          fs.copyFileSync(legacyLog, this.logFile);
+        }
+        if (fs.existsSync(this.logFile)) {
+          tightenPermissions(this.logFile);
+        }
+      } catch {
+        /* logging must never break startup */
+      }
+    }
 
     // Command history file
-    this.historyFile = path.join(__dirname, '..', '.ssh-command-history.json');
+    this.historyFile = HISTORY_FILE_NAME;
 
     // Initialize command history
     this.commandHistory = this.loadCommandHistory();
   }
 
   /**
-   * Load command history from file
+   * Load command history from the state file (~/.ssh4agent, with one-time
+   * migration from the legacy install directory — src/state-files.ts)
    */
   loadCommandHistory(): HistoryEntry[] {
     try {
-      if (fs.existsSync(this.historyFile)) {
-        const data = fs.readFileSync(this.historyFile, 'utf8');
+      const data = readStateFileText(this.historyFile);
+      if (data) {
         // External JSON written by saveCommandToHistory; trust its shape.
         return JSON.parse(data) as HistoryEntry[];
       }
@@ -111,11 +142,7 @@ class Logger {
       this.commandHistory = this.commandHistory.slice(-1000);
     }
 
-    try {
-      fs.writeFileSync(this.historyFile, JSON.stringify(this.commandHistory, null, 2));
-    } catch (error) {
-      // Ignore write errors
-    }
+    writeStateFileText(this.historyFile, JSON.stringify(this.commandHistory, null, 2));
   }
 
   /**
@@ -298,7 +325,7 @@ class Logger {
   clear() {
     this.commandHistory = [];
     try {
-      fs.writeFileSync(this.historyFile, '[]');
+      writeStateFileText(this.historyFile, '[]');
       fs.writeFileSync(this.logFile, '');
       this.info('Logs and history cleared');
     } catch (error) {

@@ -1,7 +1,12 @@
 /**
  * Database Manager for MCP SSH4Agent
  * Provides database operations for MySQL, PostgreSQL, and MongoDB
+ *
+ * Dump commands live in src/dump-command-builder.ts (single implementation
+ * shared with the backup layer — issue #5).
  */
+
+import { shSingleQuote } from './shell-quote.ts';
 
 // Supported database types
 export const DB_TYPES = {
@@ -9,10 +14,6 @@ export const DB_TYPES = {
   POSTGRESQL: 'postgresql',
   MONGODB: 'mongodb',
 };
-
-// A single quote character as a constant, so shellQuote()'s escaping stays
-// readable under the repo's single-quote lint style.
-const SQ = "'";
 
 /**
  * Quote a value for safe inclusion as a single POSIX shell word.
@@ -25,130 +26,14 @@ const SQ = "'";
  * connection fields all arrive from tool arguments (issue #48 — command
  * injection via ssh_db_list / ssh_db_dump / ssh_db_import builder arguments).
  * Numbers are coerced to string; null/undefined become an empty quoted word.
+ *
+ * Implementation delegates to shSingleQuote (src/shell-quote.ts) — the single
+ * source of shell-quoting truth — keeping only the empty-word null handling
+ * this module's callers rely on.
  */
 export function shellQuote(value) {
-  if (value === null || value === undefined) return SQ + SQ;
-  // Replace every ' with '\'' (close quote, escaped quote, reopen), then wrap.
-  return SQ + String(value).replace(/'/g, SQ + '\\' + SQ + SQ) + SQ;
-}
-
-/**
- * Build MySQL dump command
- */
-export function buildMySQLDumpCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 3306,
-    outputFile,
-    compress = true,
-    tables = null,
-  } = options;
-
-  let command = 'mysqldump';
-
-  if (user) command += ` -u${shellQuote(user)}`;
-  if (password) command += ` -p${shellQuote(password)}`;
-  if (host) command += ` -h ${shellQuote(host)}`;
-  if (port) command += ` -P ${shellQuote(port)}`;
-
-  command += ' --single-transaction --routines --triggers';
-  command += ` ${shellQuote(database)}`;
-
-  if (tables && Array.isArray(tables)) {
-    command += ` ${tables.map(shellQuote).join(' ')}`;
-  }
-
-  if (compress) {
-    command += ` | gzip > ${shellQuote(outputFile)}`;
-  } else {
-    command += ` > ${shellQuote(outputFile)}`;
-  }
-
-  return command;
-}
-
-/**
- * Build PostgreSQL dump command
- */
-export function buildPostgreSQLDumpCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 5432,
-    outputFile,
-    compress = true,
-    tables = null,
-  } = options;
-
-  let command = '';
-  if (password) {
-    command = `PGPASSWORD=${shellQuote(password)} `;
-  }
-
-  command += 'pg_dump';
-  if (user) command += ` -U ${shellQuote(user)}`;
-  if (host) command += ` -h ${shellQuote(host)}`;
-  if (port) command += ` -p ${shellQuote(port)}`;
-  command += ' --format=custom --clean --if-exists';
-
-  if (tables && Array.isArray(tables)) {
-    for (const table of tables) {
-      command += ` -t ${shellQuote(table)}`;
-    }
-  }
-
-  command += ` ${shellQuote(database)}`;
-
-  if (compress) {
-    command += ` | gzip > ${shellQuote(outputFile)}`;
-  } else {
-    command += ` > ${shellQuote(outputFile)}`;
-  }
-
-  return command;
-}
-
-/**
- * Build MongoDB dump command
- */
-export function buildMongoDBDumpCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 27017,
-    outputDir,
-    compress = true,
-    collections = null,
-  } = options;
-
-  let command = 'mongodump';
-  if (host) command += ` --host ${shellQuote(host)}`;
-  if (port) command += ` --port ${shellQuote(port)}`;
-  if (user) command += ` --username ${shellQuote(user)}`;
-  if (password) command += ` --password ${shellQuote(password)}`;
-  if (database) command += ` --db ${shellQuote(database)}`;
-
-  if (collections && Array.isArray(collections)) {
-    for (const collection of collections) {
-      command += ` --collection ${shellQuote(collection)}`;
-    }
-  }
-
-  command += ` --out ${shellQuote(outputDir)}`;
-
-  if (compress) {
-    command += ` && tar -czf ${shellQuote(outputDir + '.tar.gz')} -C "$(dirname ${shellQuote(outputDir)})" "$(basename ${shellQuote(outputDir)})"`;
-    command += ` && rm -rf ${shellQuote(outputDir)}`;
-  }
-
-  return command;
+  if (value === null || value === undefined) return "''";
+  return shSingleQuote(value);
 }
 
 /**

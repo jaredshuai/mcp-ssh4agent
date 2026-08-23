@@ -4,6 +4,12 @@ import os from 'os';
 import { isHostKnown, addHostKey } from './ssh-key-manager.ts';
 import { logger } from './logger.ts';
 import { buildCdPrefix } from './shell-quote.ts';
+// Type-only (erased at runtime — no import cycle): the tunnel seam this
+// class implements. `implements` makes the issue-#2 contract machine-
+// checked: if TunnelableConnection grows a method this class lacks,
+// typecheck fails instead of remote tunnels crashing at runtime (knip
+// also requires the import to be real).
+import type { TunnelableConnection } from './tunnel-manager.ts';
 
 // Validate liveness-probe output across shells (bash, cmd.exe, PowerShell).
 // Normalize CRLF, stray quotes/backslashes and case before matching so quoted
@@ -21,7 +27,7 @@ export function isPingAlive(stdout) {
   return normalized.includes('ping');
 }
 
-class SSHManager {
+class SSHManager implements TunnelableConnection {
   // Resolved server config plus manager-specific flags; shapes vary by source.
   config: any;
   client: Client;
@@ -552,6 +558,33 @@ class SSHManager {
         else resolve(stream);
       });
     });
+  }
+
+  // Remote-forwarding surface required by TunnelableConnection
+  // (src/tunnel-manager.ts). These forward verbatim to the ssh2 Client —
+  // before they existed, remote tunnels crashed with
+  // `TypeError: forwardIn is not a function` (issue #2).
+
+  forwardIn(remoteAddr: string, remotePort: number, callback?: (err?: Error) => void) {
+    if (!this.connected) {
+      throw new Error('Not connected to SSH server');
+    }
+    return this.client.forwardIn(remoteAddr, remotePort, callback);
+  }
+
+  unforwardIn(remoteAddr: string, remotePort: number) {
+    // Teardown path: the connection may already be gone — nothing to unforward
+    // (and the ssh2 call would throw on a dead client).
+    if (!this.connected) return;
+    return this.client.unforwardIn(remoteAddr, remotePort);
+  }
+
+  on(event: string, listener: (...args: any[]) => void) {
+    return this.client.on(event, listener);
+  }
+
+  removeListener(event: string, listener: (...args: any[]) => void) {
+    return this.client.removeListener(event, listener);
   }
 
   async ping() {

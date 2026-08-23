@@ -263,6 +263,8 @@ Prefer `git commit -F <msgfile>` over inline here-strings — multi-line `-m` ar
 
 GitHub issues (via `gh`). See `docs/agents/issue-tracker.md`.
 
+**Upstream is off-limits**: this repo has an `upstream` remote (`bvisible/mcp-ssh-manager`). NEVER view, fetch, or reference upstream issues, PRs, code, releases, or any other upstream information (e.g. via `gh` without `-R`, `gh api`, or web fetch) unless the user explicitly authorizes it in the current session. Issue/PR operations always target `origin` (`jaredshuai/mcp-ssh4agent`) — pass `-R jaredshuai/mcp-ssh4agent` to `gh` when in doubt, because bare `gh` may resolve to the upstream repo.
+
 ### Triage labels
 
 Default five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.

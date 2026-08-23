@@ -18,7 +18,10 @@ const OUTPUT_LIMITS = {
     : 5000,
 };
 
-// Timeout configuration
+// Timeout configuration — command execution only. Connection lifetime and
+// keepalive cadence live in src/connection-pool.ts (single source of truth;
+// the duplicated CONNECTION_TIMEOUT/KEEPALIVE_INTERVAL entries here were
+// dead and drifted: 30min/1min vs the pool's 30min/5min).
 export const TIMEOUTS = {
   // Default command execution timeout (milliseconds)
   DEFAULT_COMMAND_TIMEOUT: process.env.MCP_SSH_DEFAULT_TIMEOUT
@@ -29,16 +32,6 @@ export const TIMEOUTS = {
   MAX_COMMAND_TIMEOUT: process.env.MCP_SSH_MAX_TIMEOUT
     ? parseInt(process.env.MCP_SSH_MAX_TIMEOUT)
     : 300000, // 5 minutes
-
-  // Connection timeout (milliseconds)
-  CONNECTION_TIMEOUT: process.env.MCP_SSH_CONNECTION_TIMEOUT
-    ? parseInt(process.env.MCP_SSH_CONNECTION_TIMEOUT)
-    : 1800000, // 30 minutes
-
-  // Keepalive interval (milliseconds)
-  KEEPALIVE_INTERVAL: process.env.MCP_SSH_KEEPALIVE_INTERVAL
-    ? parseInt(process.env.MCP_SSH_KEEPALIVE_INTERVAL)
-    : 60000, // 1 minute
 };
 
 // Response formatting

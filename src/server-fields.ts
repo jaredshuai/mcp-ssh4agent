@@ -17,6 +17,8 @@
  * (native type stripping, no build step), and the CLI the same way.
  */
 
+import * as dotenv from 'dotenv';
+
 type ServerFieldType = 'string' | 'int' | 'bool' | 'patternList';
 
 interface ServerFieldSpec {
@@ -171,9 +173,66 @@ export function serverFromTomlRecord(tomlServer: Record<string, unknown>): Recor
 }
 
 /**
+ * Whether a value must be quoted to survive dotenv's reader: quoteEnv
+ * fields always are, and any value containing `#` (comment start),
+ * whitespace (trimmed unquoted), or a PAIRED leading delimiter (starts
+ * and ends with the same quote/backtick — dotenv would strip that outer
+ * pair) is truncated or reshaped without quotes. Interior quotes alone do
+ * NOT require quoting, and neither does an UNPAIRED leading delimiter:
+ * dotenv's quoted alternative needs a closing delimiter AND end-of-value,
+ * so `` `a'b"c `` falls through to the unquoted alternative
+ * (`[^#\r\n]+` passes quotes verbatim) (PR #9 r6/r7).
+ */
+function quotingRequired(spec: ServerFieldSpec, rendered: string): boolean {
+  return spec.quoteEnv || /[#\s]/.test(rendered) || /^(['"`])[\s\S]*\1$/.test(rendered);
+}
+
+/**
+ * Select a dotenv delimiter that round-trips `rendered` losslessly, or
+ * null when none exists. dotenv (the reader on both sides — see
+ * dotenvParse, 16.6.1) accepts THREE delimiters (`"`, `'`, `` ` ``) and
+ * expands ONLY the `\n`/`\r` escape sequences, only inside double quotes
+ * (`\t`, `\\`, `\f` etc. stay literal — verified against the dependency
+ * source and at runtime, PR #9 r10), so:
+ *   - `"` works when the value has no `"` and no literal \n/\r sequences
+ *   - `'` and `` ` `` work whenever the value simply lacks that character
+ * A value containing ALL THREE delimiter characters is unrepresentable —
+ * and so is one containing an ACTUAL CR/LF character: dotenv normalizes
+ * every \r to \n line-wise before parsing, so a raw CR round-trips as LF
+ * in ANY delimiter, and a raw LF cannot live on a single .env line at
+ * all (PR #9 r5-r10).
+ */
+function selectDelimiter(rendered: string): '"' | "'" | '`' | null {
+  if (/[\r\n]/.test(rendered)) return null;
+  if (!rendered.includes('"') && !/\\[nr]/.test(rendered)) return '"';
+  if (!rendered.includes("'")) return "'";
+  if (!rendered.includes('`')) return '`';
+  return null;
+}
+
+/**
+ * Whether `value` can be written for field `camel` (camelCase) and read
+ * back losslessly through dotenv: either it needs no quoting at all, or
+ * one of the three delimiters survives (see selectDelimiter). Shared by
+ * serverEnvLine (throws) and the CLI's pre-mutation checks.
+ */
+export function envValueRepresentable(camel: string, value: unknown): boolean {
+  const spec = FIELD_BY_CAMEL.get(camel);
+  if (!spec) return false;
+  const rendered = Array.isArray(value) ? (value as string[]).join(';') : String(value);
+  return !quotingRequired(spec, rendered) || selectDelimiter(rendered) !== null;
+}
+
+/**
  * Render one `.env` export line for a field, applying the shared quoting
- * rule: free-form / whitespace-sensitive values are double-quoted so a ` #`
- * inside the value cannot truncate it on read-back. Pattern lists join with `;`.
+ * rule (see quotingRequired / selectDelimiter). Quote CHOICE matters:
+ * dotenv (the reader on both sides — see dotenvParse) expands `\n`/`\r`
+ * inside double quotes and stops a quoted value at its delimiter, so the
+ * first delimiter that survives the value's own characters wins.
+ *
+ * A value that requires quoting but contains ALL THREE delimiter
+ * characters is UNREPRESENTABLE — it throws so callers can reject the
+ * value up front and point the user at TOML (PR #9 r5-r9).
  */
 export function serverEnvLine(
   nameUpper: string,
@@ -181,7 +240,29 @@ export function serverEnvLine(
   value: string | number | boolean | string[]
 ): string {
   const rendered = Array.isArray(value) ? value.join(';') : String(value);
-  const rhs = spec.quoteEnv ? `"${rendered}"` : rendered;
+  let rhs: string;
+  if (!quotingRequired(spec, rendered)) {
+    rhs = rendered;
+  } else {
+    // Distinct from the all-three-delimiters case below: an ACTUAL CR/LF
+    // character is unrepresentable in EVERY delimiter (see
+    // selectDelimiter), and dotenv would silently turn CR into LF on
+    // read-back — reject with a message that says so (PR #9 r10).
+    if (/[\r\n]/.test(rendered)) {
+      throw new Error(
+        `Value for ${nameUpper}.${spec.env} contains a literal CR/LF character — ` +
+          `.env format cannot represent it (dotenv normalizes CR to LF); use TOML instead`
+      );
+    }
+    const delim = selectDelimiter(rendered);
+    if (!delim) {
+      throw new Error(
+        `Value for ${nameUpper}.${spec.env} contains all three dotenv delimiter characters (" ' \`) — ` +
+          `.env format cannot represent it losslessly; use TOML instead`
+      );
+    }
+    rhs = `${delim}${rendered}${delim}`;
+  }
   return `SSH_SERVER_${nameUpper}_${spec.env}=${rhs}`;
 }
 
@@ -191,4 +272,40 @@ export function serverEnvLine(
  */
 export function canonicalTomlKey(spec: ServerFieldSpec): string {
   return spec.toml[0];
+}
+
+/**
+ * Parse raw `.env` file text into per-server camelCase partial configs,
+ * keyed by lowercased server name (issue #7).
+ *
+ * This is the ONE .env reading semantic, shared by the MCP loader
+ * (src/config-loader.ts — which layers priority over process.env/TOML) and
+ * the CLI (cli/lib/config.ts get_server_config). Both sides used to parse
+ * the file independently and had drifted (quote handling, field mapping).
+ * dotenv handles the quoting rules; the field table handles the mapping.
+ */
+export function parseEnvServersText(text: string): Map<string, Record<string, any>> {
+  const parsed = dotenvParse(text);
+  const out = new Map<string, Record<string, any>>();
+  const hostPattern = /^SSH_SERVER_([A-Z0-9_]+)_HOST$/;
+  for (const key of Object.keys(parsed)) {
+    const match = key.match(hostPattern);
+    if (!match) continue;
+    const nameLower = match[1].toLowerCase();
+    if (out.has(nameLower)) continue; // first anchor wins
+    const record = serverFromEnvRecord(parsed, match[1]);
+    record.host = parsed[key];
+    out.set(nameLower, record);
+  }
+  return out;
+}
+
+// The .env reader is the ACTUAL dotenv parser — the same one
+// src/config-loader.ts uses. A hand-rolled subset lived here before and
+// drifted from the library on every quoting edge (escaped delimiters,
+// interior quotes before comments, comment lines ending in quotes — PR #9
+// reviews, rounds 2-4); delegating makes the CLI and MCP sides
+// byte-for-byte identical by construction.
+function dotenvParse(text: string): Record<string, string> {
+  return dotenv.parse(text);
 }

@@ -3,15 +3,10 @@
  * Provides shortcuts for frequently used commands
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { loadProfile } from './profile-loader.ts';
+import { readStateFileText, writeStateFileText } from './state-files.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const ALIASES_FILE = path.join(__dirname, '..', '.command-aliases.json');
+const ALIASES_FILE = '.command-aliases.json';
 
 // Get aliases from the active profile
 let profileAliases: Record<string, string> = {};
@@ -23,7 +18,8 @@ try {
 }
 
 /**
- * Load command aliases from file
+ * Load command aliases from the state file (~/.ssh4agent, with one-time
+ * migration from the legacy install directory — see src/state-files.ts).
  */
 export function loadCommandAliases() {
   try {
@@ -31,8 +27,8 @@ export function loadCommandAliases() {
     let aliases = { ...profileAliases };
 
     // Merge with custom aliases from file
-    if (fs.existsSync(ALIASES_FILE)) {
-      const data = fs.readFileSync(ALIASES_FILE, 'utf8');
+    const data = readStateFileText(ALIASES_FILE);
+    if (data) {
       aliases = { ...aliases, ...JSON.parse(data) };
     }
 
@@ -56,8 +52,7 @@ function saveCommandAliases(aliases) {
       }
     }
 
-    fs.writeFileSync(ALIASES_FILE, JSON.stringify(customAliases, null, 2));
-    return true;
+    return writeStateFileText(ALIASES_FILE, JSON.stringify(customAliases, null, 2));
   } catch (error) {
     console.error(`Error saving command aliases: ${error.message}`);
     return false;

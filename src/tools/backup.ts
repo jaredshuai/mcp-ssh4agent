@@ -1,72 +1,22 @@
-// Auto-split from src/index.js (candidate 3). Tool definitions for the
-// backup group — bodies moved verbatim; see src/tool-registry.ts for the
-// authoritative group membership. Infrastructure (connection pool, config
-// loading, policy gate) arrives via the ctx argument at registration time.
+// Backup & restore tools (ssh_backup_*). Infrastructure arrives via ctx at
+// registration time.
 
 import { z } from 'zod';
-import fs from 'fs';
 import path from 'path';
-import os from 'os';
-import crypto from 'crypto';
-import SSHManager from '../ssh-manager.ts';
-import {
-  getTempFilename,
-  buildDeploymentStrategy,
-  detectDeploymentNeeds,
-} from '../deploy-helper.ts';
-import { resolveServerName, addAlias, removeAlias, listAliases } from '../server-aliases.ts';
-import {
-  expandCommandAlias,
-  addCommandAlias,
-  removeCommandAlias,
-  listCommandAliases,
-  suggestAliases,
-} from '../command-aliases.ts';
-import { TIMEOUTS, truncateOutput, formatJSONResponse, formatDuration } from '../config.ts';
-import { initializeHooks, executeHook, toggleHook, listHooks } from '../hooks-system.ts';
-import {
-  loadProfile,
-  listProfiles,
-  setActiveProfile,
-  getActiveProfileName,
-} from '../profile-loader.ts';
+import { executeHook } from '../hooks-system.ts';
 import { logger } from '../logger.ts';
-import { shSingleQuote, buildCdPrefix, buildSudoPipeline } from '../shell-quote.ts';
-import { parseRsyncStats } from '../rsync-stats.ts';
-import { toRsyncLocalPath } from '../rsync-path.ts';
-import { createSession, getSession, listSessions, closeSession } from '../session-manager.ts';
+import { shSingleQuote } from '../shell-quote.ts';
 import {
-  getGroup,
-  createGroup,
-  updateGroup,
-  deleteGroup,
-  addServersToGroup,
-  removeServersFromGroup,
-  listGroups,
-  executeOnGroup,
-} from '../server-groups.ts';
-import { createTunnel, listTunnels, closeTunnel, closeServerTunnels } from '../tunnel-manager.ts';
-import {
-  getHostKeyFingerprint,
-  isHostKnown,
-  getCurrentHostKey,
-  removeHostKey,
-  addHostKey,
-  updateHostKey,
-  hasHostKeyChanged,
-  listKnownHosts,
-  detectSSHKeyError,
-  extractHostFromSSHError,
-} from '../ssh-key-manager.ts';
+  buildMySQLDumpCommand,
+  buildPostgreSQLDumpCommand,
+  buildMongoDBDumpCommand,
+} from '../dump-command-builder.ts';
 import {
   BACKUP_TYPES,
   DEFAULT_BACKUP_DIR,
   generateBackupId,
   getBackupMetadataPath,
   getBackupFilePath,
-  buildMySQLDumpCommand,
-  buildPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand,
   buildFilesBackupCommand,
   buildRestoreCommand,
   createBackupMetadata,
@@ -76,65 +26,9 @@ import {
   buildCleanupCommand,
   buildCronScheduleCommand,
 } from '../backup-manager.ts';
-import {
-  HEALTH_STATUS,
-  buildServiceStatusCommand,
-  parseServiceStatus,
-  buildProcessListCommand,
-  parseProcessList,
-  buildKillProcessCommand,
-  buildProcessInfoCommand,
-  createAlertConfig,
-  buildSaveAlertConfigCommand,
-  buildLoadAlertConfigCommand,
-  checkAlertThresholds,
-  buildComprehensiveHealthCheckCommand,
-  parseComprehensiveHealthCheck,
-  resolveServiceName,
-} from '../health-monitor.ts';
-import {
-  DB_TYPES,
-  buildMySQLDumpCommand as buildDBMySQLDumpCommand,
-  buildPostgreSQLDumpCommand as buildDBPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand as buildDBMongoDBDumpCommand,
-  buildMySQLImportCommand,
-  buildPostgreSQLImportCommand,
-  buildMongoDBRestoreCommand,
-  buildMySQLListDatabasesCommand,
-  buildMySQLListTablesCommand,
-  buildPostgreSQLListDatabasesCommand,
-  buildPostgreSQLListTablesCommand,
-  buildMongoDBListDatabasesCommand,
-  buildMongoDBListCollectionsCommand,
-  buildMySQLQueryCommand,
-  buildPostgreSQLQueryCommand,
-  buildMongoDBQueryCommand,
-  isSafeQuery,
-  countQueryRows,
-  parseDatabaseList,
-  parseTableList,
-  parseSize,
-  formatBytes,
-} from '../database-manager.ts';
 
 export function registerBackupTools(ctx: import('../tool-registry.ts').ToolContext) {
-  const {
-    register: registerToolConditional,
-    getConnection,
-    closeConnection,
-    execCommandWithTimeout,
-    loadServerConfig,
-    getServerConfig,
-    applyServerPolicy,
-    auditOk,
-    isConnectionValid,
-    cleanupOldConnections,
-    connections,
-    connectionTimestamps,
-    keepaliveIntervals,
-    CONNECTION_TIMEOUT,
-    KEEPALIVE_INTERVAL,
-  } = ctx;
+  const { register: registerToolConditional, getConnection } = ctx;
 
   registerToolConditional(
     'ssh_backup_create',
@@ -177,14 +71,6 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
       retention = 7,
       compress = true,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_backup_create', {
-        type,
-        name,
-        database,
-        paths,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -377,9 +263,12 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
               text: `❌ Backup failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
@@ -493,13 +382,6 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
       targetPath,
       backupDir,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_backup_restore', {
-        backupId,
-        database,
-        targetPath,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
         const backupDirectory = backupDir || DEFAULT_BACKUP_DIR;
@@ -595,9 +477,12 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
               text: `❌ Restore failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
@@ -616,15 +501,6 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
       },
     },
     async ({ server: serverName, schedule, type, name, database, paths, retention = 7 }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_backup_schedule', {
-        schedule,
-        type,
-        name,
-        database,
-        paths,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -649,19 +525,47 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         scriptContent += `BACKUP_FILE="${backupFile}"\n\n`;
         scriptContent += 'mkdir -p "$BACKUP_DIR"\n\n';
 
-        // Add backup command based on type
+        // Add backup command based on type. Database dumps reuse the single
+        // dump-command-builder implementation (quoted); the placeholder is
+        // swapped afterwards for the runtime-expanded $BACKUP_FILE variable,
+        // which must stay unquoted inside the generated script.
+        const RUNTIME_OUTPUT = '\x00BACKUP_FILE';
         switch (type) {
           case BACKUP_TYPES.MYSQL:
-            scriptContent += `mysqldump --single-transaction --routines --triggers ${database} | gzip > "$BACKUP_FILE"\n`;
+            scriptContent +=
+              buildMySQLDumpCommand({
+                database,
+                outputFile: RUNTIME_OUTPUT,
+                compress: true,
+              }).replace(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"') + '\n';
             break;
           case BACKUP_TYPES.POSTGRESQL:
-            scriptContent += `pg_dump --format=custom --clean --if-exists ${database} | gzip > "$BACKUP_FILE"\n`;
+            scriptContent +=
+              buildPostgreSQLDumpCommand({
+                database,
+                outputFile: RUNTIME_OUTPUT,
+                compress: true,
+              }).replace(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"') + '\n';
             break;
-          case BACKUP_TYPES.MONGODB:
-            scriptContent += `mongodump --db ${database} --out /tmp/mongo_\${RANDOM} && tar -czf "$BACKUP_FILE" -C /tmp mongo_*\n`;
+          case BACKUP_TYPES.MONGODB: {
+            if (!database) {
+              throw new Error('database parameter required for MongoDB backup');
+            }
+            // mongodump --out is a DIRECTORY: dump to a runtime tmp dir via
+            // the shared builder, then tar it into $BACKUP_FILE.
+            const RUNTIME_TMP = '\x00MONGO_TMP';
+            scriptContent += 'MONGO_TMP="/tmp/mongo_$(date +%s)_$$"\n';
+            scriptContent +=
+              buildMongoDBDumpCommand({
+                database,
+                outputDir: RUNTIME_TMP,
+                compress: false,
+              }).replace(shSingleQuote(RUNTIME_TMP), '"$MONGO_TMP"') +
+              ' && tar -czf "$BACKUP_FILE" -C "$(dirname "$MONGO_TMP")" "$(basename "$MONGO_TMP")" && rm -rf "$MONGO_TMP"\n';
             break;
+          }
           case BACKUP_TYPES.FILES:
-            scriptContent += `tar -czf "$BACKUP_FILE" ${paths.join(' ')}\n`;
+            scriptContent += `tar -czf "$BACKUP_FILE" ${paths.map(shSingleQuote).join(' ')}\n`;
             break;
         }
 
@@ -670,9 +574,8 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         scriptContent += `find "$BACKUP_DIR" -name "*_${name}_*" -type f -mtime +${retention} -delete\n`;
 
         // Save script to remote server
-        const escapedScript = scriptContent.replace(/'/g, "'\\''");
         await ssh.execCommand(
-          `echo '${escapedScript}' > "${scriptPath}" && chmod +x "${scriptPath}"`
+          `echo ${shSingleQuote(scriptContent)} > "${scriptPath}" && chmod +x "${scriptPath}"`
         );
 
         // Add to crontab
@@ -727,9 +630,12 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
               text: `❌ Failed to schedule backup: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   // ============================================================================

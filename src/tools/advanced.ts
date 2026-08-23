@@ -1,29 +1,23 @@
-// Auto-split from src/index.js (candidate 3). Tool definitions for the
-// advanced group — bodies moved verbatim; see src/tool-registry.ts for the
-// authoritative group membership. Infrastructure (connection pool, config
-// loading, policy gate) arrives via the ctx argument at registration time.
+// Advanced tools (deploy / sudo / alias / hooks / profile / connection status /
+// tunnels / keys / groups / command aliases / history). Infrastructure arrives via
+// ctx at registration time.
 
 import { z } from 'zod';
-import fs from 'fs';
 import path from 'path';
-import os from 'os';
-import crypto from 'crypto';
 import SSHManager from '../ssh-manager.ts';
 import {
   getTempFilename,
   buildDeploymentStrategy,
   detectDeploymentNeeds,
 } from '../deploy-helper.ts';
-import { resolveServerName, addAlias, removeAlias, listAliases } from '../server-aliases.ts';
+import { addAlias, removeAlias, listAliases } from '../server-aliases.ts';
 import {
-  expandCommandAlias,
   addCommandAlias,
   removeCommandAlias,
   listCommandAliases,
   suggestAliases,
 } from '../command-aliases.ts';
-import { TIMEOUTS, truncateOutput, formatJSONResponse, formatDuration } from '../config.ts';
-import { initializeHooks, executeHook, toggleHook, listHooks } from '../hooks-system.ts';
+import { executeHook, toggleHook, listHooks } from '../hooks-system.ts';
 import {
   loadProfile,
   listProfiles,
@@ -31,10 +25,7 @@ import {
   getActiveProfileName,
 } from '../profile-loader.ts';
 import { logger } from '../logger.ts';
-import { shSingleQuote, buildCdPrefix, buildSudoPipeline } from '../shell-quote.ts';
-import { parseRsyncStats } from '../rsync-stats.ts';
-import { toRsyncLocalPath } from '../rsync-path.ts';
-import { createSession, getSession, listSessions, closeSession } from '../session-manager.ts';
+import { buildCdPrefix, buildSudoPipeline } from '../shell-quote.ts';
 import {
   getGroup,
   createGroup,
@@ -55,85 +46,18 @@ import {
   updateHostKey,
   hasHostKeyChanged,
   listKnownHosts,
-  detectSSHKeyError,
-  extractHostFromSSHError,
 } from '../ssh-key-manager.ts';
-import {
-  BACKUP_TYPES,
-  DEFAULT_BACKUP_DIR,
-  generateBackupId,
-  getBackupMetadataPath,
-  getBackupFilePath,
-  buildMySQLDumpCommand,
-  buildPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand,
-  buildFilesBackupCommand,
-  buildRestoreCommand,
-  createBackupMetadata,
-  buildSaveMetadataCommand,
-  buildListBackupsCommand,
-  parseBackupsList,
-  buildCleanupCommand,
-  buildCronScheduleCommand,
-} from '../backup-manager.ts';
-import {
-  HEALTH_STATUS,
-  buildServiceStatusCommand,
-  parseServiceStatus,
-  buildProcessListCommand,
-  parseProcessList,
-  buildKillProcessCommand,
-  buildProcessInfoCommand,
-  createAlertConfig,
-  buildSaveAlertConfigCommand,
-  buildLoadAlertConfigCommand,
-  checkAlertThresholds,
-  buildComprehensiveHealthCheckCommand,
-  parseComprehensiveHealthCheck,
-  resolveServiceName,
-} from '../health-monitor.ts';
-import {
-  DB_TYPES,
-  buildMySQLDumpCommand as buildDBMySQLDumpCommand,
-  buildPostgreSQLDumpCommand as buildDBPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand as buildDBMongoDBDumpCommand,
-  buildMySQLImportCommand,
-  buildPostgreSQLImportCommand,
-  buildMongoDBRestoreCommand,
-  buildMySQLListDatabasesCommand,
-  buildMySQLListTablesCommand,
-  buildPostgreSQLListDatabasesCommand,
-  buildPostgreSQLListTablesCommand,
-  buildMongoDBListDatabasesCommand,
-  buildMongoDBListCollectionsCommand,
-  buildMySQLQueryCommand,
-  buildPostgreSQLQueryCommand,
-  buildMongoDBQueryCommand,
-  isSafeQuery,
-  countQueryRows,
-  parseDatabaseList,
-  parseTableList,
-  parseSize,
-  formatBytes,
-} from '../database-manager.ts';
 
 export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolContext) {
   const {
     register: registerToolConditional,
     getConnection,
-    closeConnection,
     execCommandWithTimeout,
     loadServerConfig,
-    getServerConfig,
+    resolveServer,
     applyServerPolicy,
     auditOk,
-    isConnectionValid,
-    cleanupOldConnections,
-    connections,
-    connectionTimestamps,
-    keepaliveIntervals,
-    CONNECTION_TIMEOUT,
-    KEEPALIVE_INTERVAL,
+    pool,
   } = ctx;
 
   registerToolConditional(
@@ -283,27 +207,54 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               const errorText = denied.content?.[0]?.text || 'Policy denied';
               return { stdout: '', stderr: errorText, code: -2, success: false };
             }
-            const ssh = await getConnection(serverName);
 
-            // Build full command with cwd if provided.
-            // Use platform-appropriate syntax: Set-Location for Windows (cmd.exe
-            // does not support `cd && `) vs cd && for Linux/macOS.
-            const servers = await loadServerConfig();
-            const serverConfig = servers[serverName.toLowerCase()];
-            const workingDir = cwd || serverConfig?.defaultDir;
-            const platform = serverConfig?.platform || 'linux';
-            const fullCommand = workingDir
-              ? buildCdPrefix(workingDir, platform) + command
-              : command;
+            // manual gate: audit each member's outcome here (denials are
+            // already audited by applyServerPolicy above).
+            try {
+              const ssh = await getConnection(serverName);
 
-            const execResult = await execCommandWithTimeout(ssh, fullCommand, { platform }, 30000);
+              // Build full command with cwd if provided.
+              // Use platform-appropriate syntax: Set-Location for Windows (cmd.exe
+              // does not support `cd && `) vs cd && for Linux/macOS.
+              // resolveServer expands aliases so defaultDir/platform are honored
+              // even when the group member is addressed via alias.
+              const resolved = await resolveServer(serverName);
+              const serverConfig = resolved?.config;
+              const workingDir = cwd || serverConfig?.defaultDir;
+              const platform = serverConfig?.platform || 'linux';
+              const fullCommand = workingDir
+                ? buildCdPrefix(workingDir, platform) + command
+                : command;
 
-            return {
-              stdout: execResult.stdout,
-              stderr: execResult.stderr,
-              code: execResult.code,
-              success: execResult.code === 0,
-            };
+              const execResult = await execCommandWithTimeout(
+                ssh,
+                fullCommand,
+                { platform },
+                30000
+              );
+
+              await auditOk(
+                serverName,
+                'ssh_execute_group',
+                { group: groupName, command, cwd },
+                { success: execResult.code === 0, code: execResult.code }
+              );
+
+              return {
+                stdout: execResult.stdout,
+                stderr: execResult.stderr,
+                code: execResult.code,
+                success: execResult.code === 0,
+              };
+            } catch (error) {
+              await auditOk(
+                serverName,
+                'ssh_execute_group',
+                { group: groupName, command, cwd },
+                { success: false, error: error.message }
+              );
+              throw error;
+            }
           },
           { strategy, delay, stopOnError }
         );
@@ -370,7 +321,11 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
-    }
+    },
+    // Policy: MANUAL — each group member is evaluated independently inside
+    // executeOnGroup (best-effort; one readonly member refusing does not abort
+    // the others). Declared so it can never be confused with a forgotten gate.
+    { gate: 'manual' }
   );
 
   // The stored member list is only half the story: servers tagged with this group
@@ -572,12 +527,6 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ server, files, options = {} }: any) => {
-      const denied = await applyServerPolicy(server, 'ssh_deploy', {
-        files: files.map((f) => ({ local: f.local, remote: f.remote })),
-        options,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(server);
 
@@ -609,8 +558,8 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           results.push(`✅ Uploaded ${path.basename(file.local)} to temp location`);
 
           // Execute deployment strategy
-          const deployServers = await loadServerConfig();
-          const deployServerConfig = deployServers[server.toLowerCase()];
+          const deployResolved = await resolveServer(server);
+          const deployServerConfig = deployResolved?.config;
           for (const step of strategy.steps) {
             const command = step.command.replace('{{tempFile}}', tempFile);
 
@@ -660,9 +609,12 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Deployment failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   // Execute command with sudo support
@@ -680,17 +632,10 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ server, command, password, cwd, timeout = 30000 }) => {
-      // ssh_execute_sudo is in READONLY_BLOCKED_TOOLS, so readonly mode blocks
-      // it at the tool level. In restricted mode the command itself is matched
-      // against ALLOW/DENY patterns.
-      const denied = await applyServerPolicy(server, 'ssh_execute_sudo', { command, cwd }, command);
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(server);
-        const servers = await loadServerConfig();
-        const resolvedName = resolveServerName(server, servers);
-        const serverConfig = servers[resolvedName];
+        const resolvedEntry = await resolveServer(server);
+        const serverConfig = resolvedEntry?.config;
 
         // Build the full command. Quoting is centralized in shell-quote.js:
         // passwords and directories go through buildSudoPipeline/buildCdPrefix
@@ -726,6 +671,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `🔐 Sudo command executed\nServer: ${server}\nCommand: ${maskedCommand}\nExit code: ${result.code}\n\nOutput:\n${result.stdout || result.stderr}`,
             },
           ],
+          exitCode: result.code,
         };
       } catch (error) {
         return {
@@ -735,9 +681,13 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Sudo execution failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: command-bearing — the funnel matches the sudo command against
+    // readonly/restricted patterns (tool-level block handled by READONLY_BLOCKED_TOOLS).
+    { commandArg: 'command' }
   );
 
   // Manage command aliases
@@ -1049,27 +999,13 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       try {
         switch (action) {
           case 'status': {
-            const activeConnections = [];
-            const now = Date.now();
-
-            for (const [serverName, ssh] of connections.entries()) {
-              const timestamp = connectionTimestamps.get(serverName);
-              const ageMinutes = Math.floor((now - timestamp) / 1000 / 60);
-              const isValid = await isConnectionValid(ssh);
-
-              activeConnections.push({
-                server: serverName,
-                status: isValid ? '✅ Active' : '❌ Dead',
-                age: `${ageMinutes} minutes`,
-                keepalive: keepaliveIntervals.has(serverName) ? '✅' : '❌',
-              });
-            }
-
+            const status = await pool.status();
             const statusInfo =
-              activeConnections.length > 0
-                ? activeConnections
+              status.servers.length > 0
+                ? status.servers
                     .map(
-                      (c) => `  ${c.server}: ${c.status} (age: ${c.age}, keepalive: ${c.keepalive})`
+                      (c) =>
+                        `  ${c.server}: ${c.alive ? '✅ Active' : '❌ Dead'} (age: ${Math.floor(c.idleMs / 1000 / 60)} minutes, keepalive: ${c.keepalive ? '✅' : '❌'})`
                     )
                     .join('\n')
                 : '  No active connections';
@@ -1078,7 +1014,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               content: [
                 {
                   type: 'text',
-                  text: `🔌 Connection Pool Status:\n${statusInfo}\n\nSettings:\n  Timeout: ${CONNECTION_TIMEOUT / 1000 / 60} minutes\n  Keepalive: Every ${KEEPALIVE_INTERVAL / 1000 / 60} minutes`,
+                  text: `🔌 Connection Pool Status:\n${statusInfo}\n\nSettings:\n  Timeout: ${status.settings.timeoutMinutes} minutes\n  Keepalive: Every ${status.settings.keepaliveMinutes} minutes`,
                 },
               ],
             };
@@ -1089,12 +1025,11 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               throw new Error('Server name is required for reconnect action');
             }
 
-            const normalizedName = server.toLowerCase();
-            if (connections.has(normalizedName)) {
-              closeConnection(normalizedName);
+            if (pool.has(server)) {
+              pool.close(server);
             }
 
-            await getConnection(server);
+            await pool.get(server);
             return {
               content: [
                 {
@@ -1110,7 +1045,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               throw new Error('Server name is required for disconnect action');
             }
 
-            closeConnection(server);
+            pool.close(server);
             return {
               content: [
                 {
@@ -1122,23 +1057,12 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           }
 
           case 'cleanup': {
-            const oldCount = connections.size;
-            cleanupOldConnections();
-
-            // Also check and remove dead connections
-            for (const [serverName, ssh] of connections.entries()) {
-              const isValid = await isConnectionValid(ssh);
-              if (!isValid) {
-                closeConnection(serverName);
-              }
-            }
-
-            const cleaned = oldCount - connections.size;
+            const cleaned = await pool.sweep();
             return {
               content: [
                 {
                   type: 'text',
-                  text: `🧹 Cleanup complete: ${cleaned} connections closed, ${connections.size} active`,
+                  text: `🧹 Cleanup complete: ${cleaned} connections closed, ${pool.size} active`,
                 },
               ],
             };
@@ -1152,6 +1076,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Connection management failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -1174,14 +1099,13 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     },
     async ({ server, type, localHost, localPort, remoteHost, remotePort }) => {
       try {
-        const servers = await loadServerConfig();
-        const resolvedName = resolveServerName(server, servers);
+        const resolved = await resolveServer(server);
 
-        if (!resolvedName) {
+        if (!resolved) {
           throw new Error(`Server "${server}" not found`);
         }
 
-        const serverConfig = servers[resolvedName];
+        const serverConfig = resolved.config;
         const ssh = new SSHManager(serverConfig);
         await ssh.connect();
 
@@ -1193,7 +1117,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           remotePort,
         };
 
-        const tunnel = await createTunnel(resolvedName, ssh, config);
+        const tunnel = await createTunnel(resolved.name, ssh, config);
 
         let output = '✅ SSH tunnel created\n';
         output += `ID: ${tunnel.id}\n`;
@@ -1214,7 +1138,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
 
         logger.info('SSH tunnel created', {
           id: tunnel.id,
-          server: resolvedName,
+          server: resolved.name,
           type,
           local: `${config.localHost}:${localPort}`,
         });
@@ -1253,14 +1177,14 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     },
     async ({ server }) => {
       try {
-        const servers = await loadServerConfig();
         let resolvedName = null;
 
         if (server) {
-          resolvedName = resolveServerName(server, servers);
-          if (!resolvedName) {
+          const resolved = await resolveServer(server);
+          if (!resolved) {
             throw new Error(`Server "${server}" not found`);
           }
+          resolvedName = resolved.name;
         }
 
         const tunnels = listTunnels(resolvedName);
@@ -1319,6 +1243,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Failed to list tunnels: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -1351,8 +1276,8 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           logger.info('SSH tunnel closed', { id: tunnelId });
         } else if (server) {
           // Close all tunnels for server
-          const servers = await loadServerConfig();
-          const resolvedName = resolveServerName(server, servers);
+          const resolved = await resolveServer(server);
+          const resolvedName = resolved?.name;
 
           if (!resolvedName) {
             throw new Error(`Server "${server}" not found`);
@@ -1384,6 +1309,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Failed to close tunnel: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -1407,24 +1333,17 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ action, server, autoAccept = false }) => {
-      // Mutating actions (accept, remove) are blocked in readonly mode at the
-      // tool level. Pure-read actions (verify, list, check) are allowed regardless,
-      // so we only gate when the action would modify state.
-      if (server && (action === 'accept' || action === 'remove')) {
-        const denied = await applyServerPolicy(server, 'ssh_key_manage', { action, autoAccept });
-        if (denied) return denied;
-      }
       try {
-        const servers = await loadServerConfig();
         let resolvedName, serverConfig, host, port;
 
         // Resolve server details for actions that need them
         if (server && action !== 'list') {
-          resolvedName = resolveServerName(server, servers);
-          if (!resolvedName) {
+          const resolved = await resolveServer(server);
+          if (!resolved) {
             throw new Error(`Server "${server}" not found`);
           }
-          serverConfig = servers[resolvedName];
+          resolvedName = resolved.name;
+          serverConfig = resolved.config;
           host = serverConfig.host;
           // port is already a number from ConfigLoader; parseInt() on it only
           // worked because JS stringifies the argument first.
@@ -1589,6 +1508,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           }
 
           case 'list': {
+            const servers = await loadServerConfig();
             const knownHosts = listKnownHosts();
 
             let output = '🔑 Known SSH Hosts\n';
@@ -1645,9 +1565,13 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ SSH key management error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: only accept/remove mutate local known_hosts; verify/list/check
+    // stay available on readonly servers.
+    { when: (args) => args.action === 'accept' || args.action === 'remove' }
   );
 
   // Manage server aliases
@@ -1670,19 +1594,18 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               throw new Error('Both alias and server are required for add action');
             }
 
-            const servers = await loadServerConfig();
-            const resolvedName = resolveServerName(server, servers);
+            const resolved = await resolveServer(server);
 
-            if (!resolvedName) {
+            if (!resolved) {
               throw new Error(`Server "${server}" not found`);
             }
 
-            addAlias(alias, resolvedName);
+            addAlias(alias, resolved.name);
             return {
               content: [
                 {
                   type: 'text',
-                  text: `✅ Alias created: ${alias} -> ${resolvedName}`,
+                  text: `✅ Alias created: ${alias} -> ${resolved.name}`,
                 },
               ],
             };

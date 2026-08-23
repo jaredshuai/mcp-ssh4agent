@@ -7,6 +7,12 @@
 import path from 'path';
 import crypto from 'crypto';
 import { logger } from './logger.ts';
+import { shSingleQuote } from './shell-quote.ts';
+import {
+  buildMySQLImportCommand,
+  buildPostgreSQLImportCommand,
+  buildMongoDBRestoreCommand,
+} from './database-manager.ts';
 
 // Backup types
 export const BACKUP_TYPES = {
@@ -45,126 +51,10 @@ export function getBackupFilePath(backupId, backupDir = DEFAULT_BACKUP_DIR, exte
   return path.join(backupDir, `${backupId}${extension}`);
 }
 
-/**
- * Build MySQL dump command
- */
-export function buildMySQLDumpCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 3306,
-    outputFile,
-    singleTransaction = true,
-    compress = true,
-  } = options;
-
-  let command = 'mysqldump';
-
-  // Connection parameters
-  if (user) command += ` -u${user}`;
-  if (password) command += ` -p'${password}'`;
-  if (host) command += ` -h ${host}`;
-  if (port) command += ` -P ${port}`;
-
-  // Dump options
-  if (singleTransaction) command += ' --single-transaction';
-  command += ' --routines --triggers';
-
-  // Database name
-  command += ` ${database}`;
-
-  // Output handling
-  if (compress) {
-    command += ` | gzip > "${outputFile}"`;
-  } else {
-    command += ` > "${outputFile}"`;
-  }
-
-  return command;
-}
-
-/**
- * Build PostgreSQL dump command
- */
-export function buildPostgreSQLDumpCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 5432,
-    outputFile,
-    compress = true,
-  } = options;
-
-  // PostgreSQL uses PGPASSWORD environment variable
-  let command = '';
-  if (password) {
-    command = `PGPASSWORD='${password}' `;
-  }
-
-  command += 'pg_dump';
-
-  // Connection parameters
-  if (user) command += ` -U ${user}`;
-  if (host) command += ` -h ${host}`;
-  if (port) command += ` -p ${port}`;
-
-  // Dump options
-  command += ' --format=custom --clean --if-exists';
-
-  // Database name
-  command += ` ${database}`;
-
-  // Output handling
-  if (compress) {
-    command += ` | gzip > "${outputFile}"`;
-  } else {
-    command += ` > "${outputFile}"`;
-  }
-
-  return command;
-}
-
-/**
- * Build MongoDB dump command
- */
-export function buildMongoDBDumpCommand(options) {
-  const {
-    database,
-    user,
-    password,
-    host = 'localhost',
-    port = 27017,
-    outputDir,
-    compress = true,
-  } = options;
-
-  let command = 'mongodump';
-
-  // Connection parameters
-  if (host) command += ` --host ${host}`;
-  if (port) command += ` --port ${port}`;
-  if (user) command += ` --username ${user}`;
-  if (password) command += ` --password '${password}'`;
-
-  // Database selection
-  if (database) command += ` --db ${database}`;
-
-  // Output directory
-  command += ` --out "${outputDir}"`;
-
-  // Compress the output directory
-  if (compress) {
-    const archiveName = `${outputDir}.tar.gz`;
-    command += ` && tar -czf "${archiveName}" -C "$(dirname ${outputDir})" "$(basename ${outputDir})"`;
-    command += ` && rm -rf "${outputDir}"`;
-  }
-
-  return command;
-}
+// Dump commands (MySQL / PostgreSQL / MongoDB) live in
+// src/dump-command-builder.ts — single quoted implementation shared with the
+// database tools. The unquoted copies that used to live here interpolated
+// passwords and paths raw into the command string.
 
 /**
  * Build files backup command (tar + gzip)
@@ -200,115 +90,26 @@ export function buildFilesBackupCommand(options) {
 }
 
 /**
- * Build backup restore command based on type
+ * Build backup restore command based on type.
+ *
+ * Database restores delegate to the quoted import/restore builders in
+ * database-manager.ts — the local unquoted copies this replaces interpolated
+ * passwords and paths raw into the command string (same injection class the
+ * shell-quote module exists to prevent).
  */
 export function buildRestoreCommand(backupType, backupFile, options = {}) {
   switch (backupType) {
     case BACKUP_TYPES.MYSQL:
-      return buildMySQLRestoreCommand(backupFile, options);
+      return buildMySQLImportCommand({ ...options, inputFile: backupFile });
     case BACKUP_TYPES.POSTGRESQL:
-      return buildPostgreSQLRestoreCommand(backupFile, options);
+      return buildPostgreSQLImportCommand({ ...options, inputFile: backupFile });
     case BACKUP_TYPES.MONGODB:
-      return buildMongoDBRestoreCommand(backupFile, options);
+      return buildMongoDBRestoreCommand({ ...options, inputPath: backupFile });
     case BACKUP_TYPES.FILES:
       return buildFilesRestoreCommand(backupFile, options);
     default:
       throw new Error(`Unknown backup type: ${backupType}`);
   }
-}
-
-/**
- * Build MySQL restore command
- */
-function buildMySQLRestoreCommand(backupFile, options) {
-  const { database, user, password, host = 'localhost', port = 3306 } = options;
-
-  let command = '';
-
-  // Decompress if needed
-  if (backupFile.endsWith('.gz')) {
-    command = `gunzip -c "${backupFile}" | `;
-  } else {
-    command = `cat "${backupFile}" | `;
-  }
-
-  command += 'mysql';
-
-  // Connection parameters
-  if (user) command += ` -u${user}`;
-  if (password) command += ` -p'${password}'`;
-  if (host) command += ` -h ${host}`;
-  if (port) command += ` -P ${port}`;
-  if (database) command += ` ${database}`;
-
-  return command;
-}
-
-/**
- * Build PostgreSQL restore command
- */
-function buildPostgreSQLRestoreCommand(backupFile, options) {
-  const { database, user, password, host = 'localhost', port = 5432 } = options;
-
-  let command = '';
-  if (password) {
-    command = `PGPASSWORD='${password}' `;
-  }
-
-  command += 'pg_restore';
-
-  // Connection parameters
-  if (user) command += ` -U ${user}`;
-  if (host) command += ` -h ${host}`;
-  if (port) command += ` -p ${port}`;
-  if (database) command += ` -d ${database}`;
-
-  // Restore options
-  command += ' --clean --if-exists';
-
-  // Handle compressed files
-  if (backupFile.endsWith('.gz')) {
-    command = `gunzip -c "${backupFile}" | ${command}`;
-  } else {
-    command += ` "${backupFile}"`;
-  }
-
-  return command;
-}
-
-/**
- * Build MongoDB restore command
- */
-function buildMongoDBRestoreCommand(backupFile, options) {
-  const { user, password, host = 'localhost', port = 27017, drop = true } = options;
-
-  let command = '';
-
-  // Extract if compressed
-  if (backupFile.endsWith('.tar.gz')) {
-    const extractDir = backupFile.replace('.tar.gz', '');
-    command = `tar -xzf "${backupFile}" -C "$(dirname ${backupFile})" && `;
-    command += 'mongorestore';
-
-    if (drop) command += ' --drop';
-    if (host) command += ` --host ${host}`;
-    if (port) command += ` --port ${port}`;
-    if (user) command += ` --username ${user}`;
-    if (password) command += ` --password '${password}'`;
-
-    command += ` "${extractDir}"`;
-    command += ` && rm -rf "${extractDir}"`;
-  } else {
-    command = 'mongorestore';
-    if (drop) command += ' --drop';
-    if (host) command += ` --host ${host}`;
-    if (port) command += ` --port ${port}`;
-    if (user) command += ` --username ${user}`;
-    if (password) command += ` --password '${password}'`;
-    command += ` "${backupFile}"`;
-  }
-
-  return command;
 }
 
 /**
@@ -366,9 +167,10 @@ export function createBackupMetadata(
  */
 export function buildSaveMetadataCommand(metadata, metadataPath) {
   const jsonData = JSON.stringify(metadata, null, 2);
-  // Escape single quotes in JSON for shell
-  const escapedJson = jsonData.replace(/'/g, "'\\''");
-  return `echo '${escapedJson}' > "${metadataPath}"`;
+  // Both the payload AND the path go through shSingleQuote: the path is
+  // derived from server-controlled values (backupId, backupDir) and an
+  // unquoted `$(...)` in it would execute remotely.
+  return `echo ${shSingleQuote(jsonData)} > ${shSingleQuote(metadataPath)}`;
 }
 
 /**

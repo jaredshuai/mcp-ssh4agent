@@ -19,6 +19,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   SERVER_FIELDS,
   FIELD_BY_CAMEL,
@@ -26,6 +27,8 @@ import {
   serverFromEnvRecord,
   serverFromTomlRecord,
   canonicalTomlKey,
+  parseEnvServersText,
+  envValueRepresentable,
 } from '../src/server-fields.ts';
 import { ConfigLoader } from '../src/config-loader.ts';
 
@@ -126,6 +129,176 @@ test('pattern lists join with ; inside quotes', () => {
     serverEnvLine('S', spec('allowPatterns'), ['^ls', '^cat']),
     'SSH_SERVER_S_ALLOW_PATTERNS="^ls;^cat"'
   );
+});
+
+// The CLI read path (get_server_config → parseEnvServersText) does NOT use
+// the dotenv library — these tests lock its local parser to the same
+// semantics for the writer's unescaped-interior-quote format (PR #9).
+test('parseEnvServersText keeps interior quotes in fully-quoted values', () => {
+  const lines = [
+    serverEnvLine('Q', spec('host'), '203.0.113.10'),
+    serverEnvLine('Q', spec('password'), 'Jx"ds$2016'),
+    serverEnvLine('Q', spec('sudoPassword'), "pa';ss"),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('q');
+  assert.ok(record, 'server must parse from the HOST anchor');
+  assert.equal(record.host, '203.0.113.10');
+  assert.equal(record.password, 'Jx"ds$2016', 'double quote inside a password must survive');
+  assert.equal(record.sudoPassword, "pa';ss", 'apostrophe inside a password must survive');
+});
+
+test('parseEnvServersText stops at the first close quote before trailing content', () => {
+  const lines = [
+    serverEnvLine('C', spec('host'), '198.51.100.2'),
+    'SSH_SERVER_C_DESCRIPTION="a description" # trailing comment',
+    // The pathological round-3 case: the comment itself ends with the
+    // delimiter quote — a greedy outer-strip would swallow the comment.
+    'SSH_SERVER_C_GROUP="g1" # note ending with a "quote"',
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('c');
+  assert.ok(record);
+  assert.equal(record.description, 'a description', 'comment after the close quote is ignored');
+  assert.equal(record.group, 'g1', 'comment ending with a quote is still just a comment');
+});
+
+// Round-4 case: an interior quote followed by `#` inside a credential.
+// The writer avoids the ambiguity by alternating the delimiter
+// (single-quoted when the value contains `"` but no `'`), and the reader
+// is the REAL dotenv parser — same bytes, same result on both sides.
+test('credentials with interior quote + # round-trip via alternating quotes', () => {
+  const lines = [
+    serverEnvLine('H', spec('host'), '203.0.113.7'),
+    serverEnvLine('H', spec('password'), 'a"#b'),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('h');
+  assert.ok(record);
+  assert.equal(record.password, 'a"#b', 'quote+hash password survives via single-quoting');
+});
+
+// Round-5→9: a value with BOTH quote characters used to be rejected, but
+// dotenv accepts THREE delimiters — backticks rescue it (no expansion,
+// nothing in the value collides). Only all-three-delimiter values remain
+// unrepresentable.
+test('both-quote credentials round-trip via backtick delimiters', () => {
+  const lines = [
+    serverEnvLine('B', spec('host'), '203.0.113.12'),
+    serverEnvLine('B', spec('password'), `x'"y`),
+  ].join('\n');
+  assert.ok(lines.includes('`x\'"y`'), 'both-quote value is backtick-wrapped');
+  const record = parseEnvServersText(lines).get('b');
+  assert.ok(record);
+  assert.equal(record.password, `x'"y`, 'both-quote credential survives verbatim');
+});
+
+// Round-8→9: dotenv EXPANDS `\n`/`\r` inside double quotes — a credential
+// with literal backslash-n characters would silently change on read-back.
+// Single quotes fix the plain case; a quote character in the value too
+// falls through to backticks. ('pa\\nss' in source = ONE literal backslash
+// + n, exactly the case dotenv would corrupt inside double quotes.)
+test('literal \\n sequences avoid double quotes and round-trip', () => {
+  const lines = [
+    serverEnvLine('E', spec('host'), '203.0.113.11'),
+    serverEnvLine('E', spec('password'), 'pa\\nss'),
+    serverEnvLine('E', spec('sudoPassword'), 'x\\ry'),
+    serverEnvLine('E', spec('description'), `pa'\\nss`),
+  ].join('\n');
+  assert.ok(lines.includes("'pa\\nss'"), 'backslash-n password is single-quoted');
+  assert.ok(lines.includes("`pa'\\nss`"), 'quote + escape-sequence value is backtick-wrapped');
+  const record = parseEnvServersText(lines).get('e');
+  assert.ok(record);
+  assert.equal(record.password, 'pa\\nss', 'literal \\n survives (not expanded to newline)');
+  assert.equal(record.sudoPassword, 'x\\ry', 'literal \\r survives');
+  assert.equal(record.description, `pa'\\nss`, 'quote + \\n survives via backticks');
+});
+
+// Round-9: the ONLY unrepresentable case — all three delimiter characters.
+test('values containing all three delimiter characters are rejected', () => {
+  assert.throws(
+    () => serverEnvLine('F', spec('password'), `x'"` + 'y`'),
+    /all three dotenv delimiter characters.*TOML/s,
+    'writer must throw when every delimiter is present'
+  );
+});
+
+// Round-10 verification: dotenv 16.6.1 expands ONLY \n and \r inside double
+// quotes — \t, \\, \f stay literal (checked against the dependency source
+// AND at runtime). These round-trips lock that behavior so a future dotenv
+// upgrade widening the expansion set fails HERE instead of silently
+// corrupting credentials (cubic r10 suggested the guard was incomplete; the
+// runtime probe showed it already is complete — the tests pin it).
+test('other backslash sequences stay literal in double quotes', () => {
+  const lines = [
+    serverEnvLine('T', spec('host'), '203.0.113.13'),
+    serverEnvLine('T', spec('password'), 'pa\\tss'),
+    serverEnvLine('T', spec('sudoPassword'), 'x\\\\y'),
+    serverEnvLine('T', spec('description'), 'a\\fb'),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('t');
+  assert.ok(record);
+  assert.equal(record.password, 'pa\\tss', 'literal \\t must not become TAB');
+  assert.equal(record.sudoPassword, 'x\\\\y', 'literal \\\\ must not collapse');
+  assert.equal(record.description, 'a\\fb', 'literal \\f must not become FF');
+});
+
+// Round-10: an ACTUAL CR/LF character is unrepresentable in every
+// delimiter — dotenv normalizes \r to \n line-wise before parsing (so CR
+// would silently round-trip as LF even inside backticks), and a raw LF
+// cannot live on a single .env line at all.
+test('values containing actual CR/LF characters are rejected', () => {
+  assert.equal(envValueRepresentable('password', 'pa\rss'), false, 'actual CR vetoed');
+  assert.equal(envValueRepresentable('password', 'pa\nss'), false, 'actual LF vetoed');
+  // Even when backticks would otherwise fit (no backtick in the value),
+  // the control character still vetoes it.
+  assert.throws(
+    () => serverEnvLine('R', spec('password'), `x'"y\r`),
+    /literal CR\/LF character.*dotenv normalizes CR to LF.*TOML/s,
+    'writer must throw a CR-specific message, not the delimiter one'
+  );
+});
+
+// Round-6: the rejection is gated on quoting being REQUIRED. Interior
+// quotes alone never force quoting (dotenv's unquoted alternative passes
+// them through verbatim), so a mixed-quote PATH with no #/whitespace
+// round-trips unquoted instead of being refused.
+test('mixed-quote values that need no quoting round-trip unquoted', () => {
+  const lines = [
+    serverEnvLine('U', spec('host'), '203.0.113.9'),
+    serverEnvLine('U', spec('keyPath'), `/keys/a'b"c/id_rsa`),
+    // r7: an UNPAIRED leading delimiter also needs no quoting — dotenv's
+    // quoted alternative requires a closing delimiter at end-of-value, so
+    // this falls through to the verbatim unquoted alternative.
+    serverEnvLine('U', spec('auditLog'), '`a\'b"c'),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('u');
+  assert.ok(record);
+  assert.equal(record.keyPath, `/keys/a'b"c/id_rsa`, 'mixed-quote path survives unquoted');
+  assert.equal(record.auditLog, '`a\'b"c', 'unpaired leading backtick survives unquoted');
+});
+
+// r7 counterpart: a PAIRED leading delimiter DOES require quoting — dotenv
+// would strip the outer pair of e.g. 'abc' and reshape the value.
+test('paired leading delimiter still forces quoting', () => {
+  const line = serverEnvLine('P', spec('keyPath'), "'abc'");
+  assert.equal(line, `SSH_SERVER_P_KEYPATH="'abc'"`, 'paired quotes are double-wrapped');
+  const record = parseEnvServersText(serverEnvLine('P', spec('host'), 'h') + '\n' + line).get('p');
+  assert.equal(record.keyPath, "'abc'", 'the literal outer quotes survive the round-trip');
+});
+
+// Round-5: machine fields (key path, audit-log path...) containing `#` are
+// just as truncatable as passwords — quoting is content-driven now.
+test('machine values containing # are quoted and round-trip', () => {
+  const lines = [
+    serverEnvLine('M', spec('host'), '203.0.113.8'),
+    serverEnvLine('M', spec('keyPath'), '/keys/vault#2/id_rsa'),
+    serverEnvLine('M', spec('auditLog'), '/var/log/audit#ops.jsonl'),
+    // Values without special characters stay unquoted (wire format stable).
+    serverEnvLine('M', spec('port'), 22),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('m');
+  assert.ok(record);
+  assert.equal(record.keyPath, '/keys/vault#2/id_rsa', 'hash in key path survives');
+  assert.equal(record.auditLog, '/var/log/audit#ops.jsonl', 'hash in audit-log path survives');
+  assert.equal(record.port, 22, 'plain machine value still unquoted');
 });
 
 // ── coercion ─────────────────────────────────────────────────────────────────
@@ -253,11 +426,223 @@ async function roundTrip(): Promise<void> {
   assert.ok(updated);
   assert.equal(updated.defaultDir, '/opt/app');
   assert.equal(updated.password, 'up-pw');
+
+  // ── unrepresentable values are rejected BEFORE any file mutation (r5-r9) ──
+  // r9 narrowed the unrepresentable set to all-three-delimiter values;
+  // both-quote credentials are now accepted via backticks.
+  const linesBefore = fs.readFileSync(envPath, 'utf8');
+  const rejected = cli.add_server_to_env('mq', '198.51.100.7', 'op', 'password', `p'"` + 'q`');
+  assert.equal(rejected, false, 'add must refuse an all-three-delimiter credential');
+  assert.equal(
+    fs.readFileSync(envPath, 'utf8'),
+    linesBefore,
+    'a rejected add must not touch the .env file'
+  );
+  const bothQuotes = cli.add_server_to_env('mq2', '198.51.100.9', 'op', 'password', `p'"q`);
+  assert.equal(bothQuotes, true, 'both-quote credential is accepted (backtick delimiter)');
+  const loaderMQ = new ConfigLoader();
+  loaderMQ.loadEnvConfig(envPath);
+  assert.equal(loaderMQ.getServer('mq2')?.password, `p'"q`, 'both-quote credential round-trips');
+
+  // ── but only when quoting is required (r6): a key path with interior
+  // quotes and no #/whitespace is representable unquoted and must add.
+  const keyOk = cli.add_server_to_env('mqkey', '198.51.100.8', 'op', 'key', `/k'a"b`);
+  assert.equal(keyOk, true, 'mixed-quote key path without #/space must be accepted');
+  const loaderK = new ConfigLoader();
+  loaderK.loadEnvConfig(envPath);
+  assert.equal(loaderK.getServer('mqkey')?.keyPath, `/k'a"b`, 'key path round-trips unquoted');
+
+  // ── case-insensitive markers (r3) ─────────────────────────────────────
+  // Hand-authored mixed-case entry: listed as `cased` by load_servers().
+  // add must detect the duplicate despite the casing mismatch, and update
+  // must find and rewrite it (previously both were case-sensitive misses
+  // while remove worked — the flows disagreed).
+  fs.appendFileSync(
+    envPath,
+    [
+      'SSH_SERVER_Cased_HOST=203.0.113.99',
+      'SSH_SERVER_Cased_USER=demo',
+      'SSH_SERVER_Cased_PASSWORD="pw"',
+      '',
+    ].join('\n'),
+    'utf8'
+  );
+  const dup = cli.add_server_to_env('cased', '198.51.100.9', 'op', 'password', 'x');
+  assert.equal(dup, false, 'add must refuse a mixed-case existing entry');
+  const updatedCased = cli2.update_server_in_env(
+    'cased',
+    '203.0.113.99',
+    'demo',
+    'password',
+    'new-pw',
+    '22'
+  );
+  assert.equal(updatedCased, true, 'update must find a mixed-case entry');
+  const loader3 = new ConfigLoader();
+  loader3.loadEnvConfig(envPath);
+  const cased = loader3.getServer('cased');
+  assert.ok(cased, 'rewritten entry still loads');
+  assert.equal(cased.password, 'new-pw', 'update rewrote the cased entry');
+
+  // ── field-anchored removal (r4) ──────────────────────────────────────
+  // `server remove foo` used to match `^SSH_SERVER_FOO_` as a bare prefix
+  // and took `foo_bar`'s lines with it.
+  assert.ok(cli.add_server_to_env('pfx', '198.51.100.3', 'op', 'password', 'p1'));
+  assert.ok(cli.add_server_to_env('pfx_web', '198.51.100.4', 'op', 'password', 'p2'));
+  assert.ok(cli.remove_server_from_env('pfx'), 'remove pfx must succeed');
+  const loader4 = new ConfigLoader();
+  loader4.loadEnvConfig(envPath);
+  assert.equal(loader4.getServer('pfx'), undefined, 'pfx removed');
+  assert.ok(loader4.getServer('pfx_web'), 'pfx_web must survive removing pfx');
+  assert.equal(loader4.getServer('pfx_web')?.password, 'p2', 'pfx_web data intact');
+
+  // Same for update: rewriting pfx2 must not touch pfx2_web.
+  assert.ok(cli.add_server_to_env('pfx2', '198.51.100.5', 'op', 'password', 'q1'));
+  assert.ok(cli.add_server_to_env('pfx2_web', '198.51.100.6', 'op', 'password', 'q2'));
+  assert.ok(
+    cli2.update_server_in_env('pfx2', '198.51.100.5', 'op', 'password', 'q3'),
+    'update pfx2 must succeed'
+  );
+  const loader5 = new ConfigLoader();
+  loader5.loadEnvConfig(envPath);
+  assert.equal(loader5.getServer('pfx2')?.password, 'q3', 'pfx2 rewritten');
+  assert.equal(loader5.getServer('pfx2_web')?.password, 'q2', 'pfx2_web untouched by pfx2 update');
 }
 
 await asyncTest(
-  'CLI add/update writes load back through ConfigLoader (incl. hostile passwords)',
+  'CLI add/update writes load back through ConfigLoader (incl. hostile passwords + mixed-case markers)',
   roundTrip
+);
+
+// ── migration transaction in fresh subprocesses (r7) ────────────────────────
+// The migration runs at module import time; these scenarios need processes
+// with a controlled HOME and no SSH4AGENT_* overrides.
+async function migrationGuards(): Promise<void> {
+  const { spawnSync } = await import('node:child_process');
+  const configTs = pathToFileURL(path.resolve('cli/lib/config.ts')).href;
+  const script = `import(${JSON.stringify(configTs)}).then(()=>0,(e)=>{console.error(e);process.exit(1)})`;
+  const cleanEnv = (extra: Record<string, string>): Record<string, string> => {
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (
+        typeof v === 'string' &&
+        !k.startsWith('SSH4AGENT') &&
+        k !== 'SSH_ENV_PATH' &&
+        !k.startsWith('SSH_SERVER_')
+      ) {
+        env[k] = v;
+      }
+    }
+    const merged = { ...env, ...extra };
+    // os.homedir() on Windows ignores HOME (USERPROFILE wins, then
+    // HOMEDRIVE+HOMEPATH) — map the synthetic HOME across so the
+    // subprocess really resolves the temp home. POSIX needs no help.
+    if (process.platform === 'win32' && extra.HOME) {
+      merged.USERPROFILE = extra.HOME;
+      delete merged.HOMEDRIVE;
+      delete merged.HOMEPATH;
+    }
+    return merged;
+  };
+  const run = (home: string, extra: Record<string, string>) =>
+    spawnSync(process.execPath, ['-e', script], {
+      env: cleanEnv({ HOME: home, ...extra }),
+      cwd: home,
+      encoding: 'utf8',
+    });
+
+  // Phase 1 fails (legacy .env is a DIRECTORY → copyFileSync EISDIR) while
+  // legacy config.json exists: Phase 2 must NOT recreate the home, or the
+  // run splits servers (legacy .env) from CLI settings (new home).
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-fail-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.mkdirSync(path.join(legacy, '.env')); // directory → the copy throws
+    fs.writeFileSync(path.join(legacy, 'config.json'), '{}');
+    const r = run(home, {});
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    assert.equal(
+      fs.existsSync(path.join(home, '.ssh4agent')),
+      false,
+      'a failed .env migration must abort the settings phase for this run'
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+
+  // An explicit SSH4AGENT_HOME is isolation intent: legacy files must not
+  // be copied into the deliberately selected home.
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-iso-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, '.env'), 'SSH_SERVER_X_HOST=203.0.113.10\n');
+    fs.writeFileSync(path.join(legacy, 'config.json'), '{}');
+    const explicit = path.join(home, 'explicit-home');
+    const r = run(home, { SSH4AGENT_HOME: explicit });
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    assert.equal(
+      fs.existsSync(explicit),
+      false,
+      'an explicit SSH4AGENT_HOME must disable automatic legacy migration'
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+
+  // r8: the same isolation rule applies to the READ path — with an explicit
+  // SSH4AGENT_HOME, resolveEnvFilePath must not fall through to the legacy
+  // .env (reading old servers is as bad as copying them).
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-envpath-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, '.env'), 'SSH_SERVER_X_HOST=203.0.113.10\n');
+    const explicit = path.join(home, 'explicit-home');
+    const envTs = pathToFileURL(path.resolve('src/env-path.ts')).href;
+    const r = spawnSync(
+      process.execPath,
+      ['-e', `import(${JSON.stringify(envTs)}).then((m)=>console.log(m.resolveEnvFilePath()))`],
+      { env: cleanEnv({ HOME: home, SSH4AGENT_HOME: explicit }), cwd: home, encoding: 'utf8' }
+    );
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    assert.ok(
+      !r.stdout.includes('.ssh-manager'),
+      `explicit home must skip the legacy candidate, resolved: ${r.stdout.trim()}`
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+
+  // r8: the migrated .env and the new home must be tightened even when the
+  // legacy source is world-readable (0644) — the migration must not expose
+  // credentials the legacy dir's permissions happened to protect.
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-perm-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, '.env'), 'SSH_SERVER_X_HOST=203.0.113.10\n', {
+      mode: 0o644,
+    });
+    const r = run(home, {});
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    const newHome = path.join(home, '.ssh4agent');
+    assert.ok(fs.existsSync(path.join(newHome, '.env')), 'migration copied the .env');
+    // chmod is a no-op on Windows (stat reports synthetic 0666/0777 modes
+    // regardless), so the bit-level tightening contract is POSIX-only.
+    if (process.platform !== 'win32') {
+      assert.strictEqual(fs.statSync(newHome).mode & 0o777, 0o700, 'migrated home tightened to 0700');
+      assert.strictEqual(
+        fs.statSync(path.join(newHome, '.env')).mode & 0o777,
+        0o600,
+        'migrated .env tightened to 0600 despite a 0644 source'
+      );
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+}
+
+await asyncTest(
+  'migration: phase-1 failure aborts phase 2; explicit home disables migration',
+  migrationGuards
 );
 
 // ── Summary ──────────────────────────────────────────────────────────────────

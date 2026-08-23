@@ -25,9 +25,6 @@ import {
   buildPostgreSQLListTablesCommand,
   buildMongoDBListDatabasesCommand,
   buildMongoDBListCollectionsCommand,
-  buildMySQLDumpCommand,
-  buildPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand,
   buildMySQLImportCommand,
   buildPostgreSQLImportCommand,
   buildMongoDBRestoreCommand,
@@ -35,6 +32,11 @@ import {
   buildPostgreSQLQueryCommand,
   buildMongoDBQueryCommand,
 } from '../src/database-manager.ts';
+import {
+  buildMySQLDumpCommand,
+  buildPostgreSQLDumpCommand,
+  buildMongoDBDumpCommand,
+} from '../src/dump-command-builder.ts';
 
 // The whole point of this suite is driving payloads through a real POSIX shell
 // to prove the heredoc/quoting defenses hold; there is no /bin/sh on Windows

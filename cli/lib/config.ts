@@ -13,7 +13,14 @@ import * as fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { print_info, print_error, print_success, print_warning } from './colors.ts';
-import { FIELD_BY_CAMEL, serverEnvLine } from '../../src/server-fields.ts';
+import {
+  FIELD_BY_CAMEL,
+  SERVER_FIELDS,
+  serverEnvLine,
+  parseEnvServersText,
+  envValueRepresentable,
+} from '../../src/server-fields.ts';
+import { resolveEnvFilePath } from '../../src/env-path.ts';
 
 // Render one `SSH_SERVER_<NAME>_<KEY>=value` line for a camelCase field,
 // through the shared field table (key names + quoting rules).
@@ -25,6 +32,27 @@ function envLineFor(
   const spec = FIELD_BY_CAMEL.get(camel);
   if (!spec) throw new Error(`Unknown server field: ${camel}`);
   return serverEnvLine(nameUpper, spec, value);
+}
+
+// Values that .env cannot store losslessly (the shared field-table rule:
+// BOTH quote characters AND quoting required) are checked BEFORE any file
+// mutation so add/update fail cleanly with guidance instead of a
+// half-written file — every value that will reach envLineFor is included,
+// host/user/port/mode included (PR #9 r6).
+function allValuesRepresentable(pairs: Array<[string, unknown]>): boolean {
+  for (const [camel, value] of pairs) {
+    if (value === '' || value === undefined || value === null) continue;
+    if (!envValueRepresentable(camel, value)) {
+      print_error(
+        `Value for '${camel}' contains both ' and " — the .env format cannot store it losslessly.`
+      );
+      print_info(
+        'Store this server in TOML instead (ssh4agent codex migrate), or change the value.'
+      );
+      return false;
+    }
+  }
+  return true;
 }
 
 // ── Paths ────────────────────────────────────────────────────────────────────
@@ -47,34 +75,146 @@ function resolveConfigHome(): string {
   return SSH4AGENT_HOME;
 }
 
+// Resolve .env through the ONE shared fallback chain (src/env-path.ts):
+// SSH_ENV_PATH → SSH4AGENT_ENV (deprecated alias) → ~/.ssh4agent/.env →
+// legacy ~/.ssh-manager/.env → $PWD/.env → ~/.env → <package root>/.env →
+// default ~/.ssh4agent/.env. The CLI and the MCP entry point can no longer
+// disagree about which file holds the servers (issue #7).
+//
+// The chain documents the legacy dir as a READ-ONLY fallback, so when it is
+// the resolved file we migrate it into the config home once (copy, then use
+// the new path for reads AND writes) instead of mutating the legacy file.
+//
+// Guards (PR #9 review):
+// - An explicit SSH_ENV_PATH / SSH4AGENT_ENV override is respected verbatim:
+//   migration only runs when the legacy file was reached through the
+//   fallback chain, never when the user pointed at it directly.
+// - The CLI's own config.json/aliases.json must move in the SAME step:
+//   this migration creates ~/.ssh4agent, which flips resolveConfigHome()
+//   below to the new directory — without the copy, the legacy settings
+//   would be orphaned behind a fresh default config.
+let resolvedEnvPath: string = resolveEnvFilePath();
+const homeEnvPath = path.join(SSH4AGENT_HOME, '.env');
+const envOverrideSet = Boolean(process.env.SSH_ENV_PATH || process.env.SSH4AGENT_ENV);
+
+// The migrated .env carries SSH passwords/passphrases: mkdirSync's `mode`
+// is masked by the process umask (0755-typical) and copyFileSync keeps the
+// SOURCE's bits (0644-typical) — without an explicit chmod the migration
+// can expose credentials to other local users that the legacy dir's 0700
+// previously protected. THROWS on failure (callers run it inside the
+// migration try, so a chmod failure rolls the whole migration back
+// instead of silently switching the CLI to unsecured copies — PR #9 r9).
+function tightenMigratedHome(files: string[]): void {
+  fs.chmodSync(SSH4AGENT_HOME, 0o700);
+  for (const f of files) {
+    fs.chmodSync(f, 0o600);
+  }
+}
+
+// ONE migration transaction covering both phases (PR #9 r6): the legacy
+// .env copy AND the CLI settings (config.json / aliases.json, which must
+// move independently of where the servers live — a TOML or cwd-.env setup
+// never enters the .env phase, yet the MCP side's state dir creates
+// ~/.ssh4agent on first startup and resolveConfigHome() stops falling
+// back to the legacy dir).
+//
+// All-or-nothing per run: a half-finished migration is worse than none —
+// CONFIG_HOME follows dir existence, so a fresh home without config.json
+// gets defaults written over the gap by init_config(), and the
+// "copy when absent" retry never fires again. A single homeExisted flag is
+// shared by both phases: if the .env phase created the home and the
+// settings phase then fails, the home THIS RUN created is rolled back too
+// so the next invocation retries the whole migration. rmdirSync only
+// removes the dir when empty — pre-existing user content is never touched.
+const homeExistedBeforeMigration = fs.existsSync(SSH4AGENT_HOME);
+const migrationCreated: string[] = [];
+const rollbackMigration = () => {
+  for (const f of migrationCreated) {
+    try {
+      fs.unlinkSync(f);
+    } catch {
+      /* best-effort */
+    }
+  }
+  if (!homeExistedBeforeMigration) {
+    try {
+      fs.rmdirSync(SSH4AGENT_HOME);
+    } catch {
+      /* non-empty or already gone */
+    }
+  }
+};
+
+// Phase 1: legacy .env (only when reached through the fallback chain — an
+// explicit SSH_ENV_PATH/SSH4AGENT_ENV override is respected verbatim, and
+// so is an explicit SSH4AGENT_HOME: a deliberately isolated home must not
+// have legacy servers/credentials copied into it, PR #9 r7).
+let envMigrated = false;
+let envMigrationFailed = false;
+if (
+  !envOverrideSet &&
+  !process.env.SSH4AGENT_HOME &&
+  resolvedEnvPath !== homeEnvPath &&
+  path.dirname(resolvedEnvPath) === LEGACY_HOME
+) {
+  try {
+    fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
+    fs.copyFileSync(resolvedEnvPath, homeEnvPath);
+    // Record the copy BEFORE tightening (PR #9 r10): if the chmod below
+    // throws, rollbackMigration() must still see — and unlink — the copied
+    // .env. Recording it afterwards left the copy in place, so the next
+    // run found homeEnvPath present, skipped migration entirely, and the
+    // credentials sat there with the SOURCE file's looser permissions.
+    migrationCreated.push(homeEnvPath);
+    tightenMigratedHome([homeEnvPath]);
+    print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
+    resolvedEnvPath = homeEnvPath;
+    envMigrated = true;
+  } catch {
+    rollbackMigration();
+    envMigrationFailed = true;
+  }
+}
+
+// Phase 2: CLI settings, whenever a legacy file lacks its new counterpart.
+// SKIPPED for this run when Phase 1 failed: copying settings into a fresh
+// home while .env still resolves to the legacy file would re-create the
+// exact servers-legacy/settings-new split-brain the transaction exists to
+// prevent — the next invocation retries both phases together (PR #9 r7).
+// Also skipped under an explicit SSH4AGENT_HOME, same isolation rule.
+if (!envMigrationFailed && !process.env.SSH4AGENT_HOME && fs.existsSync(LEGACY_HOME)) {
+  const pending: Array<{ from: string; to: string }> = [];
+  for (const file of ['config.json', 'aliases.json']) {
+    const from = path.join(LEGACY_HOME, file);
+    const to = path.join(SSH4AGENT_HOME, file);
+    if (fs.existsSync(from) && !fs.existsSync(to)) pending.push({ from, to });
+  }
+  if (pending.length > 0) {
+    try {
+      fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
+      for (const p of pending) {
+        fs.copyFileSync(p.from, p.to);
+        migrationCreated.push(p.to);
+      }
+      tightenMigratedHome(pending.map((p) => p.to));
+      for (const p of pending) print_info(`Migrated legacy CLI config ${p.from} → ${p.to}`);
+    } catch {
+      rollbackMigration();
+      if (envMigrated) resolvedEnvPath = resolveEnvFilePath(); // back to the legacy file
+    }
+  }
+}
+export const SSH4AGENT_ENV: string = resolvedEnvPath;
+
+// Computed AFTER the migration above: when the migration created
+// ~/.ssh4agent (with .env + config.json), the CLI must read AND write the
+// new home immediately — resolving first would point this invocation at
+// the legacy dir and lose any config written before the next run.
 const CONFIG_HOME: string = resolveConfigHome();
 
 export const SSH4AGENT_CONFIG: string = path.join(CONFIG_HOME, 'config.json');
 
 export const SSH4AGENT_ALIASES: string = path.join(CONFIG_HOME, 'aliases.json');
-
-// Resolve .env path with the same fallback chain as config.sh (and src/index.ts):
-// 1. SSH4AGENT_ENV env var (explicit override)
-// 2. <config home>/.env (new dir, or legacy dir while the new one is absent)
-// 3. $PWD/.env
-// 4. ~/.env
-// 5. <project-root>/.env
-// 6. default <config home>/.env (created on first server add)
-function resolveEnvPath(): string {
-  if (process.env.SSH4AGENT_ENV) return process.env.SSH4AGENT_ENV;
-  const candidates = [
-    path.join(CONFIG_HOME, '.env'),
-    path.join(process.cwd(), '.env'),
-    path.join(os.homedir(), '.env'),
-    path.join(PROJECT_ROOT, '.env'),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return path.join(CONFIG_HOME, '.env');
-}
-
-export const SSH4AGENT_ENV: string = resolveEnvPath();
 
 // ── init_config: ensure config dir + default config.json exist ──────────────
 export function init_config(): void {
@@ -151,29 +291,81 @@ export function load_servers(): string[] {
   return Array.from(new Set(names)).sort();
 }
 
-// get_server_config(server, field): returns the raw value with ONLY the outer
-// surrounding double-quotes stripped (preserves internal quotes). Matches the
-// config.sh regex `^"(.*)"$`. Returns null when the key is absent / empty.
+// get_server_config(server, field): read one server field through the SAME
+// parser the MCP loader uses (parseEnvServersText in src/server-fields.ts).
+// The CLI's own line-parsing implementation was deleted — the two sides had
+// drifted on quoting and field mapping (issue #7). `field` is the `.env`
+// suffix (HOST, USER, KEYPATH, DEFAULT_DIR, ...); returns null when the file,
+// server, or field is absent.
 export function get_server_config(server: string, field: string): string | null {
   if (!fs.existsSync(SSH4AGENT_ENV)) return null;
-  const serverUpper = server.toUpperCase();
+  const servers = parseEnvServersText(fs.readFileSync(SSH4AGENT_ENV, 'utf8'));
+  const record = servers.get(server.toLowerCase());
+  if (!record) return null;
   const fieldUpper = field.toUpperCase();
-  const key = `SSH_SERVER_${serverUpper}_${fieldUpper}`;
-  const prefix = key + '=';
-  const lines = readEnvLines();
-  let value: string | null = null;
-  for (const line of lines) {
-    if (line.startsWith(prefix)) {
-      value = line.slice(prefix.length);
-      break;
-    }
-  }
-  if (value === null || value === '') return null;
-  // Strip only a single pair of surrounding double quotes.
-  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
-    return value.slice(1, -1);
-  }
-  return value;
+  const spec = SERVER_FIELDS.find((f) => f.env === fieldUpper);
+  if (!spec) return null;
+  const value = record[spec.camel];
+  if (value === undefined || value === null || value === '') return null;
+  // Pattern lists (ALLOW/DENY_PATTERNS) keep their .env `;`-separated wire
+  // format — String([]) would join with commas and break round-tripping.
+  if (Array.isArray(value)) return value.join(';');
+  return String(value);
+}
+
+// Case-insensitive `SSH_SERVER_<name>_HOST=` line marker. Hand-authored
+// files may use any casing (`SSH_SERVER_Prod_HOST=`) while the CLI
+// addresses servers by their lowercased name — every existence check
+// (add duplicate guard, update, remove, has_server_entry) must agree, or
+// users get flows like "remove works but update claims not found"
+// (PR #9 review, round 3).
+function hostMarkerRe(name: string): RegExp {
+  return new RegExp(`^SSH_SERVER_${escapeRegex(name)}_HOST=`, 'i');
+}
+
+// `SSH_SERVER_<name>_<FIELD>=` matcher for rewrite/delete flows. The field
+// alternation (from the shared field table) is what makes it exact: a bare
+// `^SSH_SERVER_${name}_` prefix also matches OTHER servers whose names
+// START with `name` — `server remove foo` would take `foo_bar`'s lines
+// with it (PR #9 review, round 4).
+function serverLinesRe(name: string): RegExp {
+  const fields = SERVER_FIELDS.map((f) => f.env).join('|');
+  return new RegExp(`^SSH_SERVER_${escapeRegex(name)}_(?:${fields})=`, 'i');
+}
+
+// Raw-line existence check that ALSO sees names the MCP loader silently
+// drops (e.g. `bad-name` — invalid in env-var syntax). load_servers() lists
+// those entries, so remove flows must recognize them too for the
+// documented remove-and-readd recovery to work.
+export function has_server_entry(server: string): boolean {
+  if (!fs.existsSync(SSH4AGENT_ENV)) return false;
+  return readEnvLines().some((l) => hostMarkerRe(server).test(l));
+}
+
+// The SSH dial coordinates every CLI ssh/rsync/tunnel invocation needs.
+// Used to be re-fetched field-by-field in five places (cmd_exec, cmd_sync,
+// cmd_tunnel, test_ssh_connection, spawnInteractiveSsh).
+export interface SshTarget {
+  host: string;
+  user: string;
+  port: string;
+  keypath: string | null;
+  password: string | null;
+}
+
+// Resolve a configured server to its ssh arguments. Returns null when the
+// server is unknown or lacks HOST/USER.
+export function resolveServerToSshArgs(server: string): SshTarget | null {
+  const host = get_server_config(server, 'HOST');
+  const user = get_server_config(server, 'USER');
+  if (!host || !user) return null;
+  return {
+    host,
+    user,
+    port: get_server_config(server, 'PORT') || '22',
+    keypath: get_server_config(server, 'KEYPATH'),
+    password: get_server_config(server, 'PASSWORD'),
+  };
 }
 
 // ── add_server_to_env ────────────────────────────────────────────────────────
@@ -194,11 +386,27 @@ export function add_server_to_env(
 ): boolean {
   const nameUpper = name.toUpperCase();
 
+  // Reject unrepresentable values before touching the file — every field
+  // that will be rendered below, not just the credentials.
+  if (
+    !allValuesRepresentable([
+      ['host', host],
+      ['user', user],
+      ['port', port],
+      ['mode', mode],
+      [authType === 'password' ? 'password' : 'keyPath', authValue],
+      ['description', description],
+      ['allowPatterns', allowPatterns],
+      ['auditLog', auditLog],
+    ])
+  ) {
+    return false;
+  }
+
   // Check if server already exists
   if (fs.existsSync(SSH4AGENT_ENV)) {
     const existing = readEnvLines();
-    const marker = `SSH_SERVER_${nameUpper}_HOST=`;
-    if (existing.some((l) => l.startsWith(marker))) {
+    if (existing.some((l) => hostMarkerRe(name).test(l))) {
       print_error(`Server '${name}' already exists`);
       return false;
     }
@@ -260,9 +468,23 @@ export function update_server_in_env(
   defaultDir: string = ''
 ): boolean {
   const nameUpper = name.toUpperCase();
-  const marker = `SSH_SERVER_${nameUpper}_HOST=`;
 
-  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
+  // Reject unrepresentable values before touching the file — every field
+  // that will be rendered below.
+  if (
+    !allValuesRepresentable([
+      ['host', host],
+      ['user', user],
+      ['port', port],
+      [authType === 'password' ? 'password' : 'keyPath', authValue],
+      ['description', description],
+      ['defaultDir', defaultDir],
+    ])
+  ) {
+    return false;
+  }
+
+  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => hostMarkerRe(name).test(l))) {
     print_error(`Server '${name}' not found`);
     return false;
   }
@@ -275,9 +497,11 @@ export function update_server_in_env(
   }
 
   // Remove old server config lines + the `# Server: name` comment line.
-  // bash: sed "/^# Server: $name$/d; /^SSH_SERVER_${name_upper}_/d"
+  // bash: sed "/^# Server: $name$/d; /^SSH_SERVER_${name_upper}_/d" —
+  // case-insensitive so hand-authored cased entries rewrite cleanly, and
+  // field-anchored so `foo` cannot swallow `foo_bar`'s lines.
   const commentRe = new RegExp(`^# Server: ${escapeRegex(name)}$`);
-  const lineRe = new RegExp(`^SSH_SERVER_${nameUpper}_`);
+  const lineRe = serverLinesRe(name);
   const kept = readEnvLines().filter((l) => !commentRe.test(l) && !lineRe.test(l));
 
   const append: string[] = [];
@@ -305,11 +529,11 @@ export function update_server_in_env(
 
 // ── remove_server_from_env ───────────────────────────────────────────────────
 // Note (matches bash grep -v): removes ONLY the SSH_SERVER_<NAME>_ lines,
-// leaving the `# Server: name` comment behind.
+// leaving the `# Server: name` comment behind. Case-insensitive for the
+// same reason as has_server_entry(): hand-authored entries may use any
+// casing while the CLI addresses servers by their lowercased name.
 export function remove_server_from_env(name: string): boolean {
-  const nameUpper = name.toUpperCase();
-  const marker = `SSH_SERVER_${nameUpper}_HOST=`;
-  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
+  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => hostMarkerRe(name).test(l))) {
     print_error(`Server '${name}' not found`);
     return false;
   }
@@ -318,8 +542,8 @@ export function remove_server_from_env(name: string): boolean {
   } catch {
     /* ignore */
   }
-  const lineRe = new RegExp(`^SSH_SERVER_${nameUpper}_`);
-  const kept = readEnvLines().filter((l) => !lineRe.test(l));
+  // Field-anchored: `server remove foo` must not take `foo_bar`'s lines.
+  const kept = readEnvLines().filter((l) => !serverLinesRe(name).test(l));
   fs.writeFileSync(SSH4AGENT_ENV, kept.join('\n') + '\n', 'utf8');
   print_success(`Server '${name}' removed successfully`);
   return true;
@@ -331,17 +555,12 @@ export function remove_server_from_env(name: string): boolean {
 // takes the "sshpass not installed" path and warns (matches bash behavior on
 // systems without sshpass — see report).
 export function test_ssh_connection(server: string): boolean {
-  const host = get_server_config(server, 'HOST');
-  const user = get_server_config(server, 'USER');
-  let port = get_server_config(server, 'PORT');
-  const keypath = get_server_config(server, 'KEYPATH');
-  const password = get_server_config(server, 'PASSWORD');
-  port = port || '22';
-
-  if (!host || !user) {
+  const target = resolveServerToSshArgs(server);
+  if (!target) {
     print_error(`Server '${server}' not found or incomplete configuration`);
     return false;
   }
+  const { host, user, port, keypath, password } = target;
 
   print_info(`Testing connection to ${server} (${user}@${host}:${port})...`);
 

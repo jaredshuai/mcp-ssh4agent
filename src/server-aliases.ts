@@ -1,24 +1,20 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { readStateFileText, writeStateFileText } from './state-files.ts';
 
 /**
  * Server alias management
  * Allows using aliases like "prod" instead of full server names
  */
 
-const ALIASES_FILE = path.join(__dirname, '..', '.server-aliases.json');
+const ALIASES_FILE = '.server-aliases.json';
 
 /**
- * Load server aliases from configuration file
+ * Load server aliases from the state file (~/.ssh4agent, with one-time
+ * migration from the legacy install directory — see src/state-files.ts).
  */
 function loadAliases(): Record<string, string> {
   try {
-    if (fs.existsSync(ALIASES_FILE)) {
-      const content = fs.readFileSync(ALIASES_FILE, 'utf8');
+    const content = readStateFileText(ALIASES_FILE);
+    if (content) {
       return JSON.parse(content);
     }
   } catch (error) {
@@ -28,27 +24,30 @@ function loadAliases(): Record<string, string> {
 }
 
 /**
- * Save server aliases to configuration file
+ * Save server aliases to the state file
  */
 function saveAliases(aliases) {
-  try {
-    fs.writeFileSync(ALIASES_FILE, JSON.stringify(aliases, null, 2));
-    return true;
-  } catch (error) {
-    console.error(`Error saving aliases: ${error.message}`);
-    return false;
-  }
+  return writeStateFileText(ALIASES_FILE, JSON.stringify(aliases, null, 2));
 }
 
 /**
- * Resolve server name from alias
+ * Resolve server name from alias.
+ *
+ * `aliasesOverride` lets callers (and tests) inject a mapping without touching
+ * the aliases file; omitted → read from disk as usual.
  */
-export function resolveServerName(nameOrAlias, servers) {
-  const aliases = loadAliases();
+export function resolveServerName(nameOrAlias, servers, aliasesOverride?) {
+  const aliases = aliasesOverride ?? loadAliases();
 
-  // Check if it's an alias
-  if (aliases[nameOrAlias]) {
-    return aliases[nameOrAlias];
+  // Check if it's an alias. Own-property + string guard: a bare truthy
+  // lookup would also catch INHERITED Object.prototype members (`toString`
+  // is a function) and `.toLowerCase()` on one throws (PR #9 review).
+  // The target is lowercased because it names a server, and config keys
+  // are lowercased on load: returning `Prod-Web` verbatim makes every
+  // later `servers[name]` lookup miss and a live server is misreported as
+  // a stale alias (PR #9 review, round 2).
+  if (Object.hasOwn(aliases, nameOrAlias) && typeof aliases[nameOrAlias] === 'string') {
+    return aliases[nameOrAlias].toLowerCase();
   }
 
   // Check if it's a direct server name
@@ -85,6 +84,27 @@ export function resolveServerName(nameOrAlias, servers) {
   }
 
   return null;
+}
+
+/**
+ * Single server resolution interface: alias → real name → prefix match →
+ * domain match (same order as resolveServerName), returning BOTH the
+ * canonical name and the full resolved config.
+ *
+ * This is the one path every config consumer must go through. Looking up
+ * `servers[name.toLowerCase()]` directly silently skips alias expansion, so a
+ * server reached via alias appears unconfigured — and an unconfigured server
+ * degrades to `unrestricted` in policy evaluation (issue #1: an alias could
+ * bypass a readonly/restricted policy).
+ *
+ * Returns `{ name, config }`, or null when nothing matches / the resolved
+ * name has no config entry. Never throws for a miss (ambiguity still throws,
+ * matching resolveServerName semantics).
+ */
+export function resolveServer(nameOrAlias, servers, aliasesOverride?) {
+  const name = resolveServerName(nameOrAlias, servers, aliasesOverride);
+  if (!name) return null;
+  return { name, config: servers[name] || null };
 }
 
 /**

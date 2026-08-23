@@ -1,102 +1,15 @@
-// Auto-split from src/index.js (candidate 3). Tool definitions for the
-// database group — bodies moved verbatim; see src/tool-registry.ts for the
-// authoritative group membership. Infrastructure (connection pool, config
-// loading, policy gate) arrives via the ctx argument at registration time.
+// Database tools (ssh_db_*). Infrastructure arrives via ctx at registration time.
 
 import { z } from 'zod';
-import fs from 'fs';
 import path from 'path';
-import os from 'os';
-import crypto from 'crypto';
-import SSHManager from '../ssh-manager.ts';
-import {
-  getTempFilename,
-  buildDeploymentStrategy,
-  detectDeploymentNeeds,
-} from '../deploy-helper.ts';
-import { resolveServerName, addAlias, removeAlias, listAliases } from '../server-aliases.ts';
-import {
-  expandCommandAlias,
-  addCommandAlias,
-  removeCommandAlias,
-  listCommandAliases,
-  suggestAliases,
-} from '../command-aliases.ts';
-import { TIMEOUTS, truncateOutput, formatJSONResponse, formatDuration } from '../config.ts';
-import { initializeHooks, executeHook, toggleHook, listHooks } from '../hooks-system.ts';
-import {
-  loadProfile,
-  listProfiles,
-  setActiveProfile,
-  getActiveProfileName,
-} from '../profile-loader.ts';
 import { logger } from '../logger.ts';
-import { shSingleQuote, buildCdPrefix, buildSudoPipeline } from '../shell-quote.ts';
-import { parseRsyncStats } from '../rsync-stats.ts';
-import { toRsyncLocalPath } from '../rsync-path.ts';
-import { createSession, getSession, listSessions, closeSession } from '../session-manager.ts';
 import {
-  getGroup,
-  createGroup,
-  updateGroup,
-  deleteGroup,
-  addServersToGroup,
-  removeServersFromGroup,
-  listGroups,
-  executeOnGroup,
-} from '../server-groups.ts';
-import { createTunnel, listTunnels, closeTunnel, closeServerTunnels } from '../tunnel-manager.ts';
-import {
-  getHostKeyFingerprint,
-  isHostKnown,
-  getCurrentHostKey,
-  removeHostKey,
-  addHostKey,
-  updateHostKey,
-  hasHostKeyChanged,
-  listKnownHosts,
-  detectSSHKeyError,
-  extractHostFromSSHError,
-} from '../ssh-key-manager.ts';
-import {
-  BACKUP_TYPES,
-  DEFAULT_BACKUP_DIR,
-  generateBackupId,
-  getBackupMetadataPath,
-  getBackupFilePath,
   buildMySQLDumpCommand,
   buildPostgreSQLDumpCommand,
   buildMongoDBDumpCommand,
-  buildFilesBackupCommand,
-  buildRestoreCommand,
-  createBackupMetadata,
-  buildSaveMetadataCommand,
-  buildListBackupsCommand,
-  parseBackupsList,
-  buildCleanupCommand,
-  buildCronScheduleCommand,
-} from '../backup-manager.ts';
-import {
-  HEALTH_STATUS,
-  buildServiceStatusCommand,
-  parseServiceStatus,
-  buildProcessListCommand,
-  parseProcessList,
-  buildKillProcessCommand,
-  buildProcessInfoCommand,
-  createAlertConfig,
-  buildSaveAlertConfigCommand,
-  buildLoadAlertConfigCommand,
-  checkAlertThresholds,
-  buildComprehensiveHealthCheckCommand,
-  parseComprehensiveHealthCheck,
-  resolveServiceName,
-} from '../health-monitor.ts';
+} from '../dump-command-builder.ts';
 import {
   DB_TYPES,
-  buildMySQLDumpCommand as buildDBMySQLDumpCommand,
-  buildPostgreSQLDumpCommand as buildDBPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand as buildDBMongoDBDumpCommand,
   buildMySQLImportCommand,
   buildPostgreSQLImportCommand,
   buildMongoDBRestoreCommand,
@@ -118,23 +31,7 @@ import {
 } from '../database-manager.ts';
 
 export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolContext) {
-  const {
-    register: registerToolConditional,
-    getConnection,
-    closeConnection,
-    execCommandWithTimeout,
-    loadServerConfig,
-    getServerConfig,
-    applyServerPolicy,
-    auditOk,
-    isConnectionValid,
-    cleanupOldConnections,
-    connections,
-    connectionTimestamps,
-    keepaliveIntervals,
-    CONNECTION_TIMEOUT,
-    KEEPALIVE_INTERVAL,
-  } = ctx;
+  const { register: registerToolConditional, getConnection } = ctx;
 
   registerToolConditional(
     'ssh_db_dump',
@@ -169,14 +66,6 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
       compress = true,
       tables,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_db_dump', {
-        type,
-        database,
-        outputFile,
-        tables,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -201,14 +90,14 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
 
         switch (type) {
           case DB_TYPES.MYSQL:
-            dumpCommand = buildDBMySQLDumpCommand(options);
+            dumpCommand = buildMySQLDumpCommand(options);
             break;
           case DB_TYPES.POSTGRESQL:
-            dumpCommand = buildDBPostgreSQLDumpCommand(options);
+            dumpCommand = buildPostgreSQLDumpCommand(options);
             break;
           case DB_TYPES.MONGODB:
             options.outputDir = outputFile.replace(/\.(tar\.gz|gz)$/, '');
-            dumpCommand = buildDBMongoDBDumpCommand(options);
+            dumpCommand = buildMongoDBDumpCommand(options);
             break;
           default:
             throw new Error(`Unsupported database type: ${type}`);
@@ -269,9 +158,12 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Database dump failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
@@ -305,14 +197,6 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
       dbPort,
       drop = true,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_db_import', {
-        type,
-        database,
-        inputFile,
-        drop,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -396,9 +280,12 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Database import failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
