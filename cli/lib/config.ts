@@ -132,10 +132,14 @@ const rollbackMigration = () => {
 };
 
 // Phase 1: legacy .env (only when reached through the fallback chain — an
-// explicit SSH_ENV_PATH/SSH4AGENT_ENV override is respected verbatim).
+// explicit SSH_ENV_PATH/SSH4AGENT_ENV override is respected verbatim, and
+// so is an explicit SSH4AGENT_HOME: a deliberately isolated home must not
+// have legacy servers/credentials copied into it, PR #9 r7).
 let envMigrated = false;
+let envMigrationFailed = false;
 if (
   !envOverrideSet &&
+  !process.env.SSH4AGENT_HOME &&
   resolvedEnvPath !== homeEnvPath &&
   path.dirname(resolvedEnvPath) === LEGACY_HOME
 ) {
@@ -148,11 +152,17 @@ if (
     envMigrated = true;
   } catch {
     rollbackMigration();
+    envMigrationFailed = true;
   }
 }
 
 // Phase 2: CLI settings, whenever a legacy file lacks its new counterpart.
-if (fs.existsSync(LEGACY_HOME)) {
+// SKIPPED for this run when Phase 1 failed: copying settings into a fresh
+// home while .env still resolves to the legacy file would re-create the
+// exact servers-legacy/settings-new split-brain the transaction exists to
+// prevent — the next invocation retries both phases together (PR #9 r7).
+// Also skipped under an explicit SSH4AGENT_HOME, same isolation rule.
+if (!envMigrationFailed && !process.env.SSH4AGENT_HOME && fs.existsSync(LEGACY_HOME)) {
   const pending: Array<{ from: string; to: string }> = [];
   for (const file of ['config.json', 'aliases.json']) {
     const from = path.join(LEGACY_HOME, file);

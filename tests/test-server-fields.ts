@@ -192,10 +192,24 @@ test('mixed-quote values that need no quoting round-trip unquoted', () => {
   const lines = [
     serverEnvLine('U', spec('host'), '203.0.113.9'),
     serverEnvLine('U', spec('keyPath'), `/keys/a'b"c/id_rsa`),
+    // r7: an UNPAIRED leading delimiter also needs no quoting — dotenv's
+    // quoted alternative requires a closing delimiter at end-of-value, so
+    // this falls through to the verbatim unquoted alternative.
+    serverEnvLine('U', spec('auditLog'), '`a\'b"c'),
   ].join('\n');
   const record = parseEnvServersText(lines).get('u');
   assert.ok(record);
   assert.equal(record.keyPath, `/keys/a'b"c/id_rsa`, 'mixed-quote path survives unquoted');
+  assert.equal(record.auditLog, '`a\'b"c', 'unpaired leading backtick survives unquoted');
+});
+
+// r7 counterpart: a PAIRED leading delimiter DOES require quoting — dotenv
+// would strip the outer pair of e.g. 'abc' and reshape the value.
+test('paired leading delimiter still forces quoting', () => {
+  const line = serverEnvLine('P', spec('keyPath'), "'abc'");
+  assert.equal(line, `SSH_SERVER_P_KEYPATH="'abc'"`, 'paired quotes are double-wrapped');
+  const record = parseEnvServersText(serverEnvLine('P', spec('host'), 'h') + '\n' + line).get('p');
+  assert.equal(record.keyPath, "'abc'", 'the literal outer quotes survive the round-trip');
 });
 
 // Round-5: machine fields (key path, audit-log path...) containing `#` are
@@ -419,6 +433,78 @@ async function roundTrip(): Promise<void> {
 await asyncTest(
   'CLI add/update writes load back through ConfigLoader (incl. hostile passwords + mixed-case markers)',
   roundTrip
+);
+
+// ── migration transaction in fresh subprocesses (r7) ────────────────────────
+// The migration runs at module import time; these scenarios need processes
+// with a controlled HOME and no SSH4AGENT_* overrides.
+async function migrationGuards(): Promise<void> {
+  const { spawnSync } = await import('node:child_process');
+  const configTs = path.resolve('cli/lib/config.ts');
+  const script = `import(${JSON.stringify(configTs)}).then(()=>0,(e)=>{console.error(e);process.exit(1)})`;
+  const cleanEnv = (extra: Record<string, string>): Record<string, string> => {
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (
+        typeof v === 'string' &&
+        !k.startsWith('SSH4AGENT') &&
+        k !== 'SSH_ENV_PATH' &&
+        !k.startsWith('SSH_SERVER_')
+      ) {
+        env[k] = v;
+      }
+    }
+    return { ...env, ...extra };
+  };
+  const run = (home: string, extra: Record<string, string>) =>
+    spawnSync(process.execPath, ['-e', script], {
+      env: cleanEnv({ HOME: home, ...extra }),
+      cwd: home,
+      encoding: 'utf8',
+    });
+
+  // Phase 1 fails (legacy .env is a DIRECTORY → copyFileSync EISDIR) while
+  // legacy config.json exists: Phase 2 must NOT recreate the home, or the
+  // run splits servers (legacy .env) from CLI settings (new home).
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-fail-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.mkdirSync(path.join(legacy, '.env')); // directory → the copy throws
+    fs.writeFileSync(path.join(legacy, 'config.json'), '{}');
+    const r = run(home, {});
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    assert.equal(
+      fs.existsSync(path.join(home, '.ssh4agent')),
+      false,
+      'a failed .env migration must abort the settings phase for this run'
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+
+  // An explicit SSH4AGENT_HOME is isolation intent: legacy files must not
+  // be copied into the deliberately selected home.
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-iso-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, '.env'), 'SSH_SERVER_X_HOST=203.0.113.10\n');
+    fs.writeFileSync(path.join(legacy, 'config.json'), '{}');
+    const explicit = path.join(home, 'explicit-home');
+    const r = run(home, { SSH4AGENT_HOME: explicit });
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    assert.equal(
+      fs.existsSync(explicit),
+      false,
+      'an explicit SSH4AGENT_HOME must disable automatic legacy migration'
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+}
+
+await asyncTest(
+  'migration: phase-1 failure aborts phase 2; explicit home disables migration',
+  migrationGuards
 );
 
 // ── Summary ──────────────────────────────────────────────────────────────────

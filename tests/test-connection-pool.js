@@ -237,6 +237,31 @@ async function main() {
     ok('cleanupAged closes connections idle past the pool timeout');
   }
 
+  // ── out-of-range timer delays fall back to defaults (r7) ───────────────
+  // Node setInterval clamps invalid delays to ~1ms: a negative or
+  // >2^31-1 keepalive would arm a continuous SSH-ping storm.
+  {
+    const created = [];
+    const pool = makePool({ 'pool-web-1': { host: '10.0.0.1' } }, created, {
+      keepaliveIntervalMs: -5000,
+      connectionTimeoutMs: 1e12,
+    });
+    await pool.get('pool-web-1');
+    const status = await pool.status();
+    assert.strictEqual(
+      status.settings.keepaliveMinutes,
+      5,
+      'negative keepalive falls back to the 5-minute default'
+    );
+    assert.strictEqual(
+      status.settings.timeoutMinutes,
+      30,
+      'overflow timeout falls back to the 30-minute default'
+    );
+    pool.close('pool-web-1');
+    ok('invalid timer values fall back to defaults instead of a 1ms ping storm');
+  }
+
   // ── concurrent get() calls share ONE connection attempt ────────────────
   {
     const created = [];

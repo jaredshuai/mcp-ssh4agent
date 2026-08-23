@@ -175,15 +175,16 @@ export function serverFromTomlRecord(tomlServer: Record<string, unknown>): Recor
 /**
  * Whether a value must be quoted to survive dotenv's reader: quoteEnv
  * fields always are, and any value containing `#` (comment start),
- * whitespace (trimmed unquoted), or STARTING with a quote/backtick
- * (dotenv would treat it as an opening delimiter) is truncated or
- * reshaped without quotes. Interior quotes alone do NOT require quoting —
- * dotenv's unquoted alternative (`[^#\r\n]+`) passes them through
- * verbatim, which is exactly what makes mixed-quote paths representable
- * (PR #9 r6).
+ * whitespace (trimmed unquoted), or a PAIRED leading delimiter (starts
+ * and ends with the same quote/backtick — dotenv would strip that outer
+ * pair) is truncated or reshaped without quotes. Interior quotes alone do
+ * NOT require quoting, and neither does an UNPAIRED leading delimiter:
+ * dotenv's quoted alternative needs a closing delimiter AND end-of-value,
+ * so `` `a'b"c `` falls through to the unquoted alternative
+ * (`[^#\r\n]+` passes quotes verbatim) (PR #9 r6/r7).
  */
 function quotingRequired(spec: ServerFieldSpec, rendered: string): boolean {
-  return spec.quoteEnv || /[#\s]/.test(rendered) || /^['"`]/.test(rendered);
+  return spec.quoteEnv || /[#\s]/.test(rendered) || /^(['"`])[\s\S]*\1$/.test(rendered);
 }
 
 /**

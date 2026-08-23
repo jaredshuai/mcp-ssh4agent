@@ -54,6 +54,18 @@ export const DEFAULT_KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000;
 // return its timeout exit code before the local SSH exec timeout fires.
 const WRAPPED_COMMAND_TIMEOUT_GRACE_MS = 5000;
 
+// Node setInterval clamps out-of-range delays to ~1ms — a negative or
+// >2^31-1 keepalive value therefore arms a continuous SSH-ping storm
+// against every live connection. Guard at the pool boundary (covers env
+// parsing in src/index.ts, config files, and direct constructor use):
+// anything outside [1, 2^31-1] falls back to the default (PR #9 r7).
+const MAX_TIMER_DELAY_MS = 2147483647;
+function validTimerDelay(value: number | undefined): value is number {
+  return (
+    typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= MAX_TIMER_DELAY_MS
+  );
+}
+
 export interface ConnectionStatusEntry {
   server: string;
   alive: boolean;
@@ -88,11 +100,13 @@ export class ConnectionPool {
   }
 
   get connectionTimeoutMs(): number {
-    return this.#options.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+    const v = this.#options.connectionTimeoutMs;
+    return validTimerDelay(v) ? v : DEFAULT_CONNECTION_TIMEOUT_MS;
   }
 
   get keepaliveIntervalMs(): number {
-    return this.#options.keepaliveIntervalMs ?? DEFAULT_KEEPALIVE_INTERVAL_MS;
+    const v = this.#options.keepaliveIntervalMs;
+    return validTimerDelay(v) ? v : DEFAULT_KEEPALIVE_INTERVAL_MS;
   }
 
   /**
