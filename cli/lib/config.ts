@@ -97,6 +97,26 @@ let resolvedEnvPath: string = resolveEnvFilePath();
 const homeEnvPath = path.join(SSH4AGENT_HOME, '.env');
 const envOverrideSet = Boolean(process.env.SSH_ENV_PATH || process.env.SSH4AGENT_ENV);
 
+// The migrated .env carries SSH passwords/passphrases: mkdirSync's `mode`
+// is masked by the process umask (0755-typical) and copyFileSync keeps the
+// SOURCE's bits (0644-typical) — without an explicit chmod the migration
+// can expose credentials to other local users that the legacy dir's 0700
+// previously protected (PR #9 r8).
+function tightenMigratedHome(files: string[]): void {
+  try {
+    fs.chmodSync(SSH4AGENT_HOME, 0o700);
+  } catch {
+    /* best-effort */
+  }
+  for (const f of files) {
+    try {
+      fs.chmodSync(f, 0o600);
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
 // ONE migration transaction covering both phases (PR #9 r6): the legacy
 // .env copy AND the CLI settings (config.json / aliases.json, which must
 // move independently of where the servers live — a TOML or cwd-.env setup
@@ -146,6 +166,7 @@ if (
   try {
     fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
     fs.copyFileSync(resolvedEnvPath, homeEnvPath);
+    tightenMigratedHome([homeEnvPath]);
     migrationCreated.push(homeEnvPath);
     print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
     resolvedEnvPath = homeEnvPath;
@@ -176,6 +197,7 @@ if (!envMigrationFailed && !process.env.SSH4AGENT_HOME && fs.existsSync(LEGACY_H
         fs.copyFileSync(p.from, p.to);
         migrationCreated.push(p.to);
       }
+      tightenMigratedHome(pending.map((p) => p.to));
       for (const p of pending) print_info(`Migrated legacy CLI config ${p.from} → ${p.to}`);
     } catch {
       rollbackMigration();

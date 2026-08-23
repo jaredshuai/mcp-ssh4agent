@@ -188,30 +188,46 @@ function quotingRequired(spec: ServerFieldSpec, rendered: string): boolean {
 }
 
 /**
+ * Whether the value must be SINGLE-quoted: dotenv expands `\n`/`\r`
+ * escape sequences inside DOUBLE quotes (silently changing credentials
+ * like `pa\nss` on read-back) and stops a double-quoted value at the
+ * first unescaped `"`. Single quotes are safe for both — dotenv expands
+ * nothing there (PR #9 r8).
+ */
+function singleQuoteRequired(rendered: string): boolean {
+  return rendered.includes('"') || /\\[nr]/.test(rendered);
+}
+
+/**
  * Whether `value` can be written for field `camel` (camelCase) and read
- * back losslessly through dotenv. False ONLY for the unrepresentable
- * case: a value containing BOTH quote characters that also REQUIRES
- * quoting (dotenv does not unescape `\"`, so no quoting scheme can
- * round-trip it). Values that stay unquoted tolerate interior quotes.
- * Shared by serverEnvLine (throws) and the CLI's pre-mutation checks.
+ * back losslessly through dotenv. False ONLY for values that REQUIRE
+ * quoting, must be single-quoted (contains `"` or literal `\n`/`\r`
+ * sequences), and also contain `'` (single-quoted values terminate at
+ * the first `'`, and dotenv does not unescape `\'`). Values that stay
+ * unquoted tolerate all of these. Shared by serverEnvLine (throws) and
+ * the CLI's pre-mutation checks.
  */
 export function envValueRepresentable(camel: string, value: unknown): boolean {
   const spec = FIELD_BY_CAMEL.get(camel);
   if (!spec) return false;
   const rendered = Array.isArray(value) ? (value as string[]).join(';') : String(value);
-  return !(rendered.includes('"') && rendered.includes("'") && quotingRequired(spec, rendered));
+  return !(
+    quotingRequired(spec, rendered) &&
+    singleQuoteRequired(rendered) &&
+    rendered.includes("'")
+  );
 }
 
 /**
  * Render one `.env` export line for a field, applying the shared quoting
- * rule (see quotingRequired). Quote CHOICE matters: dotenv (the reader on
- * both sides — see dotenvParse) stops a double-quoted value at the first
- * unescaped `"`, so a value containing `"` (but no `'`) is single-quoted,
- * and vice versa.
+ * rule (see quotingRequired / singleQuoteRequired). Quote CHOICE matters:
+ * dotenv (the reader on both sides — see dotenvParse) expands `\n`/`\r`
+ * inside double quotes and stops a double-quoted value at the first
+ * unescaped `"`, so such values are single-quoted.
  *
- * A value containing BOTH quote characters AND requiring quoting is
- * UNREPRESENTABLE — it throws so callers can reject the value up front
- * and point the user at TOML, which represents it natively (PR #9 r5/r6).
+ * A value that requires quoting, must be single-quoted, AND contains `'`
+ * is UNREPRESENTABLE — it throws so callers can reject the value up front
+ * and point the user at TOML, which represents it natively (PR #9 r5-r8).
  */
 export function serverEnvLine(
   nameUpper: string,
@@ -219,17 +235,17 @@ export function serverEnvLine(
   value: string | number | boolean | string[]
 ): string {
   const rendered = Array.isArray(value) ? value.join(';') : String(value);
-  if (rendered.includes('"') && rendered.includes("'") && quotingRequired(spec, rendered)) {
+  if (quotingRequired(spec, rendered) && singleQuoteRequired(rendered) && rendered.includes("'")) {
     throw new Error(
-      `Value for ${nameUpper}.${spec.env} contains both quote characters — ` +
-        `.env format cannot represent it losslessly; use TOML instead`
+      `Value for ${nameUpper}.${spec.env} mixes quote characters and/or dotenv escape sequences in a way ` +
+        `.env cannot represent losslessly; use TOML instead`
     );
   }
   const needsQuoting = quotingRequired(spec, rendered);
   let rhs: string;
   if (!needsQuoting) {
     rhs = rendered;
-  } else if (rendered.includes('"')) {
+  } else if (singleQuoteRequired(rendered)) {
     rhs = `'${rendered}'`;
   } else {
     rhs = `"${rendered}"`;

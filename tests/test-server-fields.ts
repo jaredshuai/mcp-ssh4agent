@@ -179,8 +179,34 @@ test('credentials with interior quote + # round-trip via alternating quotes', ()
 test('values containing both quote characters are rejected, not mangled', () => {
   assert.throws(
     () => serverEnvLine('B', spec('password'), `x'"y`),
-    /both quote characters.*TOML/s,
+    /cannot represent losslessly.*TOML/s,
     'writer must throw for mixed-quote credentials'
+  );
+});
+
+// Round-8: dotenv EXPANDS `\n`/`\r` inside double quotes — a credential
+// with literal backslash-n characters would silently change on read-back.
+// The writer must single-quote such values (no expansion there).
+test('literal \\n sequences force single-quoting and round-trip', () => {
+  const lines = [
+    serverEnvLine('E', spec('host'), '203.0.113.11'),
+    serverEnvLine('E', spec('password'), 'pa\\nss'),
+    serverEnvLine('E', spec('sudoPassword'), 'x\\ry'),
+  ].join('\n');
+  assert.ok(lines.includes("'pa\\nss'"), 'backslash-n password is single-quoted');
+  const record = parseEnvServersText(lines).get('e');
+  assert.ok(record);
+  assert.equal(record.password, 'pa\\nss', 'literal \\n survives (not expanded to newline)');
+  assert.equal(record.sudoPassword, 'x\\ry', 'literal \\r survives');
+});
+
+// Round-8 counterpart: single-quote REQUIRED (escape sequence) but the
+// value also contains `'` — unrepresentable, must throw.
+test('escape sequences mixed with a quote character are rejected', () => {
+  assert.throws(
+    () => serverEnvLine('F', spec('password'), `pa'\\nss`),
+    /cannot represent losslessly.*TOML/s,
+    'writer must throw for quote + escape-sequence credentials'
   );
 });
 
@@ -497,6 +523,52 @@ async function migrationGuards(): Promise<void> {
       fs.existsSync(explicit),
       false,
       'an explicit SSH4AGENT_HOME must disable automatic legacy migration'
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+
+  // r8: the same isolation rule applies to the READ path — with an explicit
+  // SSH4AGENT_HOME, resolveEnvFilePath must not fall through to the legacy
+  // .env (reading old servers is as bad as copying them).
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-envpath-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, '.env'), 'SSH_SERVER_X_HOST=203.0.113.10\n');
+    const explicit = path.join(home, 'explicit-home');
+    const envTs = path.resolve('src/env-path.ts');
+    const r = spawnSync(
+      process.execPath,
+      ['-e', `import(${JSON.stringify(envTs)}).then((m)=>console.log(m.resolveEnvFilePath()))`],
+      { env: cleanEnv({ HOME: home, SSH4AGENT_HOME: explicit }), cwd: home, encoding: 'utf8' }
+    );
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    assert.ok(
+      !r.stdout.includes('.ssh-manager'),
+      `explicit home must skip the legacy candidate, resolved: ${r.stdout.trim()}`
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+
+  // r8: the migrated .env and the new home must be tightened even when the
+  // legacy source is world-readable (0644) — the migration must not expose
+  // credentials the legacy dir's permissions happened to protect.
+  {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-perm-'));
+    const legacy = path.join(home, '.ssh-manager');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, '.env'), 'SSH_SERVER_X_HOST=203.0.113.10\n', {
+      mode: 0o644,
+    });
+    const r = run(home, {});
+    assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
+    const newHome = path.join(home, '.ssh4agent');
+    assert.ok(fs.existsSync(path.join(newHome, '.env')), 'migration copied the .env');
+    assert.strictEqual(fs.statSync(newHome).mode & 0o777, 0o700, 'migrated home tightened to 0700');
+    assert.strictEqual(
+      fs.statSync(path.join(newHome, '.env')).mode & 0o777,
+      0o600,
+      'migrated .env tightened to 0600 despite a 0644 source'
     );
     fs.rmSync(home, { recursive: true, force: true });
   }

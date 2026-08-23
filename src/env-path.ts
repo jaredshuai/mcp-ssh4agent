@@ -34,11 +34,18 @@ export function resolveEnvFilePath(): string {
     return process.env.SSH4AGENT_ENV;
   }
 
+  const homeExplicit = Boolean(process.env.SSH4AGENT_HOME);
   const home = process.env.SSH4AGENT_HOME || path.join(os.homedir(), '.ssh4agent');
   const legacyHome = path.join(os.homedir(), '.ssh-manager');
+  // An explicit SSH4AGENT_HOME is isolation intent (same rule as the CLI's
+  // migration guard, PR #9 r7/r8): the legacy dir stays in the chain only
+  // for the DEFAULT home, where it is a read-only fallback. With an
+  // explicit home, falling through to ~/.ssh-manager/.env would silently
+  // read — and let tools modify — the old servers and credentials the
+  // user deliberately left behind.
   const candidates = [
     path.join(home, '.env'),
-    path.join(legacyHome, '.env'),
+    ...(homeExplicit ? [] : [path.join(legacyHome, '.env')]),
     path.join(process.cwd(), '.env'),
     path.join(os.homedir(), '.env'),
     path.join(__dirname, '..', '.env'),
