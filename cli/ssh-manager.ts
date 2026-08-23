@@ -69,6 +69,10 @@ import {
   cmd_server_edit_file,
 } from './commands/server.ts';
 import { cmd_tools } from './commands/tools.ts';
+import { cmd_codex } from './commands/codex.ts';
+import { cmd_session } from './commands/session.ts';
+import { MONITOR_TYPES, monitorCommandFor } from './commands/monitor.ts';
+import { listSshProcesses, spawnInteractiveSsh } from './lib/process-utils.ts';
 
 // ── VERSION (derived from package.json, never hardcoded) ─────────────────────
 // Matches get_cli_version() in the bash entry: read cli/../package.json first
@@ -147,6 +151,13 @@ export function show_help(): void {
   out.push('        start       Start interactive session');
   out.push('        list        List active sessions');
   out.push('        close       Close a session');
+  out.push('    ');
+  out.push(`    ${CYAN}codex${NC}       OpenAI Codex integration`);
+  out.push('        setup             Configure for Codex');
+  out.push('        migrate           Convert servers to TOML');
+  out.push('        test              Test Codex integration');
+  out.push('        convert to-toml   Convert .env to TOML');
+  out.push('        convert to-env    Convert TOML to .env');
   out.push('    ');
   out.push(`    ${CYAN}exec${NC}        Execute commands`);
   out.push('        run         Run command on server');
@@ -294,24 +305,7 @@ export function cmd_ssh(server: string): void {
     process.exitCode = 1;
     return;
   }
-  const host = get_server_config(server, 'HOST');
-  const user = get_server_config(server, 'USER');
-  let port = get_server_config(server, 'PORT');
-  const keypath = get_server_config(server, 'KEYPATH');
-  port = port || '22';
-
-  if (!host || !user) {
-    print_error(`Server '${server}' not found`);
-    process.exitCode = 1;
-    return;
-  }
-
-  const sshArgs: string[] = ['-p', port];
-  if (keypath) sshArgs.push('-i', keypath);
-
-  print_info(`Connecting to ${server}...`);
-  const r = spawnSync('ssh', [...sshArgs, `${user}@${host}`], { stdio: 'inherit' });
-  if (r.status !== 0) process.exitCode = 1;
+  if (!spawnInteractiveSsh(server)) process.exitCode = 1;
 }
 
 // ── cmd_tunnel: create / list SSH tunnels ──────────────────────────────────────
@@ -382,7 +376,7 @@ export function cmd_tunnel(action: string, ...rest: string[]): void {
 
   if (action === 'list') {
     print_header('Active SSH Tunnels');
-    const lines = listTunnelProcesses();
+    const lines = listSshProcesses('tunnels').map((p) => p.display);
     if (lines.length > 0) {
       process.stdout.write(lines.join('\n') + '\n');
     } else {
@@ -394,43 +388,6 @@ export function cmd_tunnel(action: string, ...rest: string[]): void {
   print_error(`Unknown tunnel command: ${action}`);
   process.stdout.write('Available commands: create, list\n');
   process.exitCode = 1;
-}
-
-// Cross-platform tunnel listing (replaces `ps aux | grep ssh`).
-// - win32: `tasklist /FI "IMAGENAME eq ssh.exe"` (tasklist cannot see cmdline,
-//   so all ssh.exe processes are listed — same limitation as the bash fallback).
-// - other: `ps -A -o pid,command`, filtered to lines mentioning ssh with -L/-R/-D.
-function listTunnelProcesses(): string[] {
-  if (process.platform === 'win32') {
-    try {
-      const r = spawnSync('tasklist', ['/FI', 'IMAGENAME eq ssh.exe'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,
-      });
-      const out = r.stdout ? r.stdout.toString() : '';
-      // tasklist always prints an INFO/empty header when no matches; only
-      // return lines that actually reference ssh.exe.
-      const lines = out.split(/\r?\n/).filter((l) => /ssh\.exe/i.test(l));
-      // When there are matches, preserve the full tasklist table (header + rows)
-      // so the user sees column labels — matching the bash spirit of "show ssh".
-      if (lines.length > 0) {
-        const header = out.split(/\r?\n/).slice(0, 3).join('\n');
-        return [header, ...lines];
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  }
-  try {
-    const r = spawnSync('ps', ['-A', '-o', 'pid,command'], { stdio: ['ignore', 'pipe', 'pipe'] });
-    const out = r.stdout ? r.stdout.toString() : '';
-    return out
-      .split(/\r?\n/)
-      .filter((l) => /ssh/.test(l) && /(-L|-R|-D)/.test(l) && !/grep/.test(l));
-  } catch {
-    return [];
-  }
 }
 
 // ── requireCommand: lazy feature-specific dependency check ────────────────────
@@ -566,11 +523,16 @@ export async function interactive_mode(): Promise<void> {
         process.stdout.write('  5) Network\n');
         process.stdout.write('\n');
         const mt = await question('Choose [1-5]: ');
-        if (mt === '1') cmd_exec(sel, 'uptime && free -h && df -h');
-        else if (mt === '2') cmd_exec(sel, 'top -bn1 | head -20');
-        else if (mt === '3') cmd_exec(sel, 'free -h && ps aux --sort=-%mem | head -10');
-        else if (mt === '4') cmd_exec(sel, 'df -h && du -sh /* 2>/dev/null | sort -h | tail -10');
-        else if (mt === '5') cmd_exec(sel, 'netstat -tulpn 2>/dev/null | grep LISTEN');
+        const monitorChoice: Record<string, string> = {
+          '1': 'overview',
+          '2': 'cpu',
+          '3': 'memory',
+          '4': 'disk',
+          '5': 'network',
+        };
+        const monitorType = monitorChoice[mt];
+        const monitorCmd = monitorType ? monitorCommandFor(monitorType) : null;
+        if (monitorCmd) cmd_exec(sel, monitorCmd);
         process.stdout.write('\n');
         await pause();
       }
@@ -679,6 +641,23 @@ async function main(): Promise<void> {
         break;
       case 'tunnel':
         cmd_tunnel(rest[0] ?? '', ...rest.slice(1));
+        break;
+      case 'monitor': {
+        const monitorCmd = monitorCommandFor(rest[1]);
+        if (monitorCmd === null) {
+          print_error(`Unknown monitor type: ${rest[1] ?? ''}`);
+          print_info(`Valid types: ${MONITOR_TYPES.join(', ')}`);
+          process.exitCode = 1;
+          break;
+        }
+        cmd_exec(rest[0] ?? '', monitorCmd);
+        break;
+      }
+      case 'session':
+        await cmd_session(rest[0], ...rest.slice(1));
+        break;
+      case 'codex':
+        await cmd_codex(rest[0], ...rest.slice(1));
         break;
       case 'tools':
         await cmd_tools(rest[0], ...rest.slice(1));
