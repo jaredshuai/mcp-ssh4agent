@@ -39,11 +39,14 @@ function saveAliases(aliases) {
 export function resolveServerName(nameOrAlias, servers, aliasesOverride?) {
   const aliases = aliasesOverride ?? loadAliases();
 
-  // Check if it's an alias. The target is lowercased because it names a
-  // server, and config keys are lowercased on load: returning `Prod-Web`
-  // verbatim makes every later `servers[name]` lookup miss and a live
-  // server is misreported as a stale alias (PR #9 review).
-  if (aliases[nameOrAlias]) {
+  // Check if it's an alias. Own-property + string guard: a bare truthy
+  // lookup would also catch INHERITED Object.prototype members (`toString`
+  // is a function) and `.toLowerCase()` on one throws (PR #9 review).
+  // The target is lowercased because it names a server, and config keys
+  // are lowercased on load: returning `Prod-Web` verbatim makes every
+  // later `servers[name]` lookup miss and a live server is misreported as
+  // a stale alias (PR #9 review, round 2).
+  if (Object.hasOwn(aliases, nameOrAlias) && typeof aliases[nameOrAlias] === 'string') {
     return aliases[nameOrAlias].toLowerCase();
   }
 

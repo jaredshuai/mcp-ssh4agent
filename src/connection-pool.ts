@@ -140,7 +140,14 @@ export class ConnectionPool {
 
     const existing = this.#connections.get(name);
     if (existing) {
-      if (await this.#isAlive(existing)) {
+      const alive = await this.#isAlive(existing);
+      // disposeAll() may have run while the liveness probe was in flight —
+      // returning the (now disposed) connection would hand callers a dead
+      // handle after shutdown (PR #9 review, round 3).
+      if (this.#disposed) {
+        throw new Error('Connection pool has been disposed');
+      }
+      if (alive) {
         this.#timestamps.set(name, Date.now());
         return existing;
       }

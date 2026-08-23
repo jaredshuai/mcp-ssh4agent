@@ -180,6 +180,32 @@ async function main() {
     ok('auditOk rejecting with a non-Error value is still swallowed');
   }
 
+  // ── a NON-Error HANDLER rejection still audits and rethrows (r3) ──────
+  {
+    const { calls, deps } = makeDeps();
+    const handler = wrapWithPolicy(
+      'ssh_upload',
+      async () => {
+        // Reading `.message` on this in the catch would TypeError, mask
+        // the original rejection and skip the failure audit entry.
+        throw null;
+      },
+      {},
+      deps
+    );
+    let rejected = null;
+    try {
+      await handler({ server: 'prod' });
+    } catch (e) {
+      rejected = e;
+    }
+    assert.strictEqual(rejected, null, 'original rejection value rethrown unchanged');
+    const failure = calls.audits[calls.audits.length - 1];
+    assert.strictEqual(failure.result.success, false, 'failure audit entry still written');
+    assert.strictEqual(failure.result.error, 'null', 'non-Error rejection normalized to String()');
+    ok('handler rejecting with a non-Error value is audited and rethrown unchanged');
+  }
+
   // ── commandArg + expandAlias ───────────────────────────────────────────
   {
     const { calls, deps } = makeDeps();

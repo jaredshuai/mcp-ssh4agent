@@ -336,6 +336,30 @@ async function main() {
     ok('disposeAll during an in-flight connect rejects it and keeps the pool empty');
   }
 
+  // ── disposeAll during the liveness probe must not return a dead conn ──
+  {
+    const created = [];
+    const pool = makePool({ 'pool-live-2': { host: '10.8.0.1' } }, created);
+    const conn = await pool.get('pool-live-2');
+    /** @type {(v?: undefined) => void} */
+    let releasePing = () => undefined;
+    conn.ping = async () => {
+      await new Promise((resolve) => {
+        releasePing = resolve;
+      });
+      return true;
+    };
+
+    const pending = pool.get('pool-live-2');
+    await new Promise((resolve) => setImmediate(resolve)); // probe now in flight
+    pool.disposeAll(); // shutdown while the probe is pending
+    releasePing();
+    await assert.rejects(() => pending, /disposed/);
+    assert.strictEqual(conn.disposed, true, 'probe survivor was disposed by disposeAll');
+    assert.strictEqual(pool.size, 0);
+    ok('disposeAll during the liveness probe rejects get() instead of returning a dead connection');
+  }
+
   // ── a timed-out Windows command evicts the connection (PR #9) ──────────
   {
     const created = [];

@@ -57,6 +57,19 @@ async function main() {
   assert.strictEqual(mode(home), 0o700, 'existing state dir re-tightened to 0700');
   ok('writes tighten pre-existing loose file/dir permissions');
 
+  // The READ path must tighten too — upgraded installs read state long
+  // before any write would fix the permissions.
+  fs.chmodSync(home, 0o755);
+  fs.chmodSync(path.join(home, '.loose.json'), 0o644);
+  stateFiles.readStateFileText('.loose.json');
+  assert.strictEqual(
+    mode(path.join(home, '.loose.json')),
+    0o600,
+    'read path re-tightens an existing loose file'
+  );
+  assert.strictEqual(mode(home), 0o700, 'read path re-tightens a loose state dir');
+  ok('reads tighten pre-existing loose file/dir permissions');
+
   // The migration path must tighten too: a legacy file lands with 0600 even
   // when the state dir was loose.
   fs.chmodSync(home, 0o755);

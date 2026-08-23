@@ -149,10 +149,14 @@ test('parseEnvServersText stops at the first close quote before trailing content
   const lines = [
     serverEnvLine('C', spec('host'), '198.51.100.2'),
     'SSH_SERVER_C_DESCRIPTION="a description" # trailing comment',
+    // The pathological round-3 case: the comment itself ends with the
+    // delimiter quote — a greedy outer-strip would swallow the comment.
+    'SSH_SERVER_C_GROUP="g1" # note ending with a "quote"',
   ].join('\n');
   const record = parseEnvServersText(lines).get('c');
   assert.ok(record);
   assert.equal(record.description, 'a description', 'comment after the close quote is ignored');
+  assert.equal(record.group, 'g1', 'comment ending with a quote is still just a comment');
 });
 
 // ── coercion ─────────────────────────────────────────────────────────────────
@@ -280,10 +284,42 @@ async function roundTrip(): Promise<void> {
   assert.ok(updated);
   assert.equal(updated.defaultDir, '/opt/app');
   assert.equal(updated.password, 'up-pw');
+
+  // ── case-insensitive markers (r3) ─────────────────────────────────────
+  // Hand-authored mixed-case entry: listed as `cased` by load_servers().
+  // add must detect the duplicate despite the casing mismatch, and update
+  // must find and rewrite it (previously both were case-sensitive misses
+  // while remove worked — the flows disagreed).
+  fs.appendFileSync(
+    envPath,
+    [
+      'SSH_SERVER_Cased_HOST=203.0.113.99',
+      'SSH_SERVER_Cased_USER=demo',
+      'SSH_SERVER_Cased_PASSWORD="pw"',
+      '',
+    ].join('\n'),
+    'utf8'
+  );
+  const dup = cli.add_server_to_env('cased', '198.51.100.9', 'op', 'password', 'x');
+  assert.equal(dup, false, 'add must refuse a mixed-case existing entry');
+  const updatedCased = cli2.update_server_in_env(
+    'cased',
+    '203.0.113.99',
+    'demo',
+    'password',
+    'new-pw',
+    '22'
+  );
+  assert.equal(updatedCased, true, 'update must find a mixed-case entry');
+  const loader3 = new ConfigLoader();
+  loader3.loadEnvConfig(envPath);
+  const cased = loader3.getServer('cased');
+  assert.ok(cased, 'rewritten entry still loads');
+  assert.equal(cased.password, 'new-pw', 'update rewrote the cased entry');
 }
 
 await asyncTest(
-  'CLI add/update writes load back through ConfigLoader (incl. hostile passwords)',
+  'CLI add/update writes load back through ConfigLoader (incl. hostile passwords + mixed-case markers)',
   roundTrip
 );
 

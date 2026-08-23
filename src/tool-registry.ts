@@ -137,7 +137,12 @@ export function wrapWithPolicy(
       return response;
     } catch (error) {
       if (server) {
-        await safeAudit(deps, server, toolName, args, { success: false, error: error.message });
+        // Same normalization as safeAudit: handlers are seams that may
+        // reject with non-Error values — reading .message on one would
+        // throw HERE, mask the handler's original error and skip the
+        // failure audit entry entirely.
+        const message = error instanceof Error ? error.message : String(error);
+        await safeAudit(deps, server, toolName, args, { success: false, error: message });
       }
       throw error;
     }

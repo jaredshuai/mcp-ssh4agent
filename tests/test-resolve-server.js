@@ -142,6 +142,20 @@ test('cased alias target resolves to the lowercased config key', () => {
   assertEqual(resolved.config.host, '10.0.0.3', 'config lookup must succeed through the alias');
 });
 
+test('Object.prototype names (toString) are not treated as aliases', () => {
+  // A bare truthy `aliases[name]` lookup also hits INHERITED properties:
+  // aliases['toString'] is a function, and .toLowerCase() on it throws.
+  const servers = { toStringsrv: { name: 'toStringsrv', host: '10.0.0.4' } };
+  const resolved = resolveServer('toString', servers, {});
+  assertEqual(resolved, null, 'inherited property must not resolve as an alias');
+});
+
+test('non-string alias targets are skipped, not crashed on', () => {
+  const servers = { 'prod-web': { name: 'prod-web', host: '10.0.0.3' } };
+  const resolved = resolveServer('bad', servers, { bad: 123 });
+  assertEqual(resolved, null, 'malformed alias target falls through to a clean miss');
+});
+
 // ── summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${YELLOW}resolveServer tests: ${passedTests} passed, ${failedTests} failed${NC}\n`);

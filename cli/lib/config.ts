@@ -79,20 +79,44 @@ if (
   resolvedEnvPath !== homeEnvPath &&
   path.dirname(resolvedEnvPath) === LEGACY_HOME
 ) {
+  const homeExisted = fs.existsSync(SSH4AGENT_HOME);
+  const copied: string[] = [];
   try {
     fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
     fs.copyFileSync(resolvedEnvPath, homeEnvPath);
+    copied.push(homeEnvPath);
     for (const file of ['config.json', 'aliases.json']) {
       const from = path.join(LEGACY_HOME, file);
       const to = path.join(SSH4AGENT_HOME, file);
       if (fs.existsSync(from) && !fs.existsSync(to)) {
         fs.copyFileSync(from, to);
+        copied.push(to);
       }
     }
     print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
     resolvedEnvPath = homeEnvPath;
   } catch {
-    // Best-effort: keep resolving to the legacy file for reads.
+    // Best-effort rollback: a half-finished migration must not flip
+    // CONFIG_HOME (which follows dir existence) to the new directory
+    // while .env still resolves to the legacy file — that split-brain
+    // reads servers from legacy but writes config to the empty new
+    // home (PR #9 review, round 3). Undo what this attempt created;
+    // rmdirSync only removes the dir when empty, so pre-existing user
+    // content under SSH4AGENT_HOME is never touched.
+    for (const f of copied) {
+      try {
+        fs.unlinkSync(f);
+      } catch {
+        /* best-effort */
+      }
+    }
+    if (!homeExisted) {
+      try {
+        fs.rmdirSync(SSH4AGENT_HOME);
+      } catch {
+        /* non-empty or already gone */
+      }
+    }
   }
 }
 export const SSH4AGENT_ENV: string = resolvedEnvPath;
@@ -204,17 +228,23 @@ export function get_server_config(server: string, field: string): string | null 
   return String(value);
 }
 
+// Case-insensitive `SSH_SERVER_<name>_HOST=` line marker. Hand-authored
+// files may use any casing (`SSH_SERVER_Prod_HOST=`) while the CLI
+// addresses servers by their lowercased name — every existence check
+// (add duplicate guard, update, remove, has_server_entry) must agree, or
+// users get flows like "remove works but update claims not found"
+// (PR #9 review, round 3).
+function hostMarkerRe(name: string): RegExp {
+  return new RegExp(`^SSH_SERVER_${escapeRegex(name)}_HOST=`, 'i');
+}
+
 // Raw-line existence check that ALSO sees names the MCP loader silently
 // drops (e.g. `bad-name` — invalid in env-var syntax). load_servers() lists
 // those entries, so remove flows must recognize them too for the
-// documented remove-and-readd recovery to work. The match is
-// case-insensitive: hand-authored files may use any casing
-// (`SSH_SERVER_Prod_HOST=`) while load_servers() lowercases, so a
-// case-sensitive marker would make remove unable to find what list shows.
+// documented remove-and-readd recovery to work.
 export function has_server_entry(server: string): boolean {
   if (!fs.existsSync(SSH4AGENT_ENV)) return false;
-  const markerRe = new RegExp(`^SSH_SERVER_${escapeRegex(server)}_HOST=`, 'i');
-  return readEnvLines().some((l) => markerRe.test(l));
+  return readEnvLines().some((l) => hostMarkerRe(server).test(l));
 }
 
 // The SSH dial coordinates every CLI ssh/rsync/tunnel invocation needs.
@@ -264,8 +294,7 @@ export function add_server_to_env(
   // Check if server already exists
   if (fs.existsSync(SSH4AGENT_ENV)) {
     const existing = readEnvLines();
-    const marker = `SSH_SERVER_${nameUpper}_HOST=`;
-    if (existing.some((l) => l.startsWith(marker))) {
+    if (existing.some((l) => hostMarkerRe(name).test(l))) {
       print_error(`Server '${name}' already exists`);
       return false;
     }
@@ -327,9 +356,8 @@ export function update_server_in_env(
   defaultDir: string = ''
 ): boolean {
   const nameUpper = name.toUpperCase();
-  const marker = `SSH_SERVER_${nameUpper}_HOST=`;
 
-  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
+  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => hostMarkerRe(name).test(l))) {
     print_error(`Server '${name}' not found`);
     return false;
   }
@@ -342,9 +370,10 @@ export function update_server_in_env(
   }
 
   // Remove old server config lines + the `# Server: name` comment line.
-  // bash: sed "/^# Server: $name$/d; /^SSH_SERVER_${name_upper}_/d"
+  // bash: sed "/^# Server: $name$/d; /^SSH_SERVER_${name_upper}_/d" —
+  // case-insensitive so hand-authored cased entries rewrite cleanly.
   const commentRe = new RegExp(`^# Server: ${escapeRegex(name)}$`);
-  const lineRe = new RegExp(`^SSH_SERVER_${nameUpper}_`);
+  const lineRe = new RegExp(`^SSH_SERVER_${escapeRegex(name)}_`, 'i');
   const kept = readEnvLines().filter((l) => !commentRe.test(l) && !lineRe.test(l));
 
   const append: string[] = [];
@@ -376,8 +405,7 @@ export function update_server_in_env(
 // same reason as has_server_entry(): hand-authored entries may use any
 // casing while the CLI addresses servers by their lowercased name.
 export function remove_server_from_env(name: string): boolean {
-  const markerRe = new RegExp(`^SSH_SERVER_${escapeRegex(name)}_HOST=`, 'i');
-  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => markerRe.test(l))) {
+  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => hostMarkerRe(name).test(l))) {
     print_error(`Server '${name}' not found`);
     return false;
   }

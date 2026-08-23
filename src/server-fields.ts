@@ -235,19 +235,21 @@ function dotenvParse(text: string): Record<string, string> {
     let value = line.slice(eq + 1).trim();
     const quote = value[0];
     if (quote === '"' || quote === "'") {
-      if (value.length >= 2 && value.endsWith(quote)) {
-        // Fully quoted: strip the OUTER pair — interior quotes are data.
-        // serverEnvLine does not escape them, so a password like a"b is
-        // written as "a"b" and must round-trip; stopping at the first
-        // close quote would silently truncate the credential (PR #9
-        // review). Greedy strip matches dotenv's own regex semantics.
+      // The value ends at the FIRST close quote when what follows is empty
+      // or a `#` comment — dotenv semantics (`"a" # note`, including notes
+      // that themselves end with a quote). Only when the remainder is
+      // neither (e.g. `"a"b"` — serverEnvLine does not escape interior
+      // quotes, so a password a"b is written exactly like that) does the
+      // outer pair get stripped greedily so the credential round-trips
+      // (PR #9 review, rounds 2+3).
+      const close = value.indexOf(quote, 1);
+      const remainder = close > 0 ? value.slice(close + 1).trim() : null;
+      if (close > 0 && (remainder === '' || remainder.startsWith('#'))) {
+        value = value.slice(1, close);
+      } else if (value.length >= 2 && value.endsWith(quote)) {
         value = value.slice(1, -1);
-      } else {
-        // Quote with trailing content (`"a" # comment`): the value ends
-        // at the FIRST close quote; the rest is ignored — dotenv
-        // semantics.
-        const close = value.indexOf(quote, 1);
-        if (close > 0) value = value.slice(1, close);
+      } else if (close > 0) {
+        value = value.slice(1, close);
       }
     } else {
       // Unquoted: ` #` starts an inline comment.

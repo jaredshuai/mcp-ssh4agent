@@ -54,7 +54,17 @@ export function readStateFileText(name: string): string | null {
   const target = stateFilePath(name);
   if (fs.existsSync(target)) {
     try {
-      return fs.readFileSync(target, 'utf8');
+      const content = fs.readFileSync(target, 'utf8');
+      // A read-only touch must not leave a pre-existing 0644 file / 0755
+      // dir loose either — upgraded installs hit the read path long
+      // before any write (PR #9 review, round 3). Best-effort: a
+      // chmod failure (read-only fs, foreign owner) never blocks reads.
+      try {
+        tightenPermissions(target);
+      } catch {
+        /* permissions stay as-is on this path */
+      }
+      return content;
     } catch (error) {
       console.error(`Warning: Could not read state file ${target}: ${error.message}`);
       return null;
