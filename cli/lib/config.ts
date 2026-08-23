@@ -101,19 +101,13 @@ const envOverrideSet = Boolean(process.env.SSH_ENV_PATH || process.env.SSH4AGENT
 // is masked by the process umask (0755-typical) and copyFileSync keeps the
 // SOURCE's bits (0644-typical) — without an explicit chmod the migration
 // can expose credentials to other local users that the legacy dir's 0700
-// previously protected (PR #9 r8).
+// previously protected. THROWS on failure (callers run it inside the
+// migration try, so a chmod failure rolls the whole migration back
+// instead of silently switching the CLI to unsecured copies — PR #9 r9).
 function tightenMigratedHome(files: string[]): void {
-  try {
-    fs.chmodSync(SSH4AGENT_HOME, 0o700);
-  } catch {
-    /* best-effort */
-  }
+  fs.chmodSync(SSH4AGENT_HOME, 0o700);
   for (const f of files) {
-    try {
-      fs.chmodSync(f, 0o600);
-    } catch {
-      /* best-effort */
-    }
+    fs.chmodSync(f, 0o600);
   }
 }
 

@@ -173,40 +173,48 @@ test('credentials with interior quote + # round-trip via alternating quotes', ()
   assert.equal(record.password, 'a"#b', 'quote+hash password survives via single-quoting');
 });
 
-// Round-5: a value with BOTH quote characters is unrepresentable — dotenv
-// escapes are not unescaped by dotenv.parse, so any escaping silently
-// corrupts the credential. The writer must refuse instead of mangling.
-test('values containing both quote characters are rejected, not mangled', () => {
-  assert.throws(
-    () => serverEnvLine('B', spec('password'), `x'"y`),
-    /cannot represent losslessly.*TOML/s,
-    'writer must throw for mixed-quote credentials'
-  );
+// Round-5→9: a value with BOTH quote characters used to be rejected, but
+// dotenv accepts THREE delimiters — backticks rescue it (no expansion,
+// nothing in the value collides). Only all-three-delimiter values remain
+// unrepresentable.
+test('both-quote credentials round-trip via backtick delimiters', () => {
+  const lines = [
+    serverEnvLine('B', spec('host'), '203.0.113.12'),
+    serverEnvLine('B', spec('password'), `x'"y`),
+  ].join('\n');
+  assert.ok(lines.includes('`x\'"y`'), 'both-quote value is backtick-wrapped');
+  const record = parseEnvServersText(lines).get('b');
+  assert.ok(record);
+  assert.equal(record.password, `x'"y`, 'both-quote credential survives verbatim');
 });
 
-// Round-8: dotenv EXPANDS `\n`/`\r` inside double quotes — a credential
+// Round-8→9: dotenv EXPANDS `\n`/`\r` inside double quotes — a credential
 // with literal backslash-n characters would silently change on read-back.
-// The writer must single-quote such values (no expansion there).
-test('literal \\n sequences force single-quoting and round-trip', () => {
+// Single quotes fix the plain case; a quote character in the value too
+// falls through to backticks. ('pa\\nss' in source = ONE literal backslash
+// + n, exactly the case dotenv would corrupt inside double quotes.)
+test('literal \\n sequences avoid double quotes and round-trip', () => {
   const lines = [
     serverEnvLine('E', spec('host'), '203.0.113.11'),
     serverEnvLine('E', spec('password'), 'pa\\nss'),
     serverEnvLine('E', spec('sudoPassword'), 'x\\ry'),
+    serverEnvLine('E', spec('description'), `pa'\\nss`),
   ].join('\n');
   assert.ok(lines.includes("'pa\\nss'"), 'backslash-n password is single-quoted');
+  assert.ok(lines.includes("`pa'\\nss`"), 'quote + escape-sequence value is backtick-wrapped');
   const record = parseEnvServersText(lines).get('e');
   assert.ok(record);
   assert.equal(record.password, 'pa\\nss', 'literal \\n survives (not expanded to newline)');
   assert.equal(record.sudoPassword, 'x\\ry', 'literal \\r survives');
+  assert.equal(record.description, `pa'\\nss`, 'quote + \\n survives via backticks');
 });
 
-// Round-8 counterpart: single-quote REQUIRED (escape sequence) but the
-// value also contains `'` — unrepresentable, must throw.
-test('escape sequences mixed with a quote character are rejected', () => {
+// Round-9: the ONLY unrepresentable case — all three delimiter characters.
+test('values containing all three delimiter characters are rejected', () => {
   assert.throws(
-    () => serverEnvLine('F', spec('password'), `pa'\\nss`),
-    /cannot represent losslessly.*TOML/s,
-    'writer must throw for quote + escape-sequence credentials'
+    () => serverEnvLine('F', spec('password'), `x'"` + 'y`'),
+    /all three dotenv delimiter characters.*TOML/s,
+    'writer must throw when every delimiter is present'
   );
 });
 
@@ -381,15 +389,22 @@ async function roundTrip(): Promise<void> {
   assert.equal(updated.defaultDir, '/opt/app');
   assert.equal(updated.password, 'up-pw');
 
-  // ── mixed-quote values are rejected BEFORE any file mutation (r5) ────
+  // ── unrepresentable values are rejected BEFORE any file mutation (r5-r9) ──
+  // r9 narrowed the unrepresentable set to all-three-delimiter values;
+  // both-quote credentials are now accepted via backticks.
   const linesBefore = fs.readFileSync(envPath, 'utf8');
-  const rejected = cli.add_server_to_env('mq', '198.51.100.7', 'op', 'password', `p'"q`);
-  assert.equal(rejected, false, 'add must refuse a mixed-quote credential');
+  const rejected = cli.add_server_to_env('mq', '198.51.100.7', 'op', 'password', `p'"` + 'q`');
+  assert.equal(rejected, false, 'add must refuse an all-three-delimiter credential');
   assert.equal(
     fs.readFileSync(envPath, 'utf8'),
     linesBefore,
     'a rejected add must not touch the .env file'
   );
+  const bothQuotes = cli.add_server_to_env('mq2', '198.51.100.9', 'op', 'password', `p'"q`);
+  assert.equal(bothQuotes, true, 'both-quote credential is accepted (backtick delimiter)');
+  const loaderMQ = new ConfigLoader();
+  loaderMQ.loadEnvConfig(envPath);
+  assert.equal(loaderMQ.getServer('mq2')?.password, `p'"q`, 'both-quote credential round-trips');
 
   // ── but only when quoting is required (r6): a key path with interior
   // quotes and no #/whitespace is representable unquoted and must add.

@@ -42,11 +42,14 @@ export function resolveEnvFilePath(): string {
   // for the DEFAULT home, where it is a read-only fallback. With an
   // explicit home, falling through to ~/.ssh-manager/.env would silently
   // read — and let tools modify — the old servers and credentials the
-  // user deliberately left behind.
+  // user deliberately left behind. The cwd candidate gets the same
+  // filter: running FROM ~/.ssh-manager (cd there, run ssh4agent) would
+  // otherwise resolve right back to the legacy file (PR #9 r9).
+  const cwdIsLegacy = path.resolve(process.cwd()) === path.resolve(legacyHome);
   const candidates = [
     path.join(home, '.env'),
     ...(homeExplicit ? [] : [path.join(legacyHome, '.env')]),
-    path.join(process.cwd(), '.env'),
+    ...(homeExplicit && cwdIsLegacy ? [] : [path.join(process.cwd(), '.env')]),
     path.join(os.homedir(), '.env'),
     path.join(__dirname, '..', '.env'),
   ];

@@ -188,46 +188,45 @@ function quotingRequired(spec: ServerFieldSpec, rendered: string): boolean {
 }
 
 /**
- * Whether the value must be SINGLE-quoted: dotenv expands `\n`/`\r`
- * escape sequences inside DOUBLE quotes (silently changing credentials
- * like `pa\nss` on read-back) and stops a double-quoted value at the
- * first unescaped `"`. Single quotes are safe for both — dotenv expands
- * nothing there (PR #9 r8).
+ * Select a dotenv delimiter that round-trips `rendered` losslessly, or
+ * null when none exists. dotenv (the reader on both sides — see
+ * dotenvParse) accepts THREE delimiters (`"`, `'`, `` ` ``) and expands
+ * `\n`/`\r` escape sequences ONLY inside double quotes, so:
+ *   - `"` works when the value has no `"` and no literal \n/\r sequences
+ *   - `'` and `` ` `` work whenever the value simply lacks that character
+ * A value containing ALL THREE delimiter characters is the only
+ * unrepresentable case (PR #9 r5-r9).
  */
-function singleQuoteRequired(rendered: string): boolean {
-  return rendered.includes('"') || /\\[nr]/.test(rendered);
+function selectDelimiter(rendered: string): '"' | "'" | '`' | null {
+  if (!rendered.includes('"') && !/\\[nr]/.test(rendered)) return '"';
+  if (!rendered.includes("'")) return "'";
+  if (!rendered.includes('`')) return '`';
+  return null;
 }
 
 /**
  * Whether `value` can be written for field `camel` (camelCase) and read
- * back losslessly through dotenv. False ONLY for values that REQUIRE
- * quoting, must be single-quoted (contains `"` or literal `\n`/`\r`
- * sequences), and also contain `'` (single-quoted values terminate at
- * the first `'`, and dotenv does not unescape `\'`). Values that stay
- * unquoted tolerate all of these. Shared by serverEnvLine (throws) and
- * the CLI's pre-mutation checks.
+ * back losslessly through dotenv: either it needs no quoting at all, or
+ * one of the three delimiters survives (see selectDelimiter). Shared by
+ * serverEnvLine (throws) and the CLI's pre-mutation checks.
  */
 export function envValueRepresentable(camel: string, value: unknown): boolean {
   const spec = FIELD_BY_CAMEL.get(camel);
   if (!spec) return false;
   const rendered = Array.isArray(value) ? (value as string[]).join(';') : String(value);
-  return !(
-    quotingRequired(spec, rendered) &&
-    singleQuoteRequired(rendered) &&
-    rendered.includes("'")
-  );
+  return !quotingRequired(spec, rendered) || selectDelimiter(rendered) !== null;
 }
 
 /**
  * Render one `.env` export line for a field, applying the shared quoting
- * rule (see quotingRequired / singleQuoteRequired). Quote CHOICE matters:
+ * rule (see quotingRequired / selectDelimiter). Quote CHOICE matters:
  * dotenv (the reader on both sides — see dotenvParse) expands `\n`/`\r`
- * inside double quotes and stops a double-quoted value at the first
- * unescaped `"`, so such values are single-quoted.
+ * inside double quotes and stops a quoted value at its delimiter, so the
+ * first delimiter that survives the value's own characters wins.
  *
- * A value that requires quoting, must be single-quoted, AND contains `'`
- * is UNREPRESENTABLE — it throws so callers can reject the value up front
- * and point the user at TOML, which represents it natively (PR #9 r5-r8).
+ * A value that requires quoting but contains ALL THREE delimiter
+ * characters is UNREPRESENTABLE — it throws so callers can reject the
+ * value up front and point the user at TOML (PR #9 r5-r9).
  */
 export function serverEnvLine(
   nameUpper: string,
@@ -235,20 +234,18 @@ export function serverEnvLine(
   value: string | number | boolean | string[]
 ): string {
   const rendered = Array.isArray(value) ? value.join(';') : String(value);
-  if (quotingRequired(spec, rendered) && singleQuoteRequired(rendered) && rendered.includes("'")) {
-    throw new Error(
-      `Value for ${nameUpper}.${spec.env} mixes quote characters and/or dotenv escape sequences in a way ` +
-        `.env cannot represent losslessly; use TOML instead`
-    );
-  }
-  const needsQuoting = quotingRequired(spec, rendered);
   let rhs: string;
-  if (!needsQuoting) {
+  if (!quotingRequired(spec, rendered)) {
     rhs = rendered;
-  } else if (singleQuoteRequired(rendered)) {
-    rhs = `'${rendered}'`;
   } else {
-    rhs = `"${rendered}"`;
+    const delim = selectDelimiter(rendered);
+    if (!delim) {
+      throw new Error(
+        `Value for ${nameUpper}.${spec.env} contains all three dotenv delimiter characters (" ' \`) — ` +
+          `.env format cannot represent it losslessly; use TOML instead`
+      );
+    }
+    rhs = `${delim}${rendered}${delim}`;
   }
   return `SSH_SERVER_${nameUpper}_${spec.env}=${rhs}`;
 }
