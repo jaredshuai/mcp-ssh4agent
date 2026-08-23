@@ -106,6 +106,13 @@ const pool = new ConnectionPool({
   loadServers: () => loadServerConfig(),
   createConnection: (serverConfig) => new SSHManager(serverConfig),
   executeHook,
+  // Documented env overrides (see .env.example) — the pool defaults are
+  // 30min idle timeout / 5min keepalive. These were inert between the
+  // TIMEOUTS cleanup and this wiring.
+  connectionTimeoutMs:
+    parseInt(getRuntimeEnv('MCP_SSH_CONNECTION_TIMEOUT') || '', 10) || undefined,
+  keepaliveIntervalMs:
+    parseInt(getRuntimeEnv('MCP_SSH_KEEPALIVE_INTERVAL') || '', 10) || undefined,
 });
 
 const getConnection = (serverName: string) => pool.get(serverName);

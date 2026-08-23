@@ -237,6 +237,60 @@ async function main() {
     ok('cleanupAged closes connections idle past the pool timeout');
   }
 
+  // ── concurrent get() calls share ONE connection attempt ────────────────
+  {
+    const created = [];
+    /** @type {(v?: undefined) => void} */
+    let releaseConnect = () => {};
+    const gate = new Promise((resolve) => {
+      releaseConnect = resolve;
+    });
+    const pool = new ConnectionPool({
+      loadServers: async () => ({ 'pool-slow-1': { host: '10.3.0.1' } }),
+      createConnection: () => {
+        const conn = makeFakeConn();
+        conn.connect = async () => {
+          await gate; // hold the first attempt open until both callers pile up
+        };
+        created.push(conn);
+        return conn;
+      },
+    });
+
+    const p1 = pool.get('pool-slow-1');
+    const p2 = pool.get('pool-slow-1');
+    // Let both callers register: the first blocks inside connect() on the
+    // gate, the second must join the in-flight attempt instead of dialing.
+    await new Promise((resolve) => setImmediate(resolve));
+    releaseConnect();
+    const [a, b] = await Promise.all([p1, p2]);
+
+    assert.strictEqual(created.length, 1, 'overlapping setups must share one attempt');
+    assert.strictEqual(a, b, 'both callers receive the same connection');
+    ok('concurrent get() for one server shares a single in-flight connection');
+  }
+
+  // ── a failed connect disposes the half-built client ────────────────────
+  {
+    const created = [];
+    const pool = new ConnectionPool({
+      loadServers: async () => ({ 'pool-bad-1': { host: '10.4.0.1' } }),
+      createConnection: () => {
+        const conn = makeFakeConn();
+        conn.connect = async () => {
+          throw new Error('dial refused');
+        };
+        created.push(conn);
+        return conn;
+      },
+    });
+    await assert.rejects(() => pool.get('pool-bad-1'), /Failed to connect to pool-bad-1/);
+    assert.strictEqual(created.length, 1);
+    assert.strictEqual(created[0].disposed, true, 'failed client disposed, not leaked');
+    assert.strictEqual(pool.size, 0);
+    ok('failed connection setup disposes the SSH client before rethrowing');
+  }
+
   console.log(`\n✅ connection pool tests passed (${passed} checks)`);
   process.exit(0);
 }

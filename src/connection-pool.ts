@@ -78,6 +78,8 @@ export class ConnectionPool {
   #timestamps = new Map<string, number>();
   #keepalives = new Map<string, ReturnType<typeof setInterval>>();
   #jumpDeps = new Map<string, string>();
+  /** In-flight connection attempts, keyed by canonical name. */
+  #pending = new Map<string, Promise<PoolConnection>>();
 
   constructor(options: ConnectionPoolOptions) {
     this.#options = options;
@@ -125,7 +127,11 @@ export class ConnectionPool {
       );
     }
 
-    const name = resolved.name;
+    // Pool keys are the canonical LOWERCASE name — resolveServerName returns
+    // alias targets verbatim, so an alias pointing at "Prod-Web" would
+    // otherwise pool under a key close()/has() (lowercased) can never find,
+    // orphaning the keepalive timer and jump dependency.
+    const name = resolved.name.toLowerCase();
 
     const existing = this.#connections.get(name);
     if (existing) {
@@ -137,7 +143,29 @@ export class ConnectionPool {
       this.close(name);
     }
 
-    const serverConfig = resolved.config;
+    // Concurrent get() calls for the same server must share ONE connection
+    // attempt: without this, overlapping setups each create an SSH client and
+    // the later write wins, leaking the first client (and its jump/proxy
+    // resources).
+    const inFlight = this.#pending.get(name);
+    if (inFlight) return inFlight;
+
+    const attempt = this.#connect(name, serverName, resolved.config, servers);
+    this.#pending.set(name, attempt);
+    try {
+      return await attempt;
+    } finally {
+      this.#pending.delete(name);
+    }
+  }
+
+  /** Create, dial and pool one connection. Runs under a per-server in-flight guard. */
+  async #connect(
+    name: string,
+    serverName: string,
+    serverConfig: any,
+    servers: Record<string, any>
+  ): Promise<PoolConnection> {
     const ssh = this.#options.createConnection(serverConfig);
 
     try {
@@ -168,8 +196,17 @@ export class ConnectionPool {
       });
 
       await Promise.resolve(this.#options.executeHook?.('post-connect', { server: serverName }));
+      return ssh;
     } catch (error) {
       logger.logConnection(serverName, 'failed', { error: error.message });
+      // Never leak a half-built connection: dispose the SSH client (which
+      // also tears down its ProxyCommand socket / jump stream) before the
+      // hooks and rethrow.
+      try {
+        ssh.dispose();
+      } catch {
+        /* best-effort */
+      }
       await Promise.resolve(
         this.#options.executeHook?.('on-error', {
           server: serverName,
@@ -178,8 +215,6 @@ export class ConnectionPool {
       );
       throw new Error(`Failed to connect to ${serverName}: ${error.message}`);
     }
-
-    return ssh;
   }
 
   /** Dial `target` through its configured jump server (recursive for chains). */
@@ -189,28 +224,33 @@ export class ConnectionPool {
     servers: Record<string, any>,
     ssh: PoolConnection
   ) {
-    const jumpServerName = serverConfig.proxyJump.toLowerCase();
-
-    if (!servers[jumpServerName]) {
+    // Resolve the jump through the same alias-aware path the dial below
+    // uses: a raw servers[...] lookup misses aliases/casing and would throw
+    // "not found" for a jump configured as an alias.
+    const resolvedJump = resolveServer(serverConfig.proxyJump, servers);
+    if (!resolvedJump || !resolvedJump.config) {
       throw new Error(
         `Proxy jump server "${serverConfig.proxyJump}" not found. ` +
           `Available servers: ${Object.keys(servers).join(', ')}`
       );
     }
+    const jumpName = resolvedJump.name.toLowerCase();
 
-    // Circular proxy jumps would recurse forever — walk the chain and refuse
-    // any server already on the path.
+    // Circular proxy jumps would recurse forever — walk the chain (resolving
+    // each hop, so cycles routed through aliases are seen too) and refuse any
+    // server already on the path.
     const visited = new Set([name]);
-    let current: string | null = jumpServerName;
+    let current: string | null = jumpName;
     while (current) {
       if (visited.has(current)) {
         throw new Error(`Circular proxy jump detected: ${[...visited, current].join(' -> ')}`);
       }
       visited.add(current);
-      current = servers[current]?.proxyJump?.toLowerCase() || null;
+      const next = servers[current]?.proxyJump;
+      current = next ? resolveServer(next, servers)?.name.toLowerCase() ?? null : null;
     }
 
-    const jumpSSH = await this.get(serverConfig.proxyJump);
+    const jumpSSH = await this.get(jumpName);
     const stream = await jumpSSH.forwardOut(
       '127.0.0.1',
       0,
@@ -219,7 +259,7 @@ export class ConnectionPool {
     );
 
     await ssh.connect({ sock: stream });
-    this.#jumpDeps.set(name, jumpServerName);
+    this.#jumpDeps.set(name, jumpName);
     ssh.jumpConnection = jumpSSH;
   }
 
@@ -414,6 +454,7 @@ export async function execCommandWithTimeout(
     return ssh.execCommand(wrappedCommand, {
       ...otherOptions,
       execOptions: { ...(otherOptions.execOptions || {}) },
+      timeout: timeoutMs,
     });
   }
 
