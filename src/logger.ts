@@ -4,11 +4,11 @@
  */
 
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { stateFilePath, readStateFileText, writeStateFileText } from './state-files.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Command history lives in the state dir (~/.ssh4agent) — the install
+// directory is read-only under a global npm install (issue #8).
+const HISTORY_FILE_NAME = '.ssh-command-history.json';
 
 // Log levels (module-internal since debug/test-logger.js was removed).
 const LOG_LEVELS = {
@@ -61,23 +61,24 @@ class Logger {
     // Enable verbose mode from environment
     this.verbose = process.env.SSH_VERBOSE === 'true';
 
-    // Log file path
-    this.logFile = process.env.SSH_LOG_FILE || path.join(__dirname, '..', '.ssh4agent.log');
+    // Log file path (state dir unless overridden — see src/state-files.ts)
+    this.logFile = process.env.SSH_LOG_FILE || stateFilePath('.ssh4agent.log');
 
     // Command history file
-    this.historyFile = path.join(__dirname, '..', '.ssh-command-history.json');
+    this.historyFile = HISTORY_FILE_NAME;
 
     // Initialize command history
     this.commandHistory = this.loadCommandHistory();
   }
 
   /**
-   * Load command history from file
+   * Load command history from the state file (~/.ssh4agent, with one-time
+   * migration from the legacy install directory — src/state-files.ts)
    */
   loadCommandHistory(): HistoryEntry[] {
     try {
-      if (fs.existsSync(this.historyFile)) {
-        const data = fs.readFileSync(this.historyFile, 'utf8');
+      const data = readStateFileText(this.historyFile);
+      if (data) {
         // External JSON written by saveCommandToHistory; trust its shape.
         return JSON.parse(data) as HistoryEntry[];
       }
@@ -111,11 +112,7 @@ class Logger {
       this.commandHistory = this.commandHistory.slice(-1000);
     }
 
-    try {
-      fs.writeFileSync(this.historyFile, JSON.stringify(this.commandHistory, null, 2));
-    } catch (error) {
-      // Ignore write errors
-    }
+    writeStateFileText(this.historyFile, JSON.stringify(this.commandHistory, null, 2));
   }
 
   /**
@@ -298,7 +295,7 @@ class Logger {
   clear() {
     this.commandHistory = [];
     try {
-      fs.writeFileSync(this.historyFile, '[]');
+      writeStateFileText(this.historyFile, '[]');
       fs.writeFileSync(this.logFile, '');
       this.info('Logs and history cleared');
     } catch (error) {

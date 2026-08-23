@@ -1,24 +1,20 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { readStateFileText, writeStateFileText } from './state-files.ts';
 
 /**
  * Server alias management
  * Allows using aliases like "prod" instead of full server names
  */
 
-const ALIASES_FILE = path.join(__dirname, '..', '.server-aliases.json');
+const ALIASES_FILE = '.server-aliases.json';
 
 /**
- * Load server aliases from configuration file
+ * Load server aliases from the state file (~/.ssh4agent, with one-time
+ * migration from the legacy install directory — see src/state-files.ts).
  */
 function loadAliases(): Record<string, string> {
   try {
-    if (fs.existsSync(ALIASES_FILE)) {
-      const content = fs.readFileSync(ALIASES_FILE, 'utf8');
+    const content = readStateFileText(ALIASES_FILE);
+    if (content) {
       return JSON.parse(content);
     }
   } catch (error) {
@@ -28,16 +24,10 @@ function loadAliases(): Record<string, string> {
 }
 
 /**
- * Save server aliases to configuration file
+ * Save server aliases to the state file
  */
 function saveAliases(aliases) {
-  try {
-    fs.writeFileSync(ALIASES_FILE, JSON.stringify(aliases, null, 2));
-    return true;
-  } catch (error) {
-    console.error(`Error saving aliases: ${error.message}`);
-    return false;
-  }
+  return writeStateFileText(ALIASES_FILE, JSON.stringify(aliases, null, 2));
 }
 
 /**

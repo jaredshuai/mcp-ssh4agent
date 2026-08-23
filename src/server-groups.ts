@@ -4,15 +4,13 @@
  */
 
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { stateFilePath, readStateFileText, writeStateFileText } from './state-files.ts';
 import { logger } from './logger.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // Default groups file location
-const GROUPS_FILE = path.join(__dirname, '..', '.server-groups.json');
+const GROUPS_FILE_NAME = '.server-groups.json';
+const GROUPS_FILE = stateFilePath(GROUPS_FILE_NAME);
+const DEFAULT_GROUPS_FILE = GROUPS_FILE;
 
 // Group execution strategies
 const EXECUTION_STRATEGIES = {
@@ -79,12 +77,19 @@ export class ServerGroups {
   }
 
   /**
-   * Load groups from file
+   * Load groups from the state file (~/.ssh4agent by default, with one-time
+   * migration from the legacy install directory — src/state-files.ts). A
+   * custom groupsFile (tests) is read directly.
    */
   loadGroups() {
     try {
-      if (fs.existsSync(this.groupsFile)) {
-        const data = fs.readFileSync(this.groupsFile, 'utf8');
+      let data: string | null = null;
+      if (this.groupsFile === DEFAULT_GROUPS_FILE) {
+        data = readStateFileText(GROUPS_FILE_NAME);
+      } else if (fs.existsSync(this.groupsFile)) {
+        data = fs.readFileSync(this.groupsFile, 'utf8');
+      }
+      if (data) {
         // Written by saveGroups; keys are group names with varying shapes.
         const stored: Record<string, any> = JSON.parse(data);
 
@@ -134,7 +139,11 @@ export class ServerGroups {
         }
       }
 
-      fs.writeFileSync(this.groupsFile, JSON.stringify(groupsToSave, null, 2));
+      const ok =
+        this.groupsFile === DEFAULT_GROUPS_FILE
+          ? writeStateFileText(GROUPS_FILE_NAME, JSON.stringify(groupsToSave, null, 2))
+          : (fs.writeFileSync(this.groupsFile, JSON.stringify(groupsToSave, null, 2)), true);
+      if (!ok) return false;
       logger.info('Server groups saved', { count: Object.keys(groupsToSave).length });
       return true;
     } catch (error) {

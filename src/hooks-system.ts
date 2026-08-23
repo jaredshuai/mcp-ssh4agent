@@ -7,15 +7,14 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { fileURLToPath } from 'url';
+import { stateDir, stateFilePath, readStateFileText, writeStateFileText } from './state-files.ts';
 import { loadProfile } from './profile-loader.ts';
 
 const execAsync = promisify(exec);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-const HOOKS_CONFIG_FILE = path.join(__dirname, '..', '.hooks-config.json');
-const HOOKS_DIR = path.join(__dirname, '..', 'hooks');
+const HOOKS_CONFIG_NAME = '.hooks-config.json';
+const HOOKS_CONFIG_FILE = stateFilePath(HOOKS_CONFIG_NAME);
+const HOOKS_DIR = path.join(stateDir(), 'hooks');
 
 // Get hooks from the active profile — hook shapes vary per profile, keep loose.
 let profileHooks: Record<string, any> = {};
@@ -95,9 +94,10 @@ export function loadHooksConfig() {
     // Start with profile hooks
     let hooks: Record<string, any> = { ...profileHooks };
 
-    // Merge with custom hooks from file
-    if (fs.existsSync(HOOKS_CONFIG_FILE)) {
-      const data = fs.readFileSync(HOOKS_CONFIG_FILE, 'utf8');
+    // Merge with custom hooks from the state file (~/.ssh4agent, with
+    // one-time migration from the legacy install directory — state-files.ts)
+    const data = readStateFileText(HOOKS_CONFIG_NAME);
+    if (data) {
       // External config file written by saveHooksConfig; shapes vary per hook.
       const customHooks: Record<string, any> = JSON.parse(data);
 
@@ -127,13 +127,7 @@ export function loadHooksConfig() {
  * Save hooks configuration
  */
 function saveHooksConfig(config) {
-  try {
-    fs.writeFileSync(HOOKS_CONFIG_FILE, JSON.stringify(config, null, 2));
-    return true;
-  } catch (error) {
-    console.error(`Error saving hooks config: ${error.message}`);
-    return false;
-  }
+  return writeStateFileText(HOOKS_CONFIG_NAME, JSON.stringify(config, null, 2));
 }
 
 /**
