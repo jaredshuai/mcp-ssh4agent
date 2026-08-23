@@ -19,6 +19,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   SERVER_FIELDS,
   FIELD_BY_CAMEL,
@@ -27,6 +28,7 @@ import {
   serverFromTomlRecord,
   canonicalTomlKey,
   parseEnvServersText,
+  envValueRepresentable,
 } from '../src/server-fields.ts';
 import { ConfigLoader } from '../src/config-loader.ts';
 
@@ -215,6 +217,42 @@ test('values containing all three delimiter characters are rejected', () => {
     () => serverEnvLine('F', spec('password'), `x'"` + 'y`'),
     /all three dotenv delimiter characters.*TOML/s,
     'writer must throw when every delimiter is present'
+  );
+});
+
+// Round-10 verification: dotenv 16.6.1 expands ONLY \n and \r inside double
+// quotes — \t, \\, \f stay literal (checked against the dependency source
+// AND at runtime). These round-trips lock that behavior so a future dotenv
+// upgrade widening the expansion set fails HERE instead of silently
+// corrupting credentials (cubic r10 suggested the guard was incomplete; the
+// runtime probe showed it already is complete — the tests pin it).
+test('other backslash sequences stay literal in double quotes', () => {
+  const lines = [
+    serverEnvLine('T', spec('host'), '203.0.113.13'),
+    serverEnvLine('T', spec('password'), 'pa\\tss'),
+    serverEnvLine('T', spec('sudoPassword'), 'x\\\\y'),
+    serverEnvLine('T', spec('description'), 'a\\fb'),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('t');
+  assert.ok(record);
+  assert.equal(record.password, 'pa\\tss', 'literal \\t must not become TAB');
+  assert.equal(record.sudoPassword, 'x\\\\y', 'literal \\\\ must not collapse');
+  assert.equal(record.description, 'a\\fb', 'literal \\f must not become FF');
+});
+
+// Round-10: an ACTUAL CR/LF character is unrepresentable in every
+// delimiter — dotenv normalizes \r to \n line-wise before parsing (so CR
+// would silently round-trip as LF even inside backticks), and a raw LF
+// cannot live on a single .env line at all.
+test('values containing actual CR/LF characters are rejected', () => {
+  assert.equal(envValueRepresentable('password', 'pa\rss'), false, 'actual CR vetoed');
+  assert.equal(envValueRepresentable('password', 'pa\nss'), false, 'actual LF vetoed');
+  // Even when backticks would otherwise fit (no backtick in the value),
+  // the control character still vetoes it.
+  assert.throws(
+    () => serverEnvLine('R', spec('password'), `x'"y\r`),
+    /literal CR\/LF character.*dotenv normalizes CR to LF.*TOML/s,
+    'writer must throw a CR-specific message, not the delimiter one'
   );
 });
 
@@ -481,7 +519,7 @@ await asyncTest(
 // with a controlled HOME and no SSH4AGENT_* overrides.
 async function migrationGuards(): Promise<void> {
   const { spawnSync } = await import('node:child_process');
-  const configTs = path.resolve('cli/lib/config.ts');
+  const configTs = pathToFileURL(path.resolve('cli/lib/config.ts')).href;
   const script = `import(${JSON.stringify(configTs)}).then(()=>0,(e)=>{console.error(e);process.exit(1)})`;
   const cleanEnv = (extra: Record<string, string>): Record<string, string> => {
     const env: Record<string, string> = {};
@@ -495,7 +533,16 @@ async function migrationGuards(): Promise<void> {
         env[k] = v;
       }
     }
-    return { ...env, ...extra };
+    const merged = { ...env, ...extra };
+    // os.homedir() on Windows ignores HOME (USERPROFILE wins, then
+    // HOMEDRIVE+HOMEPATH) — map the synthetic HOME across so the
+    // subprocess really resolves the temp home. POSIX needs no help.
+    if (process.platform === 'win32' && extra.HOME) {
+      merged.USERPROFILE = extra.HOME;
+      delete merged.HOMEDRIVE;
+      delete merged.HOMEPATH;
+    }
+    return merged;
   };
   const run = (home: string, extra: Record<string, string>) =>
     spawnSync(process.execPath, ['-e', script], {
@@ -551,7 +598,7 @@ async function migrationGuards(): Promise<void> {
     fs.mkdirSync(legacy, { recursive: true });
     fs.writeFileSync(path.join(legacy, '.env'), 'SSH_SERVER_X_HOST=203.0.113.10\n');
     const explicit = path.join(home, 'explicit-home');
-    const envTs = path.resolve('src/env-path.ts');
+    const envTs = pathToFileURL(path.resolve('src/env-path.ts')).href;
     const r = spawnSync(
       process.execPath,
       ['-e', `import(${JSON.stringify(envTs)}).then((m)=>console.log(m.resolveEnvFilePath()))`],
@@ -579,12 +626,16 @@ async function migrationGuards(): Promise<void> {
     assert.equal(r.status, 0, `subprocess must survive: ${r.stderr}`);
     const newHome = path.join(home, '.ssh4agent');
     assert.ok(fs.existsSync(path.join(newHome, '.env')), 'migration copied the .env');
-    assert.strictEqual(fs.statSync(newHome).mode & 0o777, 0o700, 'migrated home tightened to 0700');
-    assert.strictEqual(
-      fs.statSync(path.join(newHome, '.env')).mode & 0o777,
-      0o600,
-      'migrated .env tightened to 0600 despite a 0644 source'
-    );
+    // chmod is a no-op on Windows (stat reports synthetic 0666/0777 modes
+    // regardless), so the bit-level tightening contract is POSIX-only.
+    if (process.platform !== 'win32') {
+      assert.strictEqual(fs.statSync(newHome).mode & 0o777, 0o700, 'migrated home tightened to 0700');
+      assert.strictEqual(
+        fs.statSync(path.join(newHome, '.env')).mode & 0o777,
+        0o600,
+        'migrated .env tightened to 0600 despite a 0644 source'
+      );
+    }
     fs.rmSync(home, { recursive: true, force: true });
   }
 }

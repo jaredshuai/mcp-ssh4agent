@@ -50,16 +50,22 @@ async function main() {
   // re-tightened by an explicit chmod, or credential-bearing state stays
   // readable by other local users.
   const mode = (p) => fs.statSync(p).mode & 0o777;
+  // chmod is a no-op on Windows (stat reports synthetic 0666/0777 modes
+  // regardless), so the bit-level tightening contract is POSIX-only —
+  // CI enforces it on Linux.
+  const posixModes = process.platform !== 'win32';
   fs.chmodSync(home, 0o755);
   fs.writeFileSync(path.join(home, '.loose.json'), '{"x":1}', { mode: 0o644 });
   fs.chmodSync(path.join(home, '.loose.json'), 0o644);
   assert.strictEqual(stateFiles.writeStateFileText('.loose.json', '{"x":2}'), true);
-  assert.strictEqual(
-    mode(path.join(home, '.loose.json')),
-    0o600,
-    'existing file re-tightened to 0600'
-  );
-  assert.strictEqual(mode(home), 0o700, 'existing state dir re-tightened to 0700');
+  if (posixModes) {
+    assert.strictEqual(
+      mode(path.join(home, '.loose.json')),
+      0o600,
+      'existing file re-tightened to 0600'
+    );
+    assert.strictEqual(mode(home), 0o700, 'existing state dir re-tightened to 0700');
+  }
   ok('writes tighten pre-existing loose file/dir permissions');
 
   // The READ path must tighten too — upgraded installs read state long
@@ -67,12 +73,14 @@ async function main() {
   fs.chmodSync(home, 0o755);
   fs.chmodSync(path.join(home, '.loose.json'), 0o644);
   stateFiles.readStateFileText('.loose.json');
-  assert.strictEqual(
-    mode(path.join(home, '.loose.json')),
-    0o600,
-    'read path re-tightens an existing loose file'
-  );
-  assert.strictEqual(mode(home), 0o700, 'read path re-tightens a loose state dir');
+  if (posixModes) {
+    assert.strictEqual(
+      mode(path.join(home, '.loose.json')),
+      0o600,
+      'read path re-tightens an existing loose file'
+    );
+    assert.strictEqual(mode(home), 0o700, 'read path re-tightens a loose state dir');
+  }
   ok('reads tighten pre-existing loose file/dir permissions');
 
   // The migration path must tighten too: a legacy file lands with 0600 even
@@ -80,12 +88,14 @@ async function main() {
   fs.chmodSync(home, 0o755);
   fs.writeFileSync(path.join(legacy, '.migrate-perms.json'), 'secret');
   stateFiles.readStateFileText('.migrate-perms.json');
-  assert.strictEqual(
-    mode(path.join(home, '.migrate-perms.json')),
-    0o600,
-    'migrated file tightened to 0600'
-  );
-  assert.strictEqual(mode(home), 0o700, 'state dir tightened by the migration path');
+  if (posixModes) {
+    assert.strictEqual(
+      mode(path.join(home, '.migrate-perms.json')),
+      0o600,
+      'migrated file tightened to 0600'
+    );
+    assert.strictEqual(mode(home), 0o700, 'state dir tightened by the migration path');
+  }
   ok('migration tightens permissions of the state dir and migrated file');
 
   // ── legacy install-dir file migrates on first read ─────────────────────
@@ -136,11 +146,14 @@ async function main() {
     migratedLog.includes('legacy-log-line'),
     'legacy install-root log migrated into the state dir'
   );
-  assert.strictEqual(
-    fs.statSync(path.join(home, '.ssh4agent.log')).mode & 0o777,
-    0o600,
-    'migrated log re-tightened to 0600 despite a 0644 source'
-  );
+  // Same POSIX-only rule as the mode checks above (chmod no-op on Windows).
+  if (posixModes) {
+    assert.strictEqual(
+      fs.statSync(path.join(home, '.ssh4agent.log')).mode & 0o777,
+      0o600,
+      'migrated log re-tightened to 0600 despite a 0644 source'
+    );
+  }
   ok('append-only log migrates to the state dir and is tightened to 0600');
 
   // Hooks config: initialize writes into the state dir.

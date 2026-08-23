@@ -80,8 +80,9 @@ export interface ToolPolicy {
   serverFrom?: (args: any) => any;
 }
 
-/** Dependencies the policy funnel needs, injected by the entry point. */
-export interface PolicyFunnelDeps {
+/** Dependencies the policy funnel needs, injected by the entry point.
+ * Not exported: funnel-internal contract (knip). */
+interface PolicyFunnelDeps {
   applyServerPolicy: (server: string, tool: string, args: any, command?: string) => Promise<any>;
   auditOk: (server: string, tool: string, args: any, result: any) => Promise<void>;
   expandCommandAlias?: (command: string) => string;

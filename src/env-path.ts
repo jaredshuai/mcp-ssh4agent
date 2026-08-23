@@ -45,7 +45,19 @@ export function resolveEnvFilePath(): string {
   // user deliberately left behind. The cwd candidate gets the same
   // filter: running FROM ~/.ssh-manager (cd there, run ssh4agent) would
   // otherwise resolve right back to the legacy file (PR #9 r9).
-  const cwdIsLegacy = path.resolve(process.cwd()) === path.resolve(legacyHome);
+  // Compare REAL paths, not strings: on Windows the same directory can be
+  // spelled with different casing (C:\Users vs c:\users) or an 8.3 short
+  // name (PROGRA~1) — realpathSync resolves both sides to the canonical
+  // form, so the isolation rule cannot be bypassed by path spelling
+  // (PR #9 r10). If either side no longer exists, the cwd simply cannot
+  // be the legacy home — treat as not-legacy.
+  const cwdIsLegacy = (() => {
+    try {
+      return fs.realpathSync(process.cwd()) === fs.realpathSync(legacyHome);
+    } catch {
+      return false;
+    }
+  })();
   const candidates = [
     path.join(home, '.env'),
     ...(homeExplicit ? [] : [path.join(legacyHome, '.env')]),

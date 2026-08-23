@@ -190,14 +190,20 @@ function quotingRequired(spec: ServerFieldSpec, rendered: string): boolean {
 /**
  * Select a dotenv delimiter that round-trips `rendered` losslessly, or
  * null when none exists. dotenv (the reader on both sides — see
- * dotenvParse) accepts THREE delimiters (`"`, `'`, `` ` ``) and expands
- * `\n`/`\r` escape sequences ONLY inside double quotes, so:
+ * dotenvParse, 16.6.1) accepts THREE delimiters (`"`, `'`, `` ` ``) and
+ * expands ONLY the `\n`/`\r` escape sequences, only inside double quotes
+ * (`\t`, `\\`, `\f` etc. stay literal — verified against the dependency
+ * source and at runtime, PR #9 r10), so:
  *   - `"` works when the value has no `"` and no literal \n/\r sequences
  *   - `'` and `` ` `` work whenever the value simply lacks that character
- * A value containing ALL THREE delimiter characters is the only
- * unrepresentable case (PR #9 r5-r9).
+ * A value containing ALL THREE delimiter characters is unrepresentable —
+ * and so is one containing an ACTUAL CR/LF character: dotenv normalizes
+ * every \r to \n line-wise before parsing, so a raw CR round-trips as LF
+ * in ANY delimiter, and a raw LF cannot live on a single .env line at
+ * all (PR #9 r5-r10).
  */
 function selectDelimiter(rendered: string): '"' | "'" | '`' | null {
+  if (/[\r\n]/.test(rendered)) return null;
   if (!rendered.includes('"') && !/\\[nr]/.test(rendered)) return '"';
   if (!rendered.includes("'")) return "'";
   if (!rendered.includes('`')) return '`';
@@ -238,6 +244,16 @@ export function serverEnvLine(
   if (!quotingRequired(spec, rendered)) {
     rhs = rendered;
   } else {
+    // Distinct from the all-three-delimiters case below: an ACTUAL CR/LF
+    // character is unrepresentable in EVERY delimiter (see
+    // selectDelimiter), and dotenv would silently turn CR into LF on
+    // read-back — reject with a message that says so (PR #9 r10).
+    if (/[\r\n]/.test(rendered)) {
+      throw new Error(
+        `Value for ${nameUpper}.${spec.env} contains a literal CR/LF character — ` +
+          `.env format cannot represent it (dotenv normalizes CR to LF); use TOML instead`
+      );
+    }
     const delim = selectDelimiter(rendered);
     if (!delim) {
       throw new Error(

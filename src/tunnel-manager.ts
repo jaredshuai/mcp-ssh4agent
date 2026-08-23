@@ -23,7 +23,9 @@ const tunnels = new Map();
  * internal ssh2 Client) and the in-memory fake used by
  * tests/test-tunnel-remote.js.
  */
-export interface TcpConnectionInfo {
+/** Payload of an incoming remote-forwarded connection. Not exported:
+ * tunnel-manager-internal (knip). */
+interface TcpConnectionInfo {
   destIP: string;
   destPort: number;
   srcIP: string;

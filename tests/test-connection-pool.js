@@ -361,6 +361,43 @@ async function main() {
     ok('disposeAll during an in-flight connect rejects it and keeps the pool empty');
   }
 
+  // ── close(server) during an in-flight dial cancels it (codex r4) ──────
+  {
+    const created = [];
+    /** @type {(v?: undefined) => void} */
+    let releaseConnect = () => undefined;
+    const gate = new Promise((resolve) => {
+      releaseConnect = resolve;
+    });
+    const pool = new ConnectionPool({
+      loadServers: async () => ({ 'pool-disc-1': { host: '10.9.0.1' } }),
+      createConnection: () => {
+        const conn = makeFakeConn();
+        conn.connect = async () => {
+          await gate; // hold the dial open across the close below
+        };
+        created.push(conn);
+        return conn;
+      },
+    });
+    const pending = pool.get('pool-disc-1');
+    await new Promise((resolve) => setImmediate(resolve));
+    pool.close('pool-disc-1'); // user-requested disconnect while dialing
+    releaseConnect();
+
+    await assert.rejects(() => pending, /was disconnected while dialing/);
+    assert.strictEqual(created[0].disposed, true, 'cancelled dial must dispose its client');
+    assert.strictEqual(pool.size, 0, 'a cancelled dial must not re-populate the pool');
+
+    // The cancellation must not poison the name: a get() after the
+    // disconnect dials fresh and pools normally.
+    const conn = await pool.get('pool-disc-1');
+    assert.strictEqual(created.length, 2, 'post-disconnect get dials a fresh client');
+    assert.strictEqual(pool.size, 1, 'fresh connection pooled');
+    assert.strictEqual(conn.alive, true);
+    ok('close() during an in-flight dial cancels it; a later get() dials fresh');
+  }
+
   // ── disposeAll during the liveness probe must not return a dead conn ──
   {
     const created = [];

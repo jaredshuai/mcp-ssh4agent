@@ -4,6 +4,12 @@ import os from 'os';
 import { isHostKnown, addHostKey } from './ssh-key-manager.ts';
 import { logger } from './logger.ts';
 import { buildCdPrefix } from './shell-quote.ts';
+// Type-only (erased at runtime — no import cycle): the tunnel seam this
+// class implements. `implements` makes the issue-#2 contract machine-
+// checked: if TunnelableConnection grows a method this class lacks,
+// typecheck fails instead of remote tunnels crashing at runtime (knip
+// also requires the import to be real).
+import type { TunnelableConnection } from './tunnel-manager.ts';
 
 // Validate liveness-probe output across shells (bash, cmd.exe, PowerShell).
 // Normalize CRLF, stray quotes/backslashes and case before matching so quoted
@@ -21,7 +27,7 @@ export function isPingAlive(stdout) {
   return normalized.includes('ping');
 }
 
-class SSHManager {
+class SSHManager implements TunnelableConnection {
   // Resolved server config plus manager-specific flags; shapes vary by source.
   config: any;
   client: Client;

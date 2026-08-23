@@ -24,8 +24,9 @@ import { logger } from './logger.ts';
 import { shSingleQuote } from './shell-quote.ts';
 
 /** What the pool needs from a connection to manage its lifecycle. SSHManager
- * (src/ssh-manager.ts) satisfies this structurally; tests provide fakes. */
-export interface PoolConnection {
+ * (src/ssh-manager.ts) satisfies this structurally; tests provide fakes.
+ * Not exported: pool-internal contract (knip). */
+interface PoolConnection {
   connect(options?: { sock?: any }): Promise<void>;
   ping(): Promise<boolean>;
   dispose(): void;
@@ -33,7 +34,8 @@ export interface PoolConnection {
   [key: string]: any; // SSHManager carries more (execCommand, sftp, ...); pool stays hands-off.
 }
 
-export interface ConnectionPoolOptions {
+/** Constructor options. Not exported: pool-internal contract (knip). */
+interface ConnectionPoolOptions {
   /** Load the current servers table (resolved configs, keyed by name). */
   loadServers(): Promise<Record<string, any>>;
   /** Build a fresh (unconnected) connection for a resolved server config. */
@@ -47,8 +49,9 @@ export interface ConnectionPoolOptions {
 // Idle lifetime of a pooled connection (30 minutes) and keepalive cadence
 // (5 minutes). Single source of truth — previously duplicated between
 // src/index.ts and a dead TIMEOUTS block in src/config.ts (issue #4).
-export const DEFAULT_CONNECTION_TIMEOUT_MS = 30 * 60 * 1000;
-export const DEFAULT_KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000;
+// Not exported: only the getters below read them (knip).
+const DEFAULT_CONNECTION_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000;
 
 // Extra grace window so the remote `timeout` wrapper can exit cleanly and
 // return its timeout exit code before the local SSH exec timeout fires.
@@ -66,7 +69,7 @@ function validTimerDelay(value: number | undefined): value is number {
   );
 }
 
-export interface ConnectionStatusEntry {
+interface ConnectionStatusEntry {
   server: string;
   alive: boolean;
   /** Milliseconds since the connection was last used (or validated). */
@@ -76,7 +79,7 @@ export interface ConnectionStatusEntry {
   jumpServer: string | null;
 }
 
-export interface ConnectionPoolStatus {
+interface ConnectionPoolStatus {
   servers: ConnectionStatusEntry[];
   settings: {
     timeoutMinutes: number;
@@ -176,21 +179,33 @@ export class ConnectionPool {
     const inFlight = this.#pending.get(name);
     if (inFlight) return inFlight;
 
-    const attempt = this.#connect(name, serverName, resolved.config, servers);
+    // Identity guard (PR #9 r10 / codex r4): close(server) during the dial
+    // unregisters the attempt — #connect checks its registration once the
+    // dial resolves and refuses to pool after a disconnect that already
+    // reported success. The finally only clears the entry while it is
+    // still OURS, so a replacement attempt registered after close()
+    // survives the cancelled one's cleanup.
+    let attempt: Promise<PoolConnection>;
+    attempt = this.#connect(name, serverName, resolved.config, servers, () =>
+      this.#pending.get(name) === attempt
+    );
     this.#pending.set(name, attempt);
     try {
       return await attempt;
     } finally {
-      this.#pending.delete(name);
+      if (this.#pending.get(name) === attempt) this.#pending.delete(name);
     }
   }
 
-  /** Create, dial and pool one connection. Runs under a per-server in-flight guard. */
+  /** Create, dial and pool one connection. Runs under a per-server in-flight
+   * guard; `stillRegistered` reports whether THIS attempt is still the
+   * registered one (false after close()/disposeAll() cancelled it). */
   async #connect(
     name: string,
     serverName: string,
     serverConfig: any,
-    servers: Record<string, any>
+    servers: Record<string, any>,
+    stillRegistered: () => boolean
   ): Promise<PoolConnection> {
     const ssh = this.#options.createConnection(serverConfig);
 
@@ -214,6 +229,12 @@ export class ConnectionPool {
       // routes to the catch below, which disposes the client.
       if (this.#disposed) {
         throw new Error('pool disposed during connect');
+      }
+      // Same rule for a per-server disconnect (codex r4): close(server)
+      // unregisters the attempt, and a dial completing after the user was
+      // told "disconnected" must not quietly re-populate the pool.
+      if (!stillRegistered()) {
+        throw new Error(`connect cancelled: ${serverName} was disconnected while dialing`);
       }
 
       this.#connections.set(name, ssh);
@@ -310,6 +331,12 @@ export class ConnectionPool {
    */
   close(serverName: string): void {
     const name = String(serverName).toLowerCase();
+
+    // Cancel any in-flight dial for this server (codex r4): a disconnect
+    // that already reported success must not be followed by the pending
+    // dial resolving and quietly re-populating the pool — #connect
+    // re-checks its registration once the dial settles.
+    this.#pending.delete(name);
 
     const timer = this.#keepalives.get(name);
     if (timer) {

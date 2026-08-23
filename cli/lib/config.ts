@@ -160,8 +160,13 @@ if (
   try {
     fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
     fs.copyFileSync(resolvedEnvPath, homeEnvPath);
-    tightenMigratedHome([homeEnvPath]);
+    // Record the copy BEFORE tightening (PR #9 r10): if the chmod below
+    // throws, rollbackMigration() must still see — and unlink — the copied
+    // .env. Recording it afterwards left the copy in place, so the next
+    // run found homeEnvPath present, skipped migration entirely, and the
+    // credentials sat there with the SOURCE file's looser permissions.
     migrationCreated.push(homeEnvPath);
+    tightenMigratedHome([homeEnvPath]);
     print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
     resolvedEnvPath = homeEnvPath;
     envMigrated = true;
