@@ -80,19 +80,9 @@ if (
   path.dirname(resolvedEnvPath) === LEGACY_HOME
 ) {
   const homeExisted = fs.existsSync(SSH4AGENT_HOME);
-  const copied: string[] = [];
   try {
     fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
     fs.copyFileSync(resolvedEnvPath, homeEnvPath);
-    copied.push(homeEnvPath);
-    for (const file of ['config.json', 'aliases.json']) {
-      const from = path.join(LEGACY_HOME, file);
-      const to = path.join(SSH4AGENT_HOME, file);
-      if (fs.existsSync(from) && !fs.existsSync(to)) {
-        fs.copyFileSync(from, to);
-        copied.push(to);
-      }
-    }
     print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
     resolvedEnvPath = homeEnvPath;
   } catch {
@@ -103,18 +93,39 @@ if (
     // home (PR #9 review, round 3). Undo what this attempt created;
     // rmdirSync only removes the dir when empty, so pre-existing user
     // content under SSH4AGENT_HOME is never touched.
-    for (const f of copied) {
-      try {
-        fs.unlinkSync(f);
-      } catch {
-        /* best-effort */
-      }
+    try {
+      fs.unlinkSync(homeEnvPath);
+    } catch {
+      /* best-effort */
     }
     if (!homeExisted) {
       try {
         fs.rmdirSync(SSH4AGENT_HOME);
       } catch {
         /* non-empty or already gone */
+      }
+    }
+  }
+}
+
+// Legacy CLI settings (config.json / aliases.json) migrate INDEPENDENTLY of
+// where the servers live. A TOML or cwd-.env setup never enters the .env
+// migration above, yet the MCP side's state dir creates ~/.ssh4agent on
+// first startup — after that, resolveConfigHome() stops falling back to
+// the legacy dir and init_config() would replace the user's editor/shell/
+// history settings with defaults. Copy each legacy file whenever its new
+// counterpart is absent (best-effort, additive only).
+if (fs.existsSync(LEGACY_HOME)) {
+  for (const file of ['config.json', 'aliases.json']) {
+    const from = path.join(LEGACY_HOME, file);
+    const to = path.join(SSH4AGENT_HOME, file);
+    if (fs.existsSync(from) && !fs.existsSync(to)) {
+      try {
+        fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
+        fs.copyFileSync(from, to);
+        print_info(`Migrated legacy CLI config ${from} → ${to}`);
+      } catch {
+        /* best-effort */
       }
     }
   }
@@ -236,6 +247,16 @@ export function get_server_config(server: string, field: string): string | null 
 // (PR #9 review, round 3).
 function hostMarkerRe(name: string): RegExp {
   return new RegExp(`^SSH_SERVER_${escapeRegex(name)}_HOST=`, 'i');
+}
+
+// `SSH_SERVER_<name>_<FIELD>=` matcher for rewrite/delete flows. The field
+// alternation (from the shared field table) is what makes it exact: a bare
+// `^SSH_SERVER_${name}_` prefix also matches OTHER servers whose names
+// START with `name` — `server remove foo` would take `foo_bar`'s lines
+// with it (PR #9 review, round 4).
+function serverLinesRe(name: string): RegExp {
+  const fields = SERVER_FIELDS.map((f) => f.env).join('|');
+  return new RegExp(`^SSH_SERVER_${escapeRegex(name)}_(?:${fields})=`, 'i');
 }
 
 // Raw-line existence check that ALSO sees names the MCP loader silently
@@ -371,9 +392,10 @@ export function update_server_in_env(
 
   // Remove old server config lines + the `# Server: name` comment line.
   // bash: sed "/^# Server: $name$/d; /^SSH_SERVER_${name_upper}_/d" —
-  // case-insensitive so hand-authored cased entries rewrite cleanly.
+  // case-insensitive so hand-authored cased entries rewrite cleanly, and
+  // field-anchored so `foo` cannot swallow `foo_bar`'s lines.
   const commentRe = new RegExp(`^# Server: ${escapeRegex(name)}$`);
-  const lineRe = new RegExp(`^SSH_SERVER_${escapeRegex(name)}_`, 'i');
+  const lineRe = serverLinesRe(name);
   const kept = readEnvLines().filter((l) => !commentRe.test(l) && !lineRe.test(l));
 
   const append: string[] = [];
@@ -414,8 +436,8 @@ export function remove_server_from_env(name: string): boolean {
   } catch {
     /* ignore */
   }
-  const lineRe = new RegExp(`^SSH_SERVER_${escapeRegex(name)}_`, 'i');
-  const kept = readEnvLines().filter((l) => !lineRe.test(l));
+  // Field-anchored: `server remove foo` must not take `foo_bar`'s lines.
+  const kept = readEnvLines().filter((l) => !serverLinesRe(name).test(l));
   fs.writeFileSync(SSH4AGENT_ENV, kept.join('\n') + '\n', 'utf8');
   print_success(`Server '${name}' removed successfully`);
   return true;
