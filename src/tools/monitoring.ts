@@ -131,6 +131,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
               text: `❌ Tail error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -319,6 +320,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
               text: `❌ Monitor error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -420,6 +422,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
               text: `❌ Health check failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -503,6 +506,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
               text: `❌ Service status check failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -662,6 +666,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
               text: `❌ Process manager failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
@@ -856,6 +861,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
               text: `❌ Alert setup failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },

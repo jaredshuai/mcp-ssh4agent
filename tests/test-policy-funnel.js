@@ -117,7 +117,45 @@ async function main() {
     );
     await handler({ server: 'prod', command: 'ls' });
     assert.strictEqual(calls.audits[0].result.code, 127, 'exitCode lands in the audit entry');
-    ok('handler exitCode feeds the audit entry');
+    assert.strictEqual(
+      calls.audits[0].result.success,
+      false,
+      'nonzero exitCode must be audited as failure'
+    );
+    ok('handler exitCode feeds the audit entry (nonzero = failure)');
+  }
+
+  // ── a broken audit sink never changes the tool outcome ────────────────
+  {
+    const deps = {
+      applyServerPolicy: async () => null,
+      auditOk: async () => {
+        throw new Error('audit disk full');
+      },
+    };
+    const okHandler = wrapWithPolicy(
+      'ssh_upload',
+      async () => ({ content: [], marker: 'ok' }),
+      {},
+      deps
+    );
+    const okResp = await okHandler({ server: 'prod' });
+    assert.strictEqual(
+      okResp.marker,
+      'ok',
+      'success response passes through despite audit failure'
+    );
+
+    const boom = wrapWithPolicy(
+      'ssh_upload',
+      async () => {
+        throw new Error('handler failed');
+      },
+      {},
+      deps
+    );
+    await assert.rejects(() => boom({ server: 'prod' }), /handler failed/);
+    ok('auditOk throwing is swallowed: outcome and original error preserved');
   }
 
   // ── commandArg + expandAlias ───────────────────────────────────────────

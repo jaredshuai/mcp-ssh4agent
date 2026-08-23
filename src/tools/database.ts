@@ -158,6 +158,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Database dump failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
@@ -279,6 +280,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Database import failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },

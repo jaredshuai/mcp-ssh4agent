@@ -325,7 +325,8 @@ test('auditLog redacts secrets in args', () => {
         command: 'whoami',
         password: 's3cret',
         sudoPassword: 'also-secret',
-        nested: { token: 'tok' },
+        dbPassword: 'db-secret',
+        nested: { token: 'tok', db_password: 'db-secret-2' },
       },
       { allowed: true },
       { code: 0, success: true }
@@ -333,7 +334,9 @@ test('auditLog redacts secrets in args', () => {
     const entry = JSON.parse(fs.readFileSync(tmpFile, 'utf8').trim());
     assertEqual(entry.args.password, '***', 'password redacted');
     assertEqual(entry.args.sudoPassword, '***', 'sudoPassword redacted');
+    assertEqual(entry.args.dbPassword, '***', 'dbPassword redacted (funnel audits full args)');
     assertEqual(entry.args.nested.token, '***', 'nested token redacted');
+    assertEqual(entry.args.nested.db_password, '***', 'nested db_password redacted');
     assertEqual(entry.args.command, 'whoami', 'non-secret fields preserved');
   } finally {
     if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);

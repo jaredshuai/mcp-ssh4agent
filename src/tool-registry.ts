@@ -117,19 +117,45 @@ export function wrapWithPolicy(
     try {
       const response = await handler(args, extra);
       if (server) {
-        await deps.auditOk(server, toolName, args, {
-          success: !response?.isError,
+        // Failure is derived from BOTH signals: the handler's isError flag
+        // (error responses) and a nonzero exitCode (command-bearing tools
+        // report the command's exit status) — either means the audit entry
+        // must not claim success.
+        const failed =
+          response?.isError === true ||
+          (typeof response?.exitCode === 'number' && response.exitCode !== 0);
+        await safeAudit(deps, server, toolName, args, {
+          success: !failed,
           code: response?.exitCode,
         });
       }
       return response;
     } catch (error) {
       if (server) {
-        await deps.auditOk(server, toolName, args, { success: false, error: error.message });
+        await safeAudit(deps, server, toolName, args, { success: false, error: error.message });
       }
       throw error;
     }
   };
+}
+
+/**
+ * Auditing must never alter the tool's outcome: if the audit sink itself
+ * throws (unwritable path, full disk), log it and swallow it — otherwise it
+ * would mask the handler's real result or replace its original error.
+ */
+async function safeAudit(
+  deps: PolicyFunnelDeps,
+  server: string,
+  toolName: string,
+  args: any,
+  result: { success: boolean; code?: number; error?: string }
+): Promise<void> {
+  try {
+    await deps.auditOk(server, toolName, args, result);
+  } catch (error) {
+    console.error(`audit write failed for ${toolName} on ${server}: ${error.message}`);
+  }
 }
 
 /**

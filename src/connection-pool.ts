@@ -102,8 +102,17 @@ export class ConnectionPool {
     await Promise.resolve(this.#options.executeHook?.('pre-connect', { server: serverName }));
 
     const resolved = resolveServer(serverName, servers);
-    if (!resolved) {
-      const availableServers = Object.keys(servers);
+    const availableServers = () => Object.keys(servers);
+    if (!resolved || !resolved.config) {
+      // A dangling alias (target server removed/renamed) resolves to a name
+      // with NO config — connecting would explode later on a null config, so
+      // fail here with an actionable message instead.
+      if (resolved) {
+        throw new Error(
+          `Server "${serverName}" resolves to "${resolved.name}" which has no configuration (stale alias?). ` +
+            `Available servers: ${availableServers().join(', ') || 'none'}.`
+        );
+      }
       const aliases = listAliases();
       const aliasInfo =
         aliases.length > 0
@@ -111,7 +120,7 @@ export class ConnectionPool {
           : '';
       throw new Error(
         `Server "${serverName}" not found. Available servers: ${
-          availableServers.join(', ') || 'none'
+          availableServers().join(', ') || 'none'
         }.${aliasInfo}`
       );
     }

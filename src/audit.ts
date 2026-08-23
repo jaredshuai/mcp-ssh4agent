@@ -21,6 +21,11 @@ const REDACT_FIELDS = new Set([
   'passphrase',
   'sudopassword',
   'sudo_password',
+  // Database credentials arrive as dbPassword/db_password in backup and
+  // database tool args — the funnel audits full argument objects, so they
+  // must never reach the JSONL log in plaintext.
+  'dbpassword',
+  'db_password',
   'token',
   'secret',
   'apikey',

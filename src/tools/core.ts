@@ -189,6 +189,7 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
               text: `❌ Upload error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
@@ -617,6 +618,7 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
               text: `❌ Sync error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },

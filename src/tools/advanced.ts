@@ -583,6 +583,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Deployment failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
@@ -654,6 +655,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Sudo execution failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
@@ -1048,6 +1050,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Connection management failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -1214,6 +1217,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Failed to list tunnels: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -1279,6 +1283,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Failed to close tunnel: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -1534,6 +1539,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ SSH key management error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },

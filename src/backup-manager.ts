@@ -167,8 +167,10 @@ export function createBackupMetadata(
  */
 export function buildSaveMetadataCommand(metadata, metadataPath) {
   const jsonData = JSON.stringify(metadata, null, 2);
-  // Shell-quote the whole JSON payload (single source: shell-quote.ts)
-  return `echo ${shSingleQuote(jsonData)} > "${metadataPath}"`;
+  // Both the payload AND the path go through shSingleQuote: the path is
+  // derived from server-controlled values (backupId, backupDir) and an
+  // unquoted `$(...)` in it would execute remotely.
+  return `echo ${shSingleQuote(jsonData)} > ${shSingleQuote(metadataPath)}`;
 }
 
 /**

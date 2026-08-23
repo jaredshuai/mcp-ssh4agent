@@ -53,6 +53,7 @@ export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Failed to start session: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     }
@@ -124,6 +125,7 @@ export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolCon
               text: `❌ Session error: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },

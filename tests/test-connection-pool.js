@@ -186,6 +186,22 @@ async function main() {
     ok('unknown servers fail with the available-server list');
   }
 
+  // ── dangling alias (target server removed) fails cleanly ───────────────
+  {
+    const created = [];
+    // Plant an alias pointing at a server that is NOT in the table (the
+    // isolated home keeps this away from any real aliases).
+    const { addAlias } = await import('../src/server-aliases.ts');
+    addAlias('gone', 'pool-removed-1');
+    const pool = makePool({ 'pool-web-1': { host: '10.0.0.1' } }, created);
+    await assert.rejects(
+      () => pool.get('gone'),
+      /resolves to "pool-removed-1" which has no configuration.*stale alias/s
+    );
+    assert.strictEqual(pool.size, 0, 'nothing pooled from a dangling alias');
+    ok('dangling alias (target removed) fails with a stale-alias hint, not a null-config crash');
+  }
+
   // ── sweep closes dead connections, keeps live ones ──────────────────────
   {
     const created = [];

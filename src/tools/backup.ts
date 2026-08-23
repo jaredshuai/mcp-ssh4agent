@@ -263,6 +263,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
               text: `❌ Backup failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
@@ -476,6 +477,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
               text: `❌ Restore failed: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
@@ -625,6 +627,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
               text: `❌ Failed to schedule backup: ${error.message}`,
             },
           ],
+          isError: true,
         };
       }
     },
