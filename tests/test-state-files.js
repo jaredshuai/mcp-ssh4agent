@@ -27,8 +27,10 @@ async function main() {
   process.env.SSH4AGENT_HOME = home;
   process.env.SSH4AGENT_LEGACY_STATE_DIR = legacy;
   // Legacy log fixture must exist BEFORE the first src import constructs
-  // the logger singleton (the migration runs in its constructor).
-  fs.writeFileSync(path.join(legacy, '.ssh4agent.log'), 'legacy-log-line\n');
+  // the logger singleton (the migration runs in its constructor). Written
+  // 0644 on purpose: the migrated copy must be re-tightened to 0600 even
+  // though copyFileSync inherits the source's loose bits (PR #9 r5).
+  fs.writeFileSync(path.join(legacy, '.ssh4agent.log'), 'legacy-log-line\n', { mode: 0o644 });
 
   const stateFiles = await import('../src/state-files.ts');
 
@@ -134,7 +136,12 @@ async function main() {
     migratedLog.includes('legacy-log-line'),
     'legacy install-root log migrated into the state dir'
   );
-  ok('append-only log migrates to the state dir at logger construction');
+  assert.strictEqual(
+    fs.statSync(path.join(home, '.ssh4agent.log')).mode & 0o777,
+    0o600,
+    'migrated log re-tightened to 0600 despite a 0644 source'
+  );
+  ok('append-only log migrates to the state dir and is tightened to 0600');
 
   // Hooks config: initialize writes into the state dir.
   const hooks = await import('../src/hooks-system.ts');

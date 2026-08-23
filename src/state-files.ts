@@ -135,8 +135,10 @@ export function writeStateFileText(name: string, content: string): boolean {
  * existing file with 0644 keeps its permissions through writeFileSync,
  * leaving credential-bearing state readable by other local users
  * (PR #9 review: upgraded installs must not keep loose permissions).
+ * Exported for sibling modules that manage their own state files
+ * (e.g. the logger's migrated log).
  */
-function tightenPermissions(file: string, dir: string = stateDir()): void {
+export function tightenPermissions(file: string, dir: string = stateDir()): void {
   fs.chmodSync(dir, 0o700);
   fs.chmodSync(file, 0o600);
 }

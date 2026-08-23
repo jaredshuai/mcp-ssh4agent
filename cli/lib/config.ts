@@ -33,6 +33,23 @@ function envLineFor(
   return serverEnvLine(nameUpper, spec, value);
 }
 
+// Values containing BOTH quote characters cannot be written to .env
+// losslessly (serverEnvLine throws for them) — check BEFORE any file
+// mutation so add/update fail cleanly with guidance instead of a
+// half-written file.
+function envValueRepresentable(...values: string[]): boolean {
+  for (const v of values) {
+    if (v && v.includes('"') && v.includes("'")) {
+      print_error(`Value contains both ' and " — the .env format cannot store it losslessly.`);
+      print_info(
+        'Store this server in TOML instead (ssh4agent codex migrate), or change the value.'
+      );
+      return false;
+    }
+  }
+  return true;
+}
+
 // ── Paths ────────────────────────────────────────────────────────────────────
 // cli/lib/config.ts → cli/lib → cli → <project root>
 const _HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -113,19 +130,44 @@ if (
 // migration above, yet the MCP side's state dir creates ~/.ssh4agent on
 // first startup — after that, resolveConfigHome() stops falling back to
 // the legacy dir and init_config() would replace the user's editor/shell/
-// history settings with defaults. Copy each legacy file whenever its new
-// counterpart is absent (best-effort, additive only).
+// history settings with defaults.
+//
+// All-or-nothing per run (PR #9 r5): a partial copy that leaves the new
+// home WITHOUT config.json is worse than no migration — init_config()
+// would write defaults over the gap and every later run sees the file as
+// "already migrated". On failure, this run's copies are removed and the
+// home dir (if this run created it) too, so the next invocation retries.
 if (fs.existsSync(LEGACY_HOME)) {
+  const homeExisted = fs.existsSync(SSH4AGENT_HOME);
+  const pending: Array<{ from: string; to: string }> = [];
   for (const file of ['config.json', 'aliases.json']) {
     const from = path.join(LEGACY_HOME, file);
     const to = path.join(SSH4AGENT_HOME, file);
-    if (fs.existsSync(from) && !fs.existsSync(to)) {
-      try {
-        fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
-        fs.copyFileSync(from, to);
-        print_info(`Migrated legacy CLI config ${from} → ${to}`);
-      } catch {
-        /* best-effort */
+    if (fs.existsSync(from) && !fs.existsSync(to)) pending.push({ from, to });
+  }
+  if (pending.length > 0) {
+    const done: string[] = [];
+    try {
+      fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
+      for (const p of pending) {
+        fs.copyFileSync(p.from, p.to);
+        done.push(p.to);
+      }
+      for (const p of pending) print_info(`Migrated legacy CLI config ${p.from} → ${p.to}`);
+    } catch {
+      for (const f of done) {
+        try {
+          fs.unlinkSync(f);
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (!homeExisted) {
+        try {
+          fs.rmdirSync(SSH4AGENT_HOME);
+        } catch {
+          /* non-empty or already gone */
+        }
       }
     }
   }
@@ -312,6 +354,15 @@ export function add_server_to_env(
 ): boolean {
   const nameUpper = name.toUpperCase();
 
+  // Reject unrepresentable values before touching the file.
+  if (
+    !envValueRepresentable(authValue, description) ||
+    (allowPatterns && !envValueRepresentable(allowPatterns)) ||
+    (auditLog && !envValueRepresentable(auditLog))
+  ) {
+    return false;
+  }
+
   // Check if server already exists
   if (fs.existsSync(SSH4AGENT_ENV)) {
     const existing = readEnvLines();
@@ -377,6 +428,11 @@ export function update_server_in_env(
   defaultDir: string = ''
 ): boolean {
   const nameUpper = name.toUpperCase();
+
+  // Reject unrepresentable values before touching the file.
+  if (!envValueRepresentable(authValue, description, defaultDir)) {
+    return false;
+  }
 
   if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => hostMarkerRe(name).test(l))) {
     print_error(`Server '${name}' not found`);

@@ -160,22 +160,45 @@ test('parseEnvServersText stops at the first close quote before trailing content
 });
 
 // Round-4 case: an interior quote followed by `#` inside a credential.
-// The writer avoids the ambiguity entirely by alternating the delimiter
+// The writer avoids the ambiguity by alternating the delimiter
 // (single-quoted when the value contains `"` but no `'`), and the reader
 // is the REAL dotenv parser — same bytes, same result on both sides.
 test('credentials with interior quote + # round-trip via alternating quotes', () => {
   const lines = [
     serverEnvLine('H', spec('host'), '203.0.113.7'),
     serverEnvLine('H', spec('password'), 'a"#b'),
-    serverEnvLine('H', spec('sudoPassword'), `x'"#y`),
   ].join('\n');
   const record = parseEnvServersText(lines).get('h');
   assert.ok(record);
   assert.equal(record.password, 'a"#b', 'quote+hash password survives via single-quoting');
-  // Both quote characters: escaped double-quoting. dotenv keeps the
-  // backslash (it only expands \n/\r) — the CLI parser IS dotenv here, so
-  // both sides read the exact same bytes. Consistency is the contract.
-  assert.equal(record.sudoPassword, 'x\'\\"#y');
+});
+
+// Round-5: a value with BOTH quote characters is unrepresentable — dotenv
+// escapes are not unescaped by dotenv.parse, so any escaping silently
+// corrupts the credential. The writer must refuse instead of mangling.
+test('values containing both quote characters are rejected, not mangled', () => {
+  assert.throws(
+    () => serverEnvLine('B', spec('password'), `x'"y`),
+    /both quote characters.*TOML/s,
+    'writer must throw for mixed-quote credentials'
+  );
+});
+
+// Round-5: machine fields (key path, audit-log path...) containing `#` are
+// just as truncatable as passwords — quoting is content-driven now.
+test('machine values containing # are quoted and round-trip', () => {
+  const lines = [
+    serverEnvLine('M', spec('host'), '203.0.113.8'),
+    serverEnvLine('M', spec('keyPath'), '/keys/vault#2/id_rsa'),
+    serverEnvLine('M', spec('auditLog'), '/var/log/audit#ops.jsonl'),
+    // Values without special characters stay unquoted (wire format stable).
+    serverEnvLine('M', spec('port'), 22),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('m');
+  assert.ok(record);
+  assert.equal(record.keyPath, '/keys/vault#2/id_rsa', 'hash in key path survives');
+  assert.equal(record.auditLog, '/var/log/audit#ops.jsonl', 'hash in audit-log path survives');
+  assert.equal(record.port, 22, 'plain machine value still unquoted');
 });
 
 // ── coercion ─────────────────────────────────────────────────────────────────
@@ -303,6 +326,16 @@ async function roundTrip(): Promise<void> {
   assert.ok(updated);
   assert.equal(updated.defaultDir, '/opt/app');
   assert.equal(updated.password, 'up-pw');
+
+  // ── mixed-quote values are rejected BEFORE any file mutation (r5) ────
+  const linesBefore = fs.readFileSync(envPath, 'utf8');
+  const rejected = cli.add_server_to_env('mq', '198.51.100.7', 'op', 'password', `p'"q`);
+  assert.equal(rejected, false, 'add must refuse a mixed-quote credential');
+  assert.equal(
+    fs.readFileSync(envPath, 'utf8'),
+    linesBefore,
+    'a rejected add must not touch the .env file'
+  );
 
   // ── case-insensitive markers (r3) ─────────────────────────────────────
   // Hand-authored mixed-case entry: listed as `cased` by load_servers().

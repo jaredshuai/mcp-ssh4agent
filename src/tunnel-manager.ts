@@ -483,7 +483,10 @@ class SSHTunnel {
       stats: this.stats,
       created: this.createdAt,
       lastActivity: this.lastActivity,
-      activeConnections: this.connections.size,
+      // Logical connection count (one forwarded connection = 1). The
+      // socket set is for teardown only and holds BOTH ends of each
+      // connection — reporting its size double-counted (PR #9 r5).
+      activeConnections: this.stats.connectionsActive,
     };
   }
 

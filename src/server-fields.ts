@@ -174,20 +174,20 @@ export function serverFromTomlRecord(tomlServer: Record<string, unknown>): Recor
 
 /**
  * Render one `.env` export line for a field, applying the shared quoting
- * rule: free-form / whitespace-sensitive values are quoted so a ` #` or a
- * delimiter quote inside the value cannot truncate it on read-back.
- * Pattern lists join with `;`.
+ * rule: any value containing dotenv-significant characters (`#` starts a
+ * comment, whitespace, quote characters) is quoted so it cannot be
+ * truncated on read-back. Pattern lists join with `;`.
  *
  * Quote CHOICE matters: dotenv (the reader on both sides — see
  * dotenvParse) stops a double-quoted value at the first unescaped `"`, so
- * a password like `Jx"ds$2016` must not be written as `"Jx"ds$2016"`.
- * Alternating the delimiter solves it without inventing an escape syntax:
- * values containing `"` (but no `'`) are single-quoted, everything else
- * double-quoted. A value containing BOTH quote characters is the one
- * pathological case — it is written double-quoted with interior quotes
- * escaped (`\"`), which dotenv reads back with the backslash intact
- * (dotenv only expands \n/\r); both sides agree on that byte-for-byte,
- * so the credential is mangled consistently rather than divergently.
+ * a value containing `"` (but no `'`) is single-quoted, and vice versa.
+ *
+ * A value containing BOTH quote characters is UNREPRESENTABLE: dotenv's
+ * escape syntax (`\"`) is not unescaped by dotenv.parse (it only expands
+ * \n/\r), so any escaping scheme would silently corrupt the credential on
+ * read-back. Writing it anyway used to mangle the secret consistently;
+ * now it throws so callers can reject the value up front and point the
+ * user at TOML, which represents these values natively (PR #9 r5).
  */
 export function serverEnvLine(
   nameUpper: string,
@@ -195,13 +195,21 @@ export function serverEnvLine(
   value: string | number | boolean | string[]
 ): string {
   const rendered = Array.isArray(value) ? value.join(';') : String(value);
+  if (rendered.includes('"') && rendered.includes("'")) {
+    throw new Error(
+      `Value for ${nameUpper}.${spec.env} contains both quote characters — ` +
+        `.env format cannot represent it losslessly; use TOML instead`
+    );
+  }
+  // Quoting is content-driven, not field-driven: a "machine" field
+  // (host, key path, audit-log path...) containing `#` or whitespace is
+  // just as truncatable as a password (PR #9 r5).
+  const needsQuoting = spec.quoteEnv || /["'#\s]/.test(rendered);
   let rhs: string;
-  if (!spec.quoteEnv) {
+  if (!needsQuoting) {
     rhs = rendered;
-  } else if (rendered.includes('"') && !rendered.includes("'")) {
-    rhs = `'${rendered}'`;
   } else if (rendered.includes('"')) {
-    rhs = `"${rendered.replace(/"/g, '\\"')}"`;
+    rhs = `'${rendered}'`;
   } else {
     rhs = `"${rendered}"`;
   }

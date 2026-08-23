@@ -174,6 +174,11 @@ async function main() {
     2,
     'an established remote forward must track both sockets (remote + local)'
   );
+  assert.strictEqual(
+    tunnel.getInfo().activeConnections,
+    1,
+    'getInfo counts logical connections (socket pair = 1, not 2)'
+  );
 
   const tunnelId = tunnel.id;
   closeTunnel(tunnelId);

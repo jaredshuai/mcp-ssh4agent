@@ -8,6 +8,7 @@ import {
   stateDir,
   stateFilePath,
   legacyStateFilePath,
+  tightenPermissions,
   readStateFileText,
   writeStateFileText,
 } from './state-files.ts';
@@ -78,9 +79,15 @@ class Logger {
         // readStateFileText, so a legacy install-root .ssh4agent.log would
         // otherwise be stranded while new entries land in the state dir —
         // operational history split across two files (PR #9 review, r4).
+        // copyFileSync inherits the SOURCE's permission bits — typically
+        // 0644 for a legacy install-root file — so re-tighten like every
+        // other migration path (verbose logs embed full commands, r5).
         const legacyLog = legacyStateFilePath('.ssh4agent.log');
         if (fs.existsSync(legacyLog) && !fs.existsSync(this.logFile)) {
           fs.copyFileSync(legacyLog, this.logFile);
+        }
+        if (fs.existsSync(this.logFile)) {
+          tightenPermissions(this.logFile);
         }
       } catch {
         /* logging must never break startup */
