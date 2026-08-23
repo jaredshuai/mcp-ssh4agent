@@ -50,6 +50,8 @@ import {
   check_dependencies,
   get_server_config,
   get_config,
+  require_command,
+  resolveServerToSshArgs,
 } from './lib/config.ts';
 
 import {
@@ -219,23 +221,20 @@ export function cmd_exec(server: string, ...commandParts: string[]): void {
     process.exitCode = 1;
     return;
   }
-  const host = get_server_config(server, 'HOST');
-  const user = get_server_config(server, 'USER');
-  let port = get_server_config(server, 'PORT');
-  const keypath = get_server_config(server, 'KEYPATH');
-  port = port || '22';
-
-  if (!host || !user) {
+  const target = resolveServerToSshArgs(server);
+  if (!target) {
     print_error(`Server '${server}' not found`);
     process.exitCode = 1;
     return;
   }
 
-  const sshArgs: string[] = ['-p', port];
-  if (keypath) sshArgs.push('-i', keypath);
+  const sshArgs: string[] = ['-p', target.port];
+  if (target.keypath) sshArgs.push('-i', target.keypath);
 
   print_info(`Executing on ${server}: ${command}`);
-  const result = spawnSync('ssh', [...sshArgs, `${user}@${host}`, command], { stdio: 'inherit' });
+  const result = spawnSync('ssh', [...sshArgs, `${target.user}@${target.host}`, command], {
+    stdio: 'inherit',
+  });
   if (result.status !== 0 && result.error) {
     print_error(`Failed to execute: ${result.error.message}`);
     process.exitCode = 1;
@@ -258,37 +257,32 @@ export function cmd_sync(
     return;
   }
 
-  if (!requireCommand('rsync', 'ssh4agent sync')) {
+  if (!require_command('rsync', 'ssh4agent sync')) {
     process.exitCode = 1;
     return;
   }
 
-  const host = get_server_config(server, 'HOST');
-  const user = get_server_config(server, 'USER');
-  let port = get_server_config(server, 'PORT');
-  const keypath = get_server_config(server, 'KEYPATH');
-  port = port || '22';
-
-  if (!host || !user) {
+  const target = resolveServerToSshArgs(server);
+  if (!target) {
     print_error(`Server '${server}' not found`);
     process.exitCode = 1;
     return;
   }
 
-  let sshOpts = `ssh -p ${port}`;
-  if (keypath) sshOpts += ` -i ${keypath}`;
+  let sshOpts = `ssh -p ${target.port}`;
+  if (target.keypath) sshOpts += ` -i ${target.keypath}`;
 
   const rsyncArgs = ['-avz', '--progress', '-e', sshOpts];
 
   if (direction === 'push') {
     print_info(`Pushing ${source} to ${server}:${dest}`);
-    const r = spawnSync('rsync', [...rsyncArgs, source, `${user}@${host}:${dest}`], {
+    const r = spawnSync('rsync', [...rsyncArgs, source, `${target.user}@${target.host}:${dest}`], {
       stdio: 'inherit',
     });
     if (r.status !== 0) process.exitCode = 1;
   } else if (direction === 'pull') {
     print_info(`Pulling ${server}:${source} to ${dest}`);
-    const r = spawnSync('rsync', [...rsyncArgs, `${user}@${host}:${source}`, dest], {
+    const r = spawnSync('rsync', [...rsyncArgs, `${target.user}@${target.host}:${source}`, dest], {
       stdio: 'inherit',
     });
     if (r.status !== 0) process.exitCode = 1;
@@ -325,37 +319,32 @@ export function cmd_tunnel(action: string, ...rest: string[]): void {
       return;
     }
 
-    const host = get_server_config(server, 'HOST');
-    const user = get_server_config(server, 'USER');
-    let port = get_server_config(server, 'PORT');
-    const keypath = get_server_config(server, 'KEYPATH');
-    port = port || '22';
-
-    if (!host || !user) {
+    const target = resolveServerToSshArgs(server);
+    if (!target) {
       print_error(`Server '${server}' not found`);
       process.exitCode = 1;
       return;
     }
 
-    const sshArgs: string[] = ['-p', port, '-N', '-f'];
-    if (keypath) sshArgs.push('-i', keypath);
+    const sshArgs: string[] = ['-p', target.port, '-N', '-f'];
+    if (target.keypath) sshArgs.push('-i', target.keypath);
 
     let ok = false;
     if (type === 'local') {
       print_info(`Creating local tunnel: ${ports}`);
-      const r = spawnSync('ssh', [...sshArgs, '-L', ports, `${user}@${host}`], {
+      const r = spawnSync('ssh', [...sshArgs, '-L', ports, `${target.user}@${target.host}`], {
         stdio: 'inherit',
       });
       ok = r.status === 0;
     } else if (type === 'remote') {
       print_info(`Creating remote tunnel: ${ports}`);
-      const r = spawnSync('ssh', [...sshArgs, '-R', ports, `${user}@${host}`], {
+      const r = spawnSync('ssh', [...sshArgs, '-R', ports, `${target.user}@${target.host}`], {
         stdio: 'inherit',
       });
       ok = r.status === 0;
     } else if (type === 'dynamic') {
       print_info(`Creating SOCKS proxy on port ${ports}`);
-      const r = spawnSync('ssh', [...sshArgs, '-D', ports, `${user}@${host}`], {
+      const r = spawnSync('ssh', [...sshArgs, '-D', ports, `${target.user}@${target.host}`], {
         stdio: 'inherit',
       });
       ok = r.status === 0;
@@ -388,53 +377,6 @@ export function cmd_tunnel(action: string, ...rest: string[]): void {
   print_error(`Unknown tunnel command: ${action}`);
   process.stdout.write('Available commands: create, list\n');
   process.exitCode = 1;
-}
-
-// ── requireCommand: lazy feature-specific dependency check ────────────────────
-function requireCommand(cmd: string, feature: string): boolean {
-  // Defer to config.check_dependencies' helper by re-implementing the PATH walk
-  // here (cheap, avoids an extra import cycle through config.ts at call time).
-  const pathEnv = process.env.PATH ?? '';
-  const dirs = pathEnv.split(path.delimiter);
-  const isWin = process.platform === 'win32';
-  const exists = (p: string) => {
-    try {
-      return fs.existsSync(p);
-    } catch {
-      return false;
-    }
-  };
-  let found = false;
-  if (isWin) {
-    const exts = (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';');
-    outer: for (const d of dirs) {
-      if (!d) continue;
-      for (const ext of exts) {
-        if (exists(path.join(d, cmd + ext))) {
-          found = true;
-          break outer;
-        }
-      }
-    }
-  } else {
-    for (const d of dirs) {
-      if (d && exists(path.join(d, cmd))) {
-        found = true;
-        break;
-      }
-    }
-  }
-  if (!found) {
-    print_error(`'${cmd}' is required for ${feature} but was not found on PATH`);
-    if (cmd === 'rsync') {
-      print_info('Install rsync:');
-      print_info('  • macOS:   brew install rsync');
-      print_info('  • Debian:  sudo apt-get install rsync');
-      print_info('  • Windows: install via MSYS2/Cygwin, or use WSL');
-    }
-    return false;
-  }
-  return true;
 }
 
 // ── interactive_mode ───────────────────────────────────────────────────────────

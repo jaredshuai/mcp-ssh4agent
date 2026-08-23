@@ -13,7 +13,13 @@ import * as fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { print_info, print_error, print_success, print_warning } from './colors.ts';
-import { FIELD_BY_CAMEL, serverEnvLine } from '../../src/server-fields.ts';
+import {
+  FIELD_BY_CAMEL,
+  SERVER_FIELDS,
+  serverEnvLine,
+  parseEnvServersText,
+} from '../../src/server-fields.ts';
+import { resolveEnvFilePath } from '../../src/env-path.ts';
 
 // Render one `SSH_SERVER_<NAME>_<KEY>=value` line for a camelCase field,
 // through the shared field table (key names + quoting rules).
@@ -53,28 +59,12 @@ export const SSH4AGENT_CONFIG: string = path.join(CONFIG_HOME, 'config.json');
 
 export const SSH4AGENT_ALIASES: string = path.join(CONFIG_HOME, 'aliases.json');
 
-// Resolve .env path with the same fallback chain as config.sh (and src/index.ts):
-// 1. SSH4AGENT_ENV env var (explicit override)
-// 2. <config home>/.env (new dir, or legacy dir while the new one is absent)
-// 3. $PWD/.env
-// 4. ~/.env
-// 5. <project-root>/.env
-// 6. default <config home>/.env (created on first server add)
-function resolveEnvPath(): string {
-  if (process.env.SSH4AGENT_ENV) return process.env.SSH4AGENT_ENV;
-  const candidates = [
-    path.join(CONFIG_HOME, '.env'),
-    path.join(process.cwd(), '.env'),
-    path.join(os.homedir(), '.env'),
-    path.join(PROJECT_ROOT, '.env'),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return path.join(CONFIG_HOME, '.env');
-}
-
-export const SSH4AGENT_ENV: string = resolveEnvPath();
+// Resolve .env through the ONE shared fallback chain (src/env-path.ts):
+// SSH_ENV_PATH → SSH4AGENT_ENV (deprecated alias) → ~/.ssh4agent/.env →
+// legacy ~/.ssh-manager/.env → $PWD/.env → ~/.env → <package root>/.env →
+// default ~/.ssh4agent/.env. The CLI and the MCP entry point can no longer
+// disagree about which file holds the servers (issue #7).
+export const SSH4AGENT_ENV: string = resolveEnvFilePath();
 
 // ── init_config: ensure config dir + default config.json exist ──────────────
 export function init_config(): void {
@@ -151,29 +141,49 @@ export function load_servers(): string[] {
   return Array.from(new Set(names)).sort();
 }
 
-// get_server_config(server, field): returns the raw value with ONLY the outer
-// surrounding double-quotes stripped (preserves internal quotes). Matches the
-// config.sh regex `^"(.*)"$`. Returns null when the key is absent / empty.
+// get_server_config(server, field): read one server field through the SAME
+// parser the MCP loader uses (parseEnvServersText in src/server-fields.ts).
+// The CLI's own line-parsing implementation was deleted — the two sides had
+// drifted on quoting and field mapping (issue #7). `field` is the `.env`
+// suffix (HOST, USER, KEYPATH, DEFAULT_DIR, ...); returns null when the file,
+// server, or field is absent.
 export function get_server_config(server: string, field: string): string | null {
   if (!fs.existsSync(SSH4AGENT_ENV)) return null;
-  const serverUpper = server.toUpperCase();
+  const servers = parseEnvServersText(fs.readFileSync(SSH4AGENT_ENV, 'utf8'));
+  const record = servers.get(server.toLowerCase());
+  if (!record) return null;
   const fieldUpper = field.toUpperCase();
-  const key = `SSH_SERVER_${serverUpper}_${fieldUpper}`;
-  const prefix = key + '=';
-  const lines = readEnvLines();
-  let value: string | null = null;
-  for (const line of lines) {
-    if (line.startsWith(prefix)) {
-      value = line.slice(prefix.length);
-      break;
-    }
-  }
-  if (value === null || value === '') return null;
-  // Strip only a single pair of surrounding double quotes.
-  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
-    return value.slice(1, -1);
-  }
-  return value;
+  const spec = SERVER_FIELDS.find((f) => f.env === fieldUpper);
+  if (!spec) return null;
+  const value = record[spec.camel];
+  if (value === undefined || value === null || value === '') return null;
+  return String(value);
+}
+
+// The SSH dial coordinates every CLI ssh/rsync/tunnel invocation needs.
+// Used to be re-fetched field-by-field in five places (cmd_exec, cmd_sync,
+// cmd_tunnel, test_ssh_connection, spawnInteractiveSsh).
+export interface SshTarget {
+  host: string;
+  user: string;
+  port: string;
+  keypath: string | null;
+  password: string | null;
+}
+
+// Resolve a configured server to its ssh arguments. Returns null when the
+// server is unknown or lacks HOST/USER.
+export function resolveServerToSshArgs(server: string): SshTarget | null {
+  const host = get_server_config(server, 'HOST');
+  const user = get_server_config(server, 'USER');
+  if (!host || !user) return null;
+  return {
+    host,
+    user,
+    port: get_server_config(server, 'PORT') || '22',
+    keypath: get_server_config(server, 'KEYPATH'),
+    password: get_server_config(server, 'PASSWORD'),
+  };
 }
 
 // ── add_server_to_env ────────────────────────────────────────────────────────
@@ -331,17 +341,12 @@ export function remove_server_from_env(name: string): boolean {
 // takes the "sshpass not installed" path and warns (matches bash behavior on
 // systems without sshpass — see report).
 export function test_ssh_connection(server: string): boolean {
-  const host = get_server_config(server, 'HOST');
-  const user = get_server_config(server, 'USER');
-  let port = get_server_config(server, 'PORT');
-  const keypath = get_server_config(server, 'KEYPATH');
-  const password = get_server_config(server, 'PASSWORD');
-  port = port || '22';
-
-  if (!host || !user) {
+  const target = resolveServerToSshArgs(server);
+  if (!target) {
     print_error(`Server '${server}' not found or incomplete configuration`);
     return false;
   }
+  const { host, user, port, keypath, password } = target;
 
   print_info(`Testing connection to ${server} (${user}@${host}:${port})...`);
 

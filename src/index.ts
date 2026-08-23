@@ -19,6 +19,7 @@ import { loadToolConfig, isToolEnabled } from './tool-config-manager.ts';
 import { evaluatePolicy } from './policy.ts';
 import { auditLog } from './audit.ts';
 import { ConnectionPool, execCommandWithTimeout } from './connection-pool.ts';
+import { resolveEnvFilePath } from './env-path.ts';
 import type { ToolContext, ToolPolicy } from './tool-registry.ts';
 import { wrapWithPolicy } from './tool-registry.ts';
 import { expandCommandAlias } from './command-aliases.ts';
@@ -32,39 +33,8 @@ import { registerAdvancedTools } from './tools/advanced.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Resolve .env file path with fallback chain:
-// 1. SSH_ENV_PATH env var (explicit override)
-// 2. ~/.ssh4agent/.env (user config dir — where ssh4agent CLI writes)
-// 3. ~/.ssh-manager/.env (legacy dir, read-only fallback)
-// 4. process.cwd()/.env (standard working directory)
-// 5. ~/.env (home directory)
-// 6. __dirname/../.env (backward compat for local installs)
-function resolveEnvFilePath() {
-  if (process.env.SSH_ENV_PATH) {
-    return process.env.SSH_ENV_PATH;
-  }
-  const home = process.env.SSH4AGENT_HOME || path.join(os.homedir(), '.ssh4agent');
-  const legacyHome = path.join(os.homedir(), '.ssh-manager');
-  const candidates = [
-    path.join(home, '.env'),
-    path.join(legacyHome, '.env'),
-    path.join(process.cwd(), '.env'),
-    path.join(os.homedir(), '.env'),
-    path.join(__dirname, '..', '.env'),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      if (candidate === path.join(legacyHome, '.env')) {
-        console.error(
-          `ℹ️ Using legacy config ${candidate} — move it to ${path.join(home, '.env')} to migrate`
-        );
-      }
-      return candidate;
-    }
-  }
-  return path.join(process.cwd(), '.env');
-}
-
+// Resolve .env through the ONE shared fallback chain (src/env-path.ts) —
+// the same chain the CLI uses, so both processes always agree on the file.
 const envFilePath = resolveEnvFilePath();
 const envFile = dotenv.config({ path: envFilePath, processEnv: {} });
 const envFileValues = envFile.parsed || {};

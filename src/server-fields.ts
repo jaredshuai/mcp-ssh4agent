@@ -192,3 +192,60 @@ export function serverEnvLine(
 export function canonicalTomlKey(spec: ServerFieldSpec): string {
   return spec.toml[0];
 }
+
+/**
+ * Parse raw `.env` file text into per-server camelCase partial configs,
+ * keyed by lowercased server name (issue #7).
+ *
+ * This is the ONE .env reading semantic, shared by the MCP loader
+ * (src/config-loader.ts — which layers priority over process.env/TOML) and
+ * the CLI (cli/lib/config.ts get_server_config). Both sides used to parse
+ * the file independently and had drifted (quote handling, field mapping).
+ * dotenv handles the quoting rules; the field table handles the mapping.
+ */
+export function parseEnvServersText(text: string): Map<string, Record<string, any>> {
+  const parsed = dotenvParse(text);
+  const out = new Map<string, Record<string, any>>();
+  const hostPattern = /^SSH_SERVER_([A-Z0-9_]+)_HOST$/;
+  for (const key of Object.keys(parsed)) {
+    const match = key.match(hostPattern);
+    if (!match) continue;
+    const nameLower = match[1].toLowerCase();
+    if (out.has(nameLower)) continue; // first anchor wins
+    const record = serverFromEnvRecord(parsed, match[1]);
+    record.host = parsed[key];
+    out.set(nameLower, record);
+  }
+  return out;
+}
+
+// Minimal dotenv-compatible parser (KEY=VALUE, surrounding quotes stripped,
+// # comments and blank lines ignored, `export ` prefix tolerated). Kept local
+// so the field table stays dependency-free; mirrors dotenv's semantics for
+// the subset this project's writers emit (see serverEnvLine).
+function dotenvParse(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('export ')) line = line.slice(7).trim();
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    // Strip ONE surrounding single- or double-quote pair; inline # after an
+    // unquoted value starts a comment (dotenv behavior).
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    } else {
+      const hash = value.indexOf(' #');
+      if (hash !== -1) value = value.slice(0, hash).trimEnd();
+    }
+    out[key] = value;
+  }
+  return out;
+}

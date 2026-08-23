@@ -68,7 +68,11 @@ async function main() {
 
     assert.strictEqual(handlerRan, false, 'handler must not run when denied');
     assert.strictEqual(response.isError, true, 'denial response passed through');
-    assert.strictEqual(calls.audits.length, 0, 'no success audit on denial (denial audit is written by applyServerPolicy)');
+    assert.strictEqual(
+      calls.audits.length,
+      0,
+      'no success audit on denial (denial audit is written by applyServerPolicy)'
+    );
     ok('denial short-circuits: handler skipped, denial returned');
   }
 
@@ -82,7 +86,11 @@ async function main() {
       deps
     );
     await handler({ server: 'prod' });
-    assert.strictEqual(calls.audits[0].result.success, false, 'isError response audited as failure');
+    assert.strictEqual(
+      calls.audits[0].result.success,
+      false,
+      'isError response audited as failure'
+    );
 
     const throwing = wrapWithPolicy(
       'ssh_upload',
@@ -170,7 +178,10 @@ async function main() {
     const handler = wrapWithPolicy(
       'ssh_session_send',
       async () => ({ content: [] }),
-      { serverFrom: (args) => (args.session === 's1' ? 'web-1' : undefined), commandArg: 'command' },
+      {
+        serverFrom: (args) => (args.session === 's1' ? 'web-1' : undefined),
+        commandArg: 'command',
+      },
       deps
     );
 
