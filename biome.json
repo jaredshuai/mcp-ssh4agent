@@ -107,6 +107,18 @@
       "bracketSpacing": true
     }
   },
+  "overrides": [
+    {
+      "includes": ["debug/**/*.ts", "scripts/*.ts", "tests/**/*.js"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ],
   "html": {
     "formatter": {
       "indentScriptAndStyle": false,

@@ -1,0 +1,20 @@
+# Normalize all text files to LF in the repository AND on checkout.
+# Without `eol=lf`, a Windows checkout under core.autocrlf=true materializes
+# CRLF working-tree files, and `biome check` (lineEnding: "lf" in biome.json)
+# then reports EVERY tracked file as needing formatting — the pre-commit hook
+# can never pass on such a machine. The explicit eol attribute overrides
+# autocrlf on every platform.
+* text=auto eol=lf
+
+# Windows scripts must keep CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binaries — never touch.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.gz binary

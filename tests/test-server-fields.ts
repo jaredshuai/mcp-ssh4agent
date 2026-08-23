@@ -629,7 +629,11 @@ async function migrationGuards(): Promise<void> {
     // chmod is a no-op on Windows (stat reports synthetic 0666/0777 modes
     // regardless), so the bit-level tightening contract is POSIX-only.
     if (process.platform !== 'win32') {
-      assert.strictEqual(fs.statSync(newHome).mode & 0o777, 0o700, 'migrated home tightened to 0700');
+      assert.strictEqual(
+        fs.statSync(newHome).mode & 0o777,
+        0o700,
+        'migrated home tightened to 0700'
+      );
       assert.strictEqual(
         fs.statSync(path.join(newHome, '.env')).mode & 0o777,
         0o600,

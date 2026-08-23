@@ -186,8 +186,12 @@ export class ConnectionPool {
     // still OURS, so a replacement attempt registered after close()
     // survives the cancelled one's cleanup.
     let attempt: Promise<PoolConnection>;
-    attempt = this.#connect(name, serverName, resolved.config, servers, () =>
-      this.#pending.get(name) === attempt
+    attempt = this.#connect(
+      name,
+      serverName,
+      resolved.config,
+      servers,
+      () => this.#pending.get(name) === attempt
     );
     this.#pending.set(name, attempt);
     try {
