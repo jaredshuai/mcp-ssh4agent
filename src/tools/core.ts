@@ -124,6 +124,7 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
     closeConnection,
     execCommandWithTimeout,
     loadServerConfig,
+    resolveServer,
     getServerConfig,
     applyServerPolicy,
     auditOk,
@@ -182,9 +183,11 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           });
         }
 
-        // Use provided cwd, or the server's configured defaultDir, or no cwd
-        const servers = await loadServerConfig();
-        const serverConfig = servers[serverName.toLowerCase()];
+        // Use provided cwd, or the server's configured defaultDir, or no cwd.
+        // resolveServer expands aliases — a bare servers[name] lookup would
+        // lose defaultDir/platform when the server is reached via alias.
+        const resolved = await resolveServer(serverName);
+        const serverConfig = resolved?.config;
         const workingDir = cwd || serverConfig?.defaultDir;
         const platform = serverConfig?.platform || 'linux';
 
@@ -441,8 +444,10 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
 
       try {
         await getConnection(serverName);
-        const servers = await loadServerConfig();
-        const serverConfig = servers[serverName.toLowerCase()];
+        // resolveServer expands aliases so auth fields are found even when the
+        // server is addressed by alias.
+        const resolved = await resolveServer(serverName);
+        const serverConfig = resolved?.config || {};
 
         // Check if sshpass is available for password authentication
         if (!serverConfig.keyPath && serverConfig.password) {

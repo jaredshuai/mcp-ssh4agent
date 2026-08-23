@@ -9,7 +9,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { ServerConfigManager } from './server-config-manager.ts';
-import { resolveServerName, listAliases } from './server-aliases.ts';
+import { resolveServer, listAliases } from './server-aliases.ts';
 import { formatJSONResponse } from './config.ts';
 import { initializeHooks, executeHook } from './hooks-system.ts';
 import { getActiveProfileName } from './profile-loader.ts';
@@ -154,10 +154,19 @@ async function loadServerConfig() {
 // early-returns { allowed: true } and auditLog() is a no-op when AUDIT_LOG is
 // absent — so pre-v3.5.0 configs see zero behavior change.
 
-async function getServerConfig(serverName) {
+// Single resolution path for "name or alias → { name, config }". Every config
+// consumer (getServerConfig, getConnection, tools) goes through this — a bare
+// `servers[name]` lookup skips alias expansion and lets an alias bypass the
+// server's policy (issue #1).
+async function resolveServerEntry(serverName) {
   if (!serverName) return null;
   const servers = await loadServerConfig();
-  return servers[String(serverName).toLowerCase()] || null;
+  return resolveServer(serverName, servers);
+}
+
+async function getServerConfig(serverName) {
+  const resolved = await resolveServerEntry(serverName);
+  return resolved?.config || null;
 }
 
 // Apply policy + audit a denial in one shot. Returns null when allowed; returns
@@ -424,10 +433,11 @@ async function getConnection(serverName) {
   // Execute pre-connect hook
   await executeHook('pre-connect', { server: serverName });
 
-  // Try to resolve through aliases first
-  const resolvedName = resolveServerName(serverName, servers);
+  // Resolve through the single resolution interface (alias → name → prefix →
+  // domain), so connections and policy always see the same canonical server.
+  const resolved = resolveServer(serverName, servers);
 
-  if (!resolvedName) {
+  if (!resolved) {
     const availableServers = Object.keys(servers);
     const aliases = listAliases();
     const aliasInfo =
@@ -439,7 +449,7 @@ async function getConnection(serverName) {
     );
   }
 
-  const normalizedName = resolvedName;
+  const normalizedName = resolved.name;
 
   // Check if we have an existing connection
   if (connections.has(normalizedName)) {
@@ -460,7 +470,7 @@ async function getConnection(serverName) {
   }
 
   // Create new connection
-  const serverConfig = servers[normalizedName];
+  const serverConfig = resolved.config;
   const ssh = new SSHManager(serverConfig);
 
   try {
@@ -592,6 +602,7 @@ const toolContext: ToolContext = {
   closeConnection,
   execCommandWithTimeout,
   loadServerConfig,
+  resolveServer: resolveServerEntry,
   getServerConfig,
   applyServerPolicy,
   auditOk,

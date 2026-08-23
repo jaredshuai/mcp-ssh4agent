@@ -14,7 +14,7 @@ import {
   buildDeploymentStrategy,
   detectDeploymentNeeds,
 } from '../deploy-helper.ts';
-import { resolveServerName, addAlias, removeAlias, listAliases } from '../server-aliases.ts';
+import { addAlias, removeAlias, listAliases } from '../server-aliases.ts';
 import {
   expandCommandAlias,
   addCommandAlias,
@@ -124,6 +124,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     closeConnection,
     execCommandWithTimeout,
     loadServerConfig,
+    resolveServer,
     getServerConfig,
     applyServerPolicy,
     auditOk,
@@ -288,8 +289,10 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
             // Build full command with cwd if provided.
             // Use platform-appropriate syntax: Set-Location for Windows (cmd.exe
             // does not support `cd && `) vs cd && for Linux/macOS.
-            const servers = await loadServerConfig();
-            const serverConfig = servers[serverName.toLowerCase()];
+            // resolveServer expands aliases so defaultDir/platform are honored
+            // even when the group member is addressed via alias.
+            const resolved = await resolveServer(serverName);
+            const serverConfig = resolved?.config;
             const workingDir = cwd || serverConfig?.defaultDir;
             const platform = serverConfig?.platform || 'linux';
             const fullCommand = workingDir
@@ -609,8 +612,8 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           results.push(`✅ Uploaded ${path.basename(file.local)} to temp location`);
 
           // Execute deployment strategy
-          const deployServers = await loadServerConfig();
-          const deployServerConfig = deployServers[server.toLowerCase()];
+          const deployResolved = await resolveServer(server);
+          const deployServerConfig = deployResolved?.config;
           for (const step of strategy.steps) {
             const command = step.command.replace('{{tempFile}}', tempFile);
 
@@ -688,9 +691,8 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
 
       try {
         const ssh = await getConnection(server);
-        const servers = await loadServerConfig();
-        const resolvedName = resolveServerName(server, servers);
-        const serverConfig = servers[resolvedName];
+        const resolvedEntry = await resolveServer(server);
+        const serverConfig = resolvedEntry?.config;
 
         // Build the full command. Quoting is centralized in shell-quote.js:
         // passwords and directories go through buildSudoPipeline/buildCdPrefix
@@ -1174,14 +1176,13 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     },
     async ({ server, type, localHost, localPort, remoteHost, remotePort }) => {
       try {
-        const servers = await loadServerConfig();
-        const resolvedName = resolveServerName(server, servers);
+        const resolved = await resolveServer(server);
 
-        if (!resolvedName) {
+        if (!resolved) {
           throw new Error(`Server "${server}" not found`);
         }
 
-        const serverConfig = servers[resolvedName];
+        const serverConfig = resolved.config;
         const ssh = new SSHManager(serverConfig);
         await ssh.connect();
 
@@ -1193,7 +1194,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           remotePort,
         };
 
-        const tunnel = await createTunnel(resolvedName, ssh, config);
+        const tunnel = await createTunnel(resolved.name, ssh, config);
 
         let output = '✅ SSH tunnel created\n';
         output += `ID: ${tunnel.id}\n`;
@@ -1214,7 +1215,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
 
         logger.info('SSH tunnel created', {
           id: tunnel.id,
-          server: resolvedName,
+          server: resolved.name,
           type,
           local: `${config.localHost}:${localPort}`,
         });
@@ -1253,14 +1254,14 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     },
     async ({ server }) => {
       try {
-        const servers = await loadServerConfig();
         let resolvedName = null;
 
         if (server) {
-          resolvedName = resolveServerName(server, servers);
-          if (!resolvedName) {
+          const resolved = await resolveServer(server);
+          if (!resolved) {
             throw new Error(`Server "${server}" not found`);
           }
+          resolvedName = resolved.name;
         }
 
         const tunnels = listTunnels(resolvedName);
@@ -1351,8 +1352,8 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           logger.info('SSH tunnel closed', { id: tunnelId });
         } else if (server) {
           // Close all tunnels for server
-          const servers = await loadServerConfig();
-          const resolvedName = resolveServerName(server, servers);
+          const resolved = await resolveServer(server);
+          const resolvedName = resolved?.name;
 
           if (!resolvedName) {
             throw new Error(`Server "${server}" not found`);
@@ -1415,16 +1416,16 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
         if (denied) return denied;
       }
       try {
-        const servers = await loadServerConfig();
         let resolvedName, serverConfig, host, port;
 
         // Resolve server details for actions that need them
         if (server && action !== 'list') {
-          resolvedName = resolveServerName(server, servers);
-          if (!resolvedName) {
+          const resolved = await resolveServer(server);
+          if (!resolved) {
             throw new Error(`Server "${server}" not found`);
           }
-          serverConfig = servers[resolvedName];
+          resolvedName = resolved.name;
+          serverConfig = resolved.config;
           host = serverConfig.host;
           // port is already a number from ConfigLoader; parseInt() on it only
           // worked because JS stringifies the argument first.
@@ -1589,6 +1590,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           }
 
           case 'list': {
+            const servers = await loadServerConfig();
             const knownHosts = listKnownHosts();
 
             let output = '🔑 Known SSH Hosts\n';
@@ -1670,19 +1672,18 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               throw new Error('Both alias and server are required for add action');
             }
 
-            const servers = await loadServerConfig();
-            const resolvedName = resolveServerName(server, servers);
+            const resolved = await resolveServer(server);
 
-            if (!resolvedName) {
+            if (!resolved) {
               throw new Error(`Server "${server}" not found`);
             }
 
-            addAlias(alias, resolvedName);
+            addAlias(alias, resolved.name);
             return {
               content: [
                 {
                   type: 'text',
-                  text: `✅ Alias created: ${alias} -> ${resolvedName}`,
+                  text: `✅ Alias created: ${alias} -> ${resolved.name}`,
                 },
               ],
             };

@@ -23,6 +23,8 @@ export interface ToolContext {
   closeConnection: any;
   execCommandWithTimeout: any;
   loadServerConfig: any;
+  /** Single resolution path: name-or-alias → { name, config } (alias expanded). */
+  resolveServer: any;
   getServerConfig: any;
   applyServerPolicy: any;
   auditOk: any;

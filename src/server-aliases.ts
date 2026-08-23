@@ -41,10 +41,13 @@ function saveAliases(aliases) {
 }
 
 /**
- * Resolve server name from alias
+ * Resolve server name from alias.
+ *
+ * `aliasesOverride` lets callers (and tests) inject a mapping without touching
+ * the aliases file; omitted → read from disk as usual.
  */
-export function resolveServerName(nameOrAlias, servers) {
-  const aliases = loadAliases();
+export function resolveServerName(nameOrAlias, servers, aliasesOverride?) {
+  const aliases = aliasesOverride ?? loadAliases();
 
   // Check if it's an alias
   if (aliases[nameOrAlias]) {
@@ -85,6 +88,27 @@ export function resolveServerName(nameOrAlias, servers) {
   }
 
   return null;
+}
+
+/**
+ * Single server resolution interface: alias → real name → prefix match →
+ * domain match (same order as resolveServerName), returning BOTH the
+ * canonical name and the full resolved config.
+ *
+ * This is the one path every config consumer must go through. Looking up
+ * `servers[name.toLowerCase()]` directly silently skips alias expansion, so a
+ * server reached via alias appears unconfigured — and an unconfigured server
+ * degrades to `unrestricted` in policy evaluation (issue #1: an alias could
+ * bypass a readonly/restricted policy).
+ *
+ * Returns `{ name, config }`, or null when nothing matches / the resolved
+ * name has no config entry. Never throws for a miss (ambiguity still throws,
+ * matching resolveServerName semantics).
+ */
+export function resolveServer(nameOrAlias, servers, aliasesOverride?) {
+  const name = resolveServerName(nameOrAlias, servers, aliasesOverride);
+  if (!name) return null;
+  return { name, config: servers[name] || null };
 }
 
 /**
