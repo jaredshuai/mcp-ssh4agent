@@ -184,6 +184,20 @@ test('values containing both quote characters are rejected, not mangled', () => 
   );
 });
 
+// Round-6: the rejection is gated on quoting being REQUIRED. Interior
+// quotes alone never force quoting (dotenv's unquoted alternative passes
+// them through verbatim), so a mixed-quote PATH with no #/whitespace
+// round-trips unquoted instead of being refused.
+test('mixed-quote values that need no quoting round-trip unquoted', () => {
+  const lines = [
+    serverEnvLine('U', spec('host'), '203.0.113.9'),
+    serverEnvLine('U', spec('keyPath'), `/keys/a'b"c/id_rsa`),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('u');
+  assert.ok(record);
+  assert.equal(record.keyPath, `/keys/a'b"c/id_rsa`, 'mixed-quote path survives unquoted');
+});
+
 // Round-5: machine fields (key path, audit-log path...) containing `#` are
 // just as truncatable as passwords — quoting is content-driven now.
 test('machine values containing # are quoted and round-trip', () => {
@@ -336,6 +350,14 @@ async function roundTrip(): Promise<void> {
     linesBefore,
     'a rejected add must not touch the .env file'
   );
+
+  // ── but only when quoting is required (r6): a key path with interior
+  // quotes and no #/whitespace is representable unquoted and must add.
+  const keyOk = cli.add_server_to_env('mqkey', '198.51.100.8', 'op', 'key', `/k'a"b`);
+  assert.equal(keyOk, true, 'mixed-quote key path without #/space must be accepted');
+  const loaderK = new ConfigLoader();
+  loaderK.loadEnvConfig(envPath);
+  assert.equal(loaderK.getServer('mqkey')?.keyPath, `/k'a"b`, 'key path round-trips unquoted');
 
   // ── case-insensitive markers (r3) ─────────────────────────────────────
   // Hand-authored mixed-case entry: listed as `cased` by load_servers().

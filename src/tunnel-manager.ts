@@ -230,8 +230,14 @@ class SSHTunnel {
           this.lastActivity = new Date();
         });
 
-        // Handle disconnection
+        // Handle disconnection — idempotent: error-then-close fires this
+        // up to four times (close+error on BOTH sockets); without the
+        // guard, connectionsActive undercounts or goes negative
+        // (PR #9 r6).
+        let cleaned = false;
         const cleanup = () => {
+          if (cleaned) return;
+          cleaned = true;
           this.stats.connectionsActive--;
           this.connections.delete(localSocket);
           localSocket.destroy();
@@ -248,6 +254,9 @@ class SSHTunnel {
           tunnel: this.id,
           error: error.message,
         });
+        // forwardOut failed: the increment above must not leak.
+        this.stats.connectionsActive--;
+        this.connections.delete(localSocket);
         localSocket.destroy();
       }
     });
@@ -442,18 +451,23 @@ class SSHTunnel {
         }
       });
 
-      // Cleanup on disconnect
-      localSocket.on('close', () => {
+      // Cleanup on disconnect — idempotent: an error emits 'error' AND
+      // 'close', and both handlers decremented, driving connectionsActive
+      // negative over time (PR #9 r6).
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         this.stats.connectionsActive--;
         this.connections.delete(localSocket);
         if (stream) stream.destroy();
-      });
+      };
+
+      localSocket.on('close', cleanup);
 
       localSocket.on('error', () => {
         this.stats.errors++;
-        this.stats.connectionsActive--;
-        this.connections.delete(localSocket);
-        if (stream) stream.destroy();
+        cleanup();
       });
     });
 

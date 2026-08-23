@@ -173,21 +173,44 @@ export function serverFromTomlRecord(tomlServer: Record<string, unknown>): Recor
 }
 
 /**
+ * Whether a value must be quoted to survive dotenv's reader: quoteEnv
+ * fields always are, and any value containing `#` (comment start),
+ * whitespace (trimmed unquoted), or STARTING with a quote/backtick
+ * (dotenv would treat it as an opening delimiter) is truncated or
+ * reshaped without quotes. Interior quotes alone do NOT require quoting —
+ * dotenv's unquoted alternative (`[^#\r\n]+`) passes them through
+ * verbatim, which is exactly what makes mixed-quote paths representable
+ * (PR #9 r6).
+ */
+function quotingRequired(spec: ServerFieldSpec, rendered: string): boolean {
+  return spec.quoteEnv || /[#\s]/.test(rendered) || /^['"`]/.test(rendered);
+}
+
+/**
+ * Whether `value` can be written for field `camel` (camelCase) and read
+ * back losslessly through dotenv. False ONLY for the unrepresentable
+ * case: a value containing BOTH quote characters that also REQUIRES
+ * quoting (dotenv does not unescape `\"`, so no quoting scheme can
+ * round-trip it). Values that stay unquoted tolerate interior quotes.
+ * Shared by serverEnvLine (throws) and the CLI's pre-mutation checks.
+ */
+export function envValueRepresentable(camel: string, value: unknown): boolean {
+  const spec = FIELD_BY_CAMEL.get(camel);
+  if (!spec) return false;
+  const rendered = Array.isArray(value) ? (value as string[]).join(';') : String(value);
+  return !(rendered.includes('"') && rendered.includes("'") && quotingRequired(spec, rendered));
+}
+
+/**
  * Render one `.env` export line for a field, applying the shared quoting
- * rule: any value containing dotenv-significant characters (`#` starts a
- * comment, whitespace, quote characters) is quoted so it cannot be
- * truncated on read-back. Pattern lists join with `;`.
+ * rule (see quotingRequired). Quote CHOICE matters: dotenv (the reader on
+ * both sides — see dotenvParse) stops a double-quoted value at the first
+ * unescaped `"`, so a value containing `"` (but no `'`) is single-quoted,
+ * and vice versa.
  *
- * Quote CHOICE matters: dotenv (the reader on both sides — see
- * dotenvParse) stops a double-quoted value at the first unescaped `"`, so
- * a value containing `"` (but no `'`) is single-quoted, and vice versa.
- *
- * A value containing BOTH quote characters is UNREPRESENTABLE: dotenv's
- * escape syntax (`\"`) is not unescaped by dotenv.parse (it only expands
- * \n/\r), so any escaping scheme would silently corrupt the credential on
- * read-back. Writing it anyway used to mangle the secret consistently;
- * now it throws so callers can reject the value up front and point the
- * user at TOML, which represents these values natively (PR #9 r5).
+ * A value containing BOTH quote characters AND requiring quoting is
+ * UNREPRESENTABLE — it throws so callers can reject the value up front
+ * and point the user at TOML, which represents it natively (PR #9 r5/r6).
  */
 export function serverEnvLine(
   nameUpper: string,
@@ -195,16 +218,13 @@ export function serverEnvLine(
   value: string | number | boolean | string[]
 ): string {
   const rendered = Array.isArray(value) ? value.join(';') : String(value);
-  if (rendered.includes('"') && rendered.includes("'")) {
+  if (rendered.includes('"') && rendered.includes("'") && quotingRequired(spec, rendered)) {
     throw new Error(
       `Value for ${nameUpper}.${spec.env} contains both quote characters — ` +
         `.env format cannot represent it losslessly; use TOML instead`
     );
   }
-  // Quoting is content-driven, not field-driven: a "machine" field
-  // (host, key path, audit-log path...) containing `#` or whitespace is
-  // just as truncatable as a password (PR #9 r5).
-  const needsQuoting = spec.quoteEnv || /["'#\s]/.test(rendered);
+  const needsQuoting = quotingRequired(spec, rendered);
   let rhs: string;
   if (!needsQuoting) {
     rhs = rendered;

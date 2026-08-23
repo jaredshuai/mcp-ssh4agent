@@ -18,6 +18,7 @@ import {
   SERVER_FIELDS,
   serverEnvLine,
   parseEnvServersText,
+  envValueRepresentable,
 } from '../../src/server-fields.ts';
 import { resolveEnvFilePath } from '../../src/env-path.ts';
 
@@ -33,14 +34,18 @@ function envLineFor(
   return serverEnvLine(nameUpper, spec, value);
 }
 
-// Values containing BOTH quote characters cannot be written to .env
-// losslessly (serverEnvLine throws for them) — check BEFORE any file
+// Values that .env cannot store losslessly (the shared field-table rule:
+// BOTH quote characters AND quoting required) are checked BEFORE any file
 // mutation so add/update fail cleanly with guidance instead of a
-// half-written file.
-function envValueRepresentable(...values: string[]): boolean {
-  for (const v of values) {
-    if (v && v.includes('"') && v.includes("'")) {
-      print_error(`Value contains both ' and " — the .env format cannot store it losslessly.`);
+// half-written file — every value that will reach envLineFor is included,
+// host/user/port/mode included (PR #9 r6).
+function allValuesRepresentable(pairs: Array<[string, unknown]>): boolean {
+  for (const [camel, value] of pairs) {
+    if (value === '' || value === undefined || value === null) continue;
+    if (!envValueRepresentable(camel, value)) {
+      print_error(
+        `Value for '${camel}' contains both ' and " — the .env format cannot store it losslessly.`
+      );
       print_info(
         'Store this server in TOML instead (ssh4agent codex migrate), or change the value.'
       );
@@ -91,54 +96,63 @@ function resolveConfigHome(): string {
 let resolvedEnvPath: string = resolveEnvFilePath();
 const homeEnvPath = path.join(SSH4AGENT_HOME, '.env');
 const envOverrideSet = Boolean(process.env.SSH_ENV_PATH || process.env.SSH4AGENT_ENV);
+
+// ONE migration transaction covering both phases (PR #9 r6): the legacy
+// .env copy AND the CLI settings (config.json / aliases.json, which must
+// move independently of where the servers live — a TOML or cwd-.env setup
+// never enters the .env phase, yet the MCP side's state dir creates
+// ~/.ssh4agent on first startup and resolveConfigHome() stops falling
+// back to the legacy dir).
+//
+// All-or-nothing per run: a half-finished migration is worse than none —
+// CONFIG_HOME follows dir existence, so a fresh home without config.json
+// gets defaults written over the gap by init_config(), and the
+// "copy when absent" retry never fires again. A single homeExisted flag is
+// shared by both phases: if the .env phase created the home and the
+// settings phase then fails, the home THIS RUN created is rolled back too
+// so the next invocation retries the whole migration. rmdirSync only
+// removes the dir when empty — pre-existing user content is never touched.
+const homeExistedBeforeMigration = fs.existsSync(SSH4AGENT_HOME);
+const migrationCreated: string[] = [];
+const rollbackMigration = () => {
+  for (const f of migrationCreated) {
+    try {
+      fs.unlinkSync(f);
+    } catch {
+      /* best-effort */
+    }
+  }
+  if (!homeExistedBeforeMigration) {
+    try {
+      fs.rmdirSync(SSH4AGENT_HOME);
+    } catch {
+      /* non-empty or already gone */
+    }
+  }
+};
+
+// Phase 1: legacy .env (only when reached through the fallback chain — an
+// explicit SSH_ENV_PATH/SSH4AGENT_ENV override is respected verbatim).
+let envMigrated = false;
 if (
   !envOverrideSet &&
   resolvedEnvPath !== homeEnvPath &&
   path.dirname(resolvedEnvPath) === LEGACY_HOME
 ) {
-  const homeExisted = fs.existsSync(SSH4AGENT_HOME);
   try {
     fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
     fs.copyFileSync(resolvedEnvPath, homeEnvPath);
+    migrationCreated.push(homeEnvPath);
     print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
     resolvedEnvPath = homeEnvPath;
+    envMigrated = true;
   } catch {
-    // Best-effort rollback: a half-finished migration must not flip
-    // CONFIG_HOME (which follows dir existence) to the new directory
-    // while .env still resolves to the legacy file — that split-brain
-    // reads servers from legacy but writes config to the empty new
-    // home (PR #9 review, round 3). Undo what this attempt created;
-    // rmdirSync only removes the dir when empty, so pre-existing user
-    // content under SSH4AGENT_HOME is never touched.
-    try {
-      fs.unlinkSync(homeEnvPath);
-    } catch {
-      /* best-effort */
-    }
-    if (!homeExisted) {
-      try {
-        fs.rmdirSync(SSH4AGENT_HOME);
-      } catch {
-        /* non-empty or already gone */
-      }
-    }
+    rollbackMigration();
   }
 }
 
-// Legacy CLI settings (config.json / aliases.json) migrate INDEPENDENTLY of
-// where the servers live. A TOML or cwd-.env setup never enters the .env
-// migration above, yet the MCP side's state dir creates ~/.ssh4agent on
-// first startup — after that, resolveConfigHome() stops falling back to
-// the legacy dir and init_config() would replace the user's editor/shell/
-// history settings with defaults.
-//
-// All-or-nothing per run (PR #9 r5): a partial copy that leaves the new
-// home WITHOUT config.json is worse than no migration — init_config()
-// would write defaults over the gap and every later run sees the file as
-// "already migrated". On failure, this run's copies are removed and the
-// home dir (if this run created it) too, so the next invocation retries.
+// Phase 2: CLI settings, whenever a legacy file lacks its new counterpart.
 if (fs.existsSync(LEGACY_HOME)) {
-  const homeExisted = fs.existsSync(SSH4AGENT_HOME);
   const pending: Array<{ from: string; to: string }> = [];
   for (const file of ['config.json', 'aliases.json']) {
     const from = path.join(LEGACY_HOME, file);
@@ -146,29 +160,16 @@ if (fs.existsSync(LEGACY_HOME)) {
     if (fs.existsSync(from) && !fs.existsSync(to)) pending.push({ from, to });
   }
   if (pending.length > 0) {
-    const done: string[] = [];
     try {
       fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
       for (const p of pending) {
         fs.copyFileSync(p.from, p.to);
-        done.push(p.to);
+        migrationCreated.push(p.to);
       }
       for (const p of pending) print_info(`Migrated legacy CLI config ${p.from} → ${p.to}`);
     } catch {
-      for (const f of done) {
-        try {
-          fs.unlinkSync(f);
-        } catch {
-          /* best-effort */
-        }
-      }
-      if (!homeExisted) {
-        try {
-          fs.rmdirSync(SSH4AGENT_HOME);
-        } catch {
-          /* non-empty or already gone */
-        }
-      }
+      rollbackMigration();
+      if (envMigrated) resolvedEnvPath = resolveEnvFilePath(); // back to the legacy file
     }
   }
 }
@@ -354,11 +355,19 @@ export function add_server_to_env(
 ): boolean {
   const nameUpper = name.toUpperCase();
 
-  // Reject unrepresentable values before touching the file.
+  // Reject unrepresentable values before touching the file — every field
+  // that will be rendered below, not just the credentials.
   if (
-    !envValueRepresentable(authValue, description) ||
-    (allowPatterns && !envValueRepresentable(allowPatterns)) ||
-    (auditLog && !envValueRepresentable(auditLog))
+    !allValuesRepresentable([
+      ['host', host],
+      ['user', user],
+      ['port', port],
+      ['mode', mode],
+      [authType === 'password' ? 'password' : 'keyPath', authValue],
+      ['description', description],
+      ['allowPatterns', allowPatterns],
+      ['auditLog', auditLog],
+    ])
   ) {
     return false;
   }
@@ -429,8 +438,18 @@ export function update_server_in_env(
 ): boolean {
   const nameUpper = name.toUpperCase();
 
-  // Reject unrepresentable values before touching the file.
-  if (!envValueRepresentable(authValue, description, defaultDir)) {
+  // Reject unrepresentable values before touching the file — every field
+  // that will be rendered below.
+  if (
+    !allValuesRepresentable([
+      ['host', host],
+      ['user', user],
+      ['port', port],
+      [authType === 'password' ? 'password' : 'keyPath', authValue],
+      ['description', description],
+      ['defaultDir', defaultDir],
+    ])
+  ) {
     return false;
   }
 

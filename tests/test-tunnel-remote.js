@@ -224,6 +224,35 @@ async function main() {
   );
   ok('forwardIn refusal rejects createTunnel cleanly');
 
+  // ── LOCAL tunnels: activeConnections stays exact across teardown (r6) ──
+  // cleanup is registered on close+error of BOTH sockets; error-then-close
+  // used to decrement connectionsActive twice, driving it negative over
+  // time. The guarded cleanup must land on exactly 0.
+  {
+    const localPort = await freePort();
+    const lt = await createTunnel('fake-server', fake, {
+      type: 'local',
+      localHost: HOST,
+      localPort,
+      remoteHost: '10.9.8.7',
+      remotePort: 9999,
+    });
+    const sock = net.connect(localPort, HOST);
+    await new Promise((resolve) => sock.once('connect', resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50)); // forwardOut + pipe settle
+    assert.strictEqual(lt.getInfo().activeConnections, 1, 'one live local-forward connection');
+
+    sock.destroy(); // remote side sees close; stream teardown fires too
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.strictEqual(
+      lt.getInfo().activeConnections,
+      0,
+      'counter returns to exactly 0 (no double decrement across close/error)'
+    );
+    closeTunnel(lt.id);
+    ok('local tunnel activeConnections is exact across close/error teardown');
+  }
+
   await closeServer(echoServer);
   console.log(`\n✅ remote tunnel tests passed (${passed} checks)`);
   process.exit(0);
