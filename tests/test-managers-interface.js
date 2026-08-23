@@ -8,10 +8,9 @@
  * place the remote-tunnel and alias-policy bugs used to hide.
  */
 
+import './lib/isolated-home.js'; // must precede src imports: isolates SSH4AGENT_HOME
 import assert from 'assert';
 import { EventEmitter } from 'events';
-import os from 'os';
-import fs from 'fs';
 import path from 'path';
 import { createSession, getSession, listSessions, closeSession } from '../src/session-manager.ts';
 import {
@@ -248,16 +247,10 @@ function testHealthMonitor() {
 }
 
 async function main() {
-  // Keep every state write away from the real home during this test.
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh4agent-mgr-'));
-  process.env.SSH4AGENT_HOME = home;
-
   await testSessions();
   testBackupManager();
   testHealthMonitor();
 
-  delete process.env.SSH4AGENT_HOME;
-  fs.rmSync(home, { recursive: true, force: true });
   console.log(`\n✅ manager interface tests passed (${passed} checks)`);
   process.exit(0);
 }

@@ -6,6 +6,7 @@
  * with fake connections — no network, no SSH.
  */
 
+import './lib/isolated-home.js'; // must precede src imports: isolates SSH4AGENT_HOME
 import assert from 'assert';
 import { ConnectionPool } from '../src/connection-pool.ts';
 

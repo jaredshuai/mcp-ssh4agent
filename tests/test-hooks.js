@@ -4,6 +4,7 @@
  * Test suite for Hooks System
  */
 
+import { TEST_HOME } from './lib/isolated-home.js';
 import {
   initializeHooks,
   loadHooksConfig,
@@ -23,7 +24,9 @@ const __dirname = path.dirname(__filename);
 
 console.log('🧪 Testing Hooks System...\n');
 
-const HOOKS_CONFIG_FILE = path.join(__dirname, '..', '.hooks-config.json');
+// Hooks state lives under the isolated SSH4AGENT_HOME (state dir), matching
+// src/state-files.ts — not the pre-unification install directory.
+const HOOKS_CONFIG_FILE = path.join(TEST_HOME, '.hooks-config.json');
 const backupFile = HOOKS_CONFIG_FILE + '.backup';
 
 // Backup existing hooks config if it exists
@@ -36,7 +39,7 @@ if (fs.existsSync(HOOKS_CONFIG_FILE)) {
 console.log('Test 1: Initialize hooks system');
 try {
   await initializeHooks();
-  assert(fs.existsSync(path.join(__dirname, '..', 'hooks')), 'Hooks directory should be created');
+  assert(fs.existsSync(path.join(TEST_HOME, 'hooks')), 'Hooks directory should be created');
   console.log('✅ Hooks system initialized\n');
 } catch (error) {
   console.error(`❌ Failed to initialize hooks: ${error.message}\n`);
