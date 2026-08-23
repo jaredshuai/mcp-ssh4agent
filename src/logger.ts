@@ -4,7 +4,13 @@
  */
 
 import fs from 'fs';
-import { stateDir, stateFilePath, readStateFileText, writeStateFileText } from './state-files.ts';
+import {
+  stateDir,
+  stateFilePath,
+  legacyStateFilePath,
+  readStateFileText,
+  writeStateFileText,
+} from './state-files.ts';
 
 // Command history lives in the state dir (~/.ssh4agent) — the install
 // directory is read-only under a global npm install (issue #8).
@@ -68,6 +74,14 @@ class Logger {
     if (!process.env.SSH_LOG_FILE) {
       try {
         fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+        // One-time migration: the log is append-only and never went through
+        // readStateFileText, so a legacy install-root .ssh4agent.log would
+        // otherwise be stranded while new entries land in the state dir —
+        // operational history split across two files (PR #9 review, r4).
+        const legacyLog = legacyStateFilePath('.ssh4agent.log');
+        if (fs.existsSync(legacyLog) && !fs.existsSync(this.logFile)) {
+          fs.copyFileSync(legacyLog, this.logFile);
+        }
       } catch {
         /* logging must never break startup */
       }

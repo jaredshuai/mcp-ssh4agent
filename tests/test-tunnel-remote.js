@@ -82,6 +82,9 @@ function makeFakeConnection() {
 async function main() {
   // Local "service" the remote tunnel forwards to: echoes each chunk back.
   const echoServer = net.createServer((socket) => {
+    socket.on('error', () => {
+      /* tunnel teardown hard-resets in-flight connections — expected */
+    });
     socket.on('data', (chunk) => socket.write(chunk));
   });
   const echoPort = await freePort();
@@ -159,9 +162,22 @@ async function main() {
   );
   ok('reconnect re-registers exactly one tcp connection handler');
 
-  // ── teardown unforwards ──────────────────────────────────────────────────
+  // ── established remote-forward connections are tracked and torn down ──
+  // close() used to cancel only FUTURE forwards: accepted channels were
+  // never added to this.connections, so live connections kept proxying
+  // after the tunnel closed (PR #9 review, round 4).
+  const liveSocket = fake.emitTcpConnection({ destIP: REMOTE.host, destPort: REMOTE.port });
+  liveSocket.write('x');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.strictEqual(
+    tunnel.connections.size,
+    2,
+    'an established remote forward must track both sockets (remote + local)'
+  );
+
   const tunnelId = tunnel.id;
   closeTunnel(tunnelId);
+  assert.strictEqual(liveSocket.destroyed, true, 'close must destroy established remote forwards');
   assert.strictEqual(
     state.unforwardInCalls.length,
     1,
@@ -177,7 +193,7 @@ async function main() {
     'closing a remote tunnel must detach its tcp connection handler'
   );
   assert.strictEqual(listTunnels().length, 0, 'closed tunnel leaves the registry');
-  ok('closeTunnel unforwards the remote port and deregisters the tunnel');
+  ok('closeTunnel unforwards, detaches, and kills established remote-forward sockets');
 
   // ── forwardIn failure surfaces as a rejected createTunnel ────────────────
   const failing = {

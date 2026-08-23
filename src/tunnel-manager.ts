@@ -311,9 +311,21 @@ class SSHTunnel {
         });
       });
 
-      // Handle errors and cleanup
+      // Track both sockets so close() can terminate ESTABLISHED remote
+      // forwards too — without this, closing the tunnel only cancelled
+      // future forwards while live channels kept proxying traffic
+      // (PR #9 review, round 4).
+      this.connections.add(remoteSocket);
+      this.connections.add(localSocket);
+
+      // Handle errors and cleanup — idempotent: both 'close' events fire.
+      let cleaned = false;
       const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         this.stats.connectionsActive--;
+        this.connections.delete(remoteSocket);
+        this.connections.delete(localSocket);
         remoteSocket.destroy();
         localSocket.destroy();
       };

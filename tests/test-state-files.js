@@ -26,6 +26,9 @@ async function main() {
   const legacy = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh4agent-legacy-'));
   process.env.SSH4AGENT_HOME = home;
   process.env.SSH4AGENT_LEGACY_STATE_DIR = legacy;
+  // Legacy log fixture must exist BEFORE the first src import constructs
+  // the logger singleton (the migration runs in its constructor).
+  fs.writeFileSync(path.join(legacy, '.ssh4agent.log'), 'legacy-log-line\n');
 
   const stateFiles = await import('../src/state-files.ts');
 
@@ -118,11 +121,20 @@ async function main() {
   ok('server-aliases and server-groups modules use the unified state dir');
 
   // Command history: logger persists into the state dir, not the repo root.
+  // The legacy-log fixture (written at the top, before the singleton was
+  // constructed) must have been migrated into the state dir — see the
+  // assertion after the history check.
   const { logger } = await import('../src/logger.ts');
   logger.saveCommandToHistory('uptime', 'srv', { success: true, duration: '5ms' });
   const history = JSON.parse(fs.readFileSync(path.join(home, '.ssh-command-history.json'), 'utf8'));
   assert.strictEqual(history[history.length - 1].command, 'uptime');
   ok('command history persists into the state dir');
+  const migratedLog = fs.readFileSync(path.join(home, '.ssh4agent.log'), 'utf8');
+  assert.ok(
+    migratedLog.includes('legacy-log-line'),
+    'legacy install-root log migrated into the state dir'
+  );
+  ok('append-only log migrates to the state dir at logger construction');
 
   // Hooks config: initialize writes into the state dir.
   const hooks = await import('../src/hooks-system.ts');
@@ -140,7 +152,10 @@ async function main() {
     .readdirSync(legacy)
     .filter(
       (f) =>
-        f !== '.server-aliases.json' && f !== '.server-groups.json' && f !== '.migrate-perms.json'
+        f !== '.server-aliases.json' &&
+        f !== '.server-groups.json' &&
+        f !== '.migrate-perms.json' &&
+        f !== '.ssh4agent.log'
     );
   assert.deepStrictEqual(legacyEntries, [], 'no module writes to the legacy dir');
 

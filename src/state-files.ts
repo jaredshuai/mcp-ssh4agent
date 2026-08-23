@@ -46,6 +46,15 @@ function legacyDir(): string {
 }
 
 /**
+ * Path of `name` in the legacy install-dir location. Exported for state
+ * that does not round-trip through readStateFileText but still needs the
+ * one-time migration (e.g. the append-only log in src/logger.ts).
+ */
+export function legacyStateFilePath(name: string): string {
+  return path.join(legacyDir(), name);
+}
+
+/**
  * Read a state file as text. Falls back to the legacy install-dir location:
  * when found there, the content is migrated (copied) into the state dir
  * best-effort. Returns null when the file exists nowhere.
