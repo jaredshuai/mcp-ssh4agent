@@ -21,6 +21,7 @@
 
 import { resolveServer, listAliases } from './server-aliases.ts';
 import { logger } from './logger.ts';
+import { shSingleQuote } from './shell-quote.ts';
 
 /** What the pool needs from a connection to manage its lifecycle. SSHManager
  * (src/ssh-manager.ts) satisfies this structurally; tests provide fakes. */
@@ -414,7 +415,7 @@ export async function execCommandWithTimeout(
   if (useSystemTimeout) {
     // Wrap command with timeout command (works on Linux/Mac)
     const timeoutSeconds = Math.ceil(timeoutMs / 1000);
-    const wrappedCommand = `timeout ${timeoutSeconds} sh -c '${command.replace(/'/g, "'\\''")}'`;
+    const wrappedCommand = `timeout ${timeoutSeconds} sh -c ${shSingleQuote(command)}`;
 
     try {
       const result = await ssh.execCommand(wrappedCommand, {

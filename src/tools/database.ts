@@ -4,10 +4,12 @@ import { z } from 'zod';
 import path from 'path';
 import { logger } from '../logger.ts';
 import {
+  buildMySQLDumpCommand,
+  buildPostgreSQLDumpCommand,
+  buildMongoDBDumpCommand,
+} from '../dump-command-builder.ts';
+import {
   DB_TYPES,
-  buildMySQLDumpCommand as buildDBMySQLDumpCommand,
-  buildPostgreSQLDumpCommand as buildDBPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand as buildDBMongoDBDumpCommand,
   buildMySQLImportCommand,
   buildPostgreSQLImportCommand,
   buildMongoDBRestoreCommand,
@@ -96,14 +98,14 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
 
         switch (type) {
           case DB_TYPES.MYSQL:
-            dumpCommand = buildDBMySQLDumpCommand(options);
+            dumpCommand = buildMySQLDumpCommand(options);
             break;
           case DB_TYPES.POSTGRESQL:
-            dumpCommand = buildDBPostgreSQLDumpCommand(options);
+            dumpCommand = buildPostgreSQLDumpCommand(options);
             break;
           case DB_TYPES.MONGODB:
             options.outputDir = outputFile.replace(/\.(tar\.gz|gz)$/, '');
-            dumpCommand = buildDBMongoDBDumpCommand(options);
+            dumpCommand = buildMongoDBDumpCommand(options);
             break;
           default:
             throw new Error(`Unsupported database type: ${type}`);

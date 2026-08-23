@@ -5,15 +5,18 @@ import { z } from 'zod';
 import path from 'path';
 import { executeHook } from '../hooks-system.ts';
 import { logger } from '../logger.ts';
+import { shSingleQuote } from '../shell-quote.ts';
+import {
+  buildMySQLDumpCommand,
+  buildPostgreSQLDumpCommand,
+  buildMongoDBDumpCommand,
+} from '../dump-command-builder.ts';
 import {
   BACKUP_TYPES,
   DEFAULT_BACKUP_DIR,
   generateBackupId,
   getBackupMetadataPath,
   getBackupFilePath,
-  buildMySQLDumpCommand,
-  buildPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand,
   buildFilesBackupCommand,
   buildRestoreCommand,
   createBackupMetadata,
@@ -540,19 +543,44 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         scriptContent += `BACKUP_FILE="${backupFile}"\n\n`;
         scriptContent += 'mkdir -p "$BACKUP_DIR"\n\n';
 
-        // Add backup command based on type
+        // Add backup command based on type. Database dumps reuse the single
+        // dump-command-builder implementation (quoted); the placeholder is
+        // swapped afterwards for the runtime-expanded $BACKUP_FILE variable,
+        // which must stay unquoted inside the generated script.
+        const RUNTIME_OUTPUT = '\x00BACKUP_FILE';
         switch (type) {
           case BACKUP_TYPES.MYSQL:
-            scriptContent += `mysqldump --single-transaction --routines --triggers ${database} | gzip > "$BACKUP_FILE"\n`;
+            scriptContent +=
+              buildMySQLDumpCommand({
+                database,
+                outputFile: RUNTIME_OUTPUT,
+                compress: true,
+              }).replace(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"') + '\n';
             break;
           case BACKUP_TYPES.POSTGRESQL:
-            scriptContent += `pg_dump --format=custom --clean --if-exists ${database} | gzip > "$BACKUP_FILE"\n`;
+            scriptContent +=
+              buildPostgreSQLDumpCommand({
+                database,
+                outputFile: RUNTIME_OUTPUT,
+                compress: true,
+              }).replace(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"') + '\n';
             break;
-          case BACKUP_TYPES.MONGODB:
-            scriptContent += `mongodump --db ${database} --out /tmp/mongo_\${RANDOM} && tar -czf "$BACKUP_FILE" -C /tmp mongo_*\n`;
+          case BACKUP_TYPES.MONGODB: {
+            // mongodump --out is a DIRECTORY: dump to a runtime tmp dir via
+            // the shared builder, then tar it into $BACKUP_FILE.
+            const RUNTIME_TMP = '\x00MONGO_TMP';
+            scriptContent += 'MONGO_TMP="/tmp/mongo_$(date +%s)_$$"\n';
+            scriptContent +=
+              buildMongoDBDumpCommand({
+                database,
+                outputDir: RUNTIME_TMP,
+                compress: false,
+              }).replace(shSingleQuote(RUNTIME_TMP), '"$MONGO_TMP"') +
+              ' && tar -czf "$BACKUP_FILE" -C "$(dirname "$MONGO_TMP")" "$(basename "$MONGO_TMP")" && rm -rf "$MONGO_TMP"\n';
             break;
+          }
           case BACKUP_TYPES.FILES:
-            scriptContent += `tar -czf "$BACKUP_FILE" ${paths.join(' ')}\n`;
+            scriptContent += `tar -czf "$BACKUP_FILE" ${paths.map(shSingleQuote).join(' ')}\n`;
             break;
         }
 
@@ -561,9 +589,8 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         scriptContent += `find "$BACKUP_DIR" -name "*_${name}_*" -type f -mtime +${retention} -delete\n`;
 
         // Save script to remote server
-        const escapedScript = scriptContent.replace(/'/g, "'\\''");
         await ssh.execCommand(
-          `echo '${escapedScript}' > "${scriptPath}" && chmod +x "${scriptPath}"`
+          `echo ${shSingleQuote(scriptContent)} > "${scriptPath}" && chmod +x "${scriptPath}"`
         );
 
         // Add to crontab

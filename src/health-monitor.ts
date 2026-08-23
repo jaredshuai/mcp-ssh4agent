@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger.ts';
+import { shSingleQuote } from './shell-quote.ts';
 
 // Health status levels
 export const HEALTH_STATUS = {
@@ -325,8 +326,8 @@ export function createAlertConfig(thresholds) {
  */
 export function buildSaveAlertConfigCommand(config, configPath = '/etc/ssh4agent-alerts.json') {
   const jsonData = JSON.stringify(config, null, 2);
-  const escapedJson = jsonData.replace(/'/g, "'\\''");
-  return `echo '${escapedJson}' > "${configPath}"`;
+  // Shell-quote the whole JSON payload (single source: shell-quote.ts)
+  return `echo ${shSingleQuote(jsonData)} > "${configPath}"`;
 }
 
 /**
