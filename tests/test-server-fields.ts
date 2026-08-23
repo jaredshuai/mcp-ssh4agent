@@ -159,6 +159,25 @@ test('parseEnvServersText stops at the first close quote before trailing content
   assert.equal(record.group, 'g1', 'comment ending with a quote is still just a comment');
 });
 
+// Round-4 case: an interior quote followed by `#` inside a credential.
+// The writer avoids the ambiguity entirely by alternating the delimiter
+// (single-quoted when the value contains `"` but no `'`), and the reader
+// is the REAL dotenv parser — same bytes, same result on both sides.
+test('credentials with interior quote + # round-trip via alternating quotes', () => {
+  const lines = [
+    serverEnvLine('H', spec('host'), '203.0.113.7'),
+    serverEnvLine('H', spec('password'), 'a"#b'),
+    serverEnvLine('H', spec('sudoPassword'), `x'"#y`),
+  ].join('\n');
+  const record = parseEnvServersText(lines).get('h');
+  assert.ok(record);
+  assert.equal(record.password, 'a"#b', 'quote+hash password survives via single-quoting');
+  // Both quote characters: escaped double-quoting. dotenv keeps the
+  // backslash (it only expands \n/\r) — the CLI parser IS dotenv here, so
+  // both sides read the exact same bytes. Consistency is the contract.
+  assert.equal(record.sudoPassword, 'x\'\\"#y');
+});
+
 // ── coercion ─────────────────────────────────────────────────────────────────
 
 test('int coercion: numeric string becomes number', () => {
@@ -316,6 +335,30 @@ async function roundTrip(): Promise<void> {
   const cased = loader3.getServer('cased');
   assert.ok(cased, 'rewritten entry still loads');
   assert.equal(cased.password, 'new-pw', 'update rewrote the cased entry');
+
+  // ── field-anchored removal (r4) ──────────────────────────────────────
+  // `server remove foo` used to match `^SSH_SERVER_FOO_` as a bare prefix
+  // and took `foo_bar`'s lines with it.
+  assert.ok(cli.add_server_to_env('pfx', '198.51.100.3', 'op', 'password', 'p1'));
+  assert.ok(cli.add_server_to_env('pfx_web', '198.51.100.4', 'op', 'password', 'p2'));
+  assert.ok(cli.remove_server_from_env('pfx'), 'remove pfx must succeed');
+  const loader4 = new ConfigLoader();
+  loader4.loadEnvConfig(envPath);
+  assert.equal(loader4.getServer('pfx'), undefined, 'pfx removed');
+  assert.ok(loader4.getServer('pfx_web'), 'pfx_web must survive removing pfx');
+  assert.equal(loader4.getServer('pfx_web')?.password, 'p2', 'pfx_web data intact');
+
+  // Same for update: rewriting pfx2 must not touch pfx2_web.
+  assert.ok(cli.add_server_to_env('pfx2', '198.51.100.5', 'op', 'password', 'q1'));
+  assert.ok(cli.add_server_to_env('pfx2_web', '198.51.100.6', 'op', 'password', 'q2'));
+  assert.ok(
+    cli2.update_server_in_env('pfx2', '198.51.100.5', 'op', 'password', 'q3'),
+    'update pfx2 must succeed'
+  );
+  const loader5 = new ConfigLoader();
+  loader5.loadEnvConfig(envPath);
+  assert.equal(loader5.getServer('pfx2')?.password, 'q3', 'pfx2 rewritten');
+  assert.equal(loader5.getServer('pfx2_web')?.password, 'q2', 'pfx2_web untouched by pfx2 update');
 }
 
 await asyncTest(

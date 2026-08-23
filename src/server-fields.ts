@@ -17,6 +17,8 @@
  * (native type stripping, no build step), and the CLI the same way.
  */
 
+import * as dotenv from 'dotenv';
+
 type ServerFieldType = 'string' | 'int' | 'bool' | 'patternList';
 
 interface ServerFieldSpec {
@@ -172,8 +174,20 @@ export function serverFromTomlRecord(tomlServer: Record<string, unknown>): Recor
 
 /**
  * Render one `.env` export line for a field, applying the shared quoting
- * rule: free-form / whitespace-sensitive values are double-quoted so a ` #`
- * inside the value cannot truncate it on read-back. Pattern lists join with `;`.
+ * rule: free-form / whitespace-sensitive values are quoted so a ` #` or a
+ * delimiter quote inside the value cannot truncate it on read-back.
+ * Pattern lists join with `;`.
+ *
+ * Quote CHOICE matters: dotenv (the reader on both sides — see
+ * dotenvParse) stops a double-quoted value at the first unescaped `"`, so
+ * a password like `Jx"ds$2016` must not be written as `"Jx"ds$2016"`.
+ * Alternating the delimiter solves it without inventing an escape syntax:
+ * values containing `"` (but no `'`) are single-quoted, everything else
+ * double-quoted. A value containing BOTH quote characters is the one
+ * pathological case — it is written double-quoted with interior quotes
+ * escaped (`\"`), which dotenv reads back with the backslash intact
+ * (dotenv only expands \n/\r); both sides agree on that byte-for-byte,
+ * so the credential is mangled consistently rather than divergently.
  */
 export function serverEnvLine(
   nameUpper: string,
@@ -181,7 +195,16 @@ export function serverEnvLine(
   value: string | number | boolean | string[]
 ): string {
   const rendered = Array.isArray(value) ? value.join(';') : String(value);
-  const rhs = spec.quoteEnv ? `"${rendered}"` : rendered;
+  let rhs: string;
+  if (!spec.quoteEnv) {
+    rhs = rendered;
+  } else if (rendered.includes('"') && !rendered.includes("'")) {
+    rhs = `'${rendered}'`;
+  } else if (rendered.includes('"')) {
+    rhs = `"${rendered.replace(/"/g, '\\"')}"`;
+  } else {
+    rhs = `"${rendered}"`;
+  }
   return `SSH_SERVER_${nameUpper}_${spec.env}=${rhs}`;
 }
 
@@ -219,44 +242,12 @@ export function parseEnvServersText(text: string): Map<string, Record<string, an
   return out;
 }
 
-// Minimal dotenv-compatible parser (KEY=VALUE, surrounding quotes stripped,
-// # comments and blank lines ignored, `export ` prefix tolerated). Kept local
-// so the field table stays dependency-free; mirrors dotenv's semantics for
-// the subset this project's writers emit (see serverEnvLine).
+// The .env reader is the ACTUAL dotenv parser — the same one
+// src/config-loader.ts uses. A hand-rolled subset lived here before and
+// drifted from the library on every quoting edge (escaped delimiters,
+// interior quotes before comments, comment lines ending in quotes — PR #9
+// reviews, rounds 2-4); delegating makes the CLI and MCP sides
+// byte-for-byte identical by construction.
 function dotenvParse(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const rawLine of text.split(/\r?\n/)) {
-    let line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    if (line.startsWith('export ')) line = line.slice(7).trim();
-    const eq = line.indexOf('=');
-    if (eq <= 0) continue;
-    const key = line.slice(0, eq).trim();
-    let value = line.slice(eq + 1).trim();
-    const quote = value[0];
-    if (quote === '"' || quote === "'") {
-      // The value ends at the FIRST close quote when what follows is empty
-      // or a `#` comment — dotenv semantics (`"a" # note`, including notes
-      // that themselves end with a quote). Only when the remainder is
-      // neither (e.g. `"a"b"` — serverEnvLine does not escape interior
-      // quotes, so a password a"b is written exactly like that) does the
-      // outer pair get stripped greedily so the credential round-trips
-      // (PR #9 review, rounds 2+3).
-      const close = value.indexOf(quote, 1);
-      const remainder = close > 0 ? value.slice(close + 1).trim() : null;
-      if (close > 0 && (remainder === '' || remainder.startsWith('#'))) {
-        value = value.slice(1, close);
-      } else if (value.length >= 2 && value.endsWith(quote)) {
-        value = value.slice(1, -1);
-      } else if (close > 0) {
-        value = value.slice(1, close);
-      }
-    } else {
-      // Unquoted: ` #` starts an inline comment.
-      const hash = value.indexOf(' #');
-      if (hash !== -1) value = value.slice(0, hash).trimEnd();
-    }
-    out[key] = value;
-  }
-  return out;
+  return dotenv.parse(text);
 }
