@@ -27,7 +27,6 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
     getConnection,
     execCommandWithTimeout,
     loadServerConfig,
-    applyServerPolicy,
   } = ctx;
 
   registerToolConditional(
@@ -541,16 +540,6 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
       limit = 20,
       filter,
     }) => {
-      // Only the `kill` action mutates remote state — gate just that branch so
-      // operators on readonly servers can still `list` / `info` processes.
-      if (action === 'kill') {
-        const denied = await applyServerPolicy(serverName, 'ssh_process_manager', {
-          action,
-          pid,
-          signal,
-        });
-        if (denied) return denied;
-      }
       try {
         const ssh = await getConnection(serverName);
 
@@ -675,7 +664,10 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           ],
         };
       }
-    }
+    },
+    // Policy: only the `kill` action mutates remote state — gate just that
+    // branch so operators on readonly servers can still list/info processes.
+    { when: (args) => args.action === 'kill' }
   );
 
   registerToolConditional(
@@ -707,17 +699,6 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
       diskThreshold,
       enabled = true,
     }) => {
-      // `set` writes config on the remote; `get` and `check` are read-only.
-      if (action === 'set') {
-        const denied = await applyServerPolicy(serverName, 'ssh_alert_setup', {
-          action,
-          cpuThreshold,
-          memoryThreshold,
-          diskThreshold,
-          enabled,
-        });
-        if (denied) return denied;
-      }
       try {
         const ssh = await getConnection(serverName);
         // BREAKING (unreleased): the pre-rebrand /etc/ssh-manager-alerts.json is no longer read.
@@ -877,7 +858,9 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           ],
         };
       }
-    }
+    },
+    // Policy: `set` writes config on the remote; `get` and `check` are read-only.
+    { when: (args) => args.action === 'set' }
   );
 
   // ============================================================================

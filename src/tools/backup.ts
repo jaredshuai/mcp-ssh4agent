@@ -28,7 +28,7 @@ import {
 } from '../backup-manager.ts';
 
 export function registerBackupTools(ctx: import('../tool-registry.ts').ToolContext) {
-  const { register: registerToolConditional, getConnection, applyServerPolicy } = ctx;
+  const { register: registerToolConditional, getConnection } = ctx;
 
   registerToolConditional(
     'ssh_backup_create',
@@ -71,14 +71,6 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
       retention = 7,
       compress = true,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_backup_create', {
-        type,
-        name,
-        database,
-        paths,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -273,7 +265,9 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
@@ -387,13 +381,6 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
       targetPath,
       backupDir,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_backup_restore', {
-        backupId,
-        database,
-        targetPath,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
         const backupDirectory = backupDir || DEFAULT_BACKUP_DIR;
@@ -491,7 +478,9 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
@@ -510,15 +499,6 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
       },
     },
     async ({ server: serverName, schedule, type, name, database, paths, retention = 7 }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_backup_schedule', {
-        schedule,
-        type,
-        name,
-        database,
-        paths,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -647,7 +627,9 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   // ============================================================================

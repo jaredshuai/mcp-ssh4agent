@@ -19,7 +19,9 @@ import { loadToolConfig, isToolEnabled } from './tool-config-manager.ts';
 import { evaluatePolicy } from './policy.ts';
 import { auditLog } from './audit.ts';
 import { ConnectionPool, execCommandWithTimeout } from './connection-pool.ts';
-import type { ToolContext } from './tool-registry.ts';
+import type { ToolContext, ToolPolicy } from './tool-registry.ts';
+import { wrapWithPolicy } from './tool-registry.ts';
+import { expandCommandAlias } from './command-aliases.ts';
 import { registerCoreTools } from './tools/core.ts';
 import { registerSessionsTools } from './tools/sessions.ts';
 import { registerMonitoringTools } from './tools/monitoring.ts';
@@ -226,12 +228,21 @@ logger.info('MCP Server initialized', { version: serverVersion });
 function registerToolConditional(
   toolName: string,
   schema: any,
-  handler: (args: any, extra?: any) => any
+  handler: (args: any, extra?: any) => any,
+  policy?: ToolPolicy
 ) {
   if (isToolEnabled(toolName)) {
+    // The single registration funnel: policy gate + audit trail wrap every
+    // handler according to its declaration (see wrapWithPolicy). Tools carry
+    // business logic only (issue #6).
+    const wrapped = wrapWithPolicy(toolName, handler, policy, {
+      applyServerPolicy,
+      auditOk,
+      expandCommandAlias,
+    });
     // Cast: registerTool infers its handler signature from the zod schema, which
     // this generic wrapper cannot express while staying one helper for 37 tools.
-    server.registerTool(toolName, schema, handler as any);
+    server.registerTool(toolName, schema, wrapped as any);
     logger.debug(`Registered tool: ${toolName}`);
   } else {
     logger.debug(`Skipped disabled tool: ${toolName}`);
@@ -255,7 +266,6 @@ const toolContext: ToolContext = {
   resolveServer: resolveServerEntry,
   getServerConfig,
   applyServerPolicy,
-  auditOk,
   cleanupOldConnections,
 };
 

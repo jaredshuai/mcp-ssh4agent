@@ -295,7 +295,11 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
-    }
+    },
+    // Policy: MANUAL — each group member is evaluated independently inside
+    // executeOnGroup (best-effort; one readonly member refusing does not abort
+    // the others). Declared so it can never be confused with a forgotten gate.
+    { gate: 'manual' }
   );
 
   // The stored member list is only half the story: servers tagged with this group
@@ -497,12 +501,6 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ server, files, options = {} }: any) => {
-      const denied = await applyServerPolicy(server, 'ssh_deploy', {
-        files: files.map((f) => ({ local: f.local, remote: f.remote })),
-        options,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(server);
 
@@ -587,7 +585,9 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   // Execute command with sudo support
@@ -605,12 +605,6 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ server, command, password, cwd, timeout = 30000 }) => {
-      // ssh_execute_sudo is in READONLY_BLOCKED_TOOLS, so readonly mode blocks
-      // it at the tool level. In restricted mode the command itself is matched
-      // against ALLOW/DENY patterns.
-      const denied = await applyServerPolicy(server, 'ssh_execute_sudo', { command, cwd }, command);
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(server);
         const resolvedEntry = await resolveServer(server);
@@ -650,6 +644,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               text: `🔐 Sudo command executed\nServer: ${server}\nCommand: ${maskedCommand}\nExit code: ${result.code}\n\nOutput:\n${result.stdout || result.stderr}`,
             },
           ],
+          exitCode: result.code,
         };
       } catch (error) {
         return {
@@ -661,7 +656,10 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
-    }
+    },
+    // Policy: command-bearing — the funnel matches the sudo command against
+    // readonly/restricted patterns (tool-level block handled by READONLY_BLOCKED_TOOLS).
+    { commandArg: 'command' }
   );
 
   // Manage command aliases
@@ -1304,13 +1302,6 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ action, server, autoAccept = false }) => {
-      // Mutating actions (accept, remove) are blocked in readonly mode at the
-      // tool level. Pure-read actions (verify, list, check) are allowed regardless,
-      // so we only gate when the action would modify state.
-      if (server && (action === 'accept' || action === 'remove')) {
-        const denied = await applyServerPolicy(server, 'ssh_key_manage', { action, autoAccept });
-        if (denied) return denied;
-      }
       try {
         let resolvedName, serverConfig, host, port;
 
@@ -1545,7 +1536,10 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
-    }
+    },
+    // Policy: only accept/remove mutate local known_hosts; verify/list/check
+    // stay available on readonly servers.
+    { when: (args) => args.action === 'accept' || args.action === 'remove' }
   );
 
   // Manage server aliases

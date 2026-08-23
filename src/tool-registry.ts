@@ -22,7 +22,12 @@
  */
 export interface ToolContext {
   /** Register a tool unless disabled in tool config. */
-  register: (toolName: string, schema: any, handler: (args: any, extra?: any) => any) => void;
+  register: (
+    toolName: string,
+    schema: any,
+    handler: (args: any, extra?: any) => any,
+    policy?: ToolPolicy
+  ) => void;
   /** The connection pool: get/close/invalidate/status/sweep/... (src/connection-pool.ts). */
   pool: any;
   getConnection: any;
@@ -32,9 +37,99 @@ export interface ToolContext {
   /** Single resolution path: name-or-alias → { name, config } (alias expanded). */
   resolveServer: any;
   getServerConfig: any;
+  /** Kept for tools that own their policy evaluation (gate: 'manual'). */
   applyServerPolicy: any;
-  auditOk: any;
   cleanupOldConnections: any;
+}
+
+/**
+ * Policy declaration for a tool registration (issue #6).
+ *
+ * The registration funnel enforces the per-server security policy and writes
+ * the audit trail from ONE place, based on this declaration — a mutating tool
+ * can no longer ship without a gate, and "intentionally exempt" is visibly
+ * different from "forgot".
+ *
+ *  - gate 'server' (default): evaluate the policy for `args.server` (or the
+ *    value returned by `serverFrom`) before the handler runs, then audit the
+ *    outcome on both the success and failure paths.
+ *  - gate 'exempt': explicitly no policy, no funnel audit (e.g. ssh_download,
+ *    which must stay usable on readonly servers).
+ *  - gate 'manual': the handler owns policy/audit itself (e.g. ssh_execute_group
+ *    evaluates each group member independently, best-effort).
+ *
+ *  - commandArg: name of the argument carrying the command to match against
+ *    readonly/restricted patterns (command-bearing tools).
+ *  - expandAlias: run the command through expandCommandAlias before matching,
+ *    so a destructive command cannot hide behind an alias (ssh_execute).
+ *  - when: restrict the gate to matching invocations (e.g. only the `kill`
+ *    action of ssh_process_manager); non-matching calls skip the policy
+ *    evaluation but are still audited.
+ */
+export interface ToolPolicy {
+  gate?: 'server' | 'exempt' | 'manual';
+  commandArg?: string;
+  expandAlias?: boolean;
+  when?: (args: any) => boolean;
+  /** Derive the policy subject when it is not `args.server` (e.g. a session's server). */
+  serverFrom?: (args: any) => any;
+}
+
+/** Dependencies the policy funnel needs, injected by the entry point. */
+export interface PolicyFunnelDeps {
+  applyServerPolicy: (server: string, tool: string, args: any, command?: string) => Promise<any>;
+  auditOk: (server: string, tool: string, args: any, result: any) => Promise<void>;
+  expandCommandAlias?: (command: string) => string;
+}
+
+/**
+ * Wrap a tool handler with the declared policy gate and audit trail.
+ *
+ * Pure orchestration — no imports from the entry point, fully unit-testable
+ * via injected deps. Returns the original handler untouched for exempt/manual
+ * gates so their behavior is explicitly owned by the tool itself.
+ */
+export function wrapWithPolicy(
+  toolName: string,
+  handler: (args: any, extra?: any) => any,
+  policyDecl: ToolPolicy | undefined,
+  deps: PolicyFunnelDeps
+): (args: any, extra?: any) => any {
+  const gate = policyDecl?.gate ?? 'server';
+  if (gate === 'exempt' || gate === 'manual') return handler;
+
+  return async (args, extra) => {
+    const server = policyDecl?.serverFrom ? await policyDecl.serverFrom(args) : args?.server;
+    const gateApplies = !policyDecl?.when || policyDecl.when(args);
+
+    if (server && gateApplies) {
+      let command: string | undefined;
+      if (policyDecl?.commandArg && typeof args?.[policyDecl.commandArg] === 'string') {
+        command = args[policyDecl.commandArg];
+        if (policyDecl.expandAlias && typeof deps.expandCommandAlias === 'function') {
+          command = deps.expandCommandAlias(command);
+        }
+      }
+      const denied = await deps.applyServerPolicy(server, toolName, args, command);
+      if (denied) return denied;
+    }
+
+    try {
+      const response = await handler(args, extra);
+      if (server) {
+        await deps.auditOk(server, toolName, args, {
+          success: !response?.isError,
+          code: response?.exitCode,
+        });
+      }
+      return response;
+    } catch (error) {
+      if (server) {
+        await deps.auditOk(server, toolName, args, { success: false, error: error.message });
+      }
+      throw error;
+    }
+  };
 }
 
 /**

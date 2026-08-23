@@ -23,8 +23,6 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
     execCommandWithTimeout,
     loadServerConfig,
     resolveServer,
-    applyServerPolicy,
-    auditOk,
   } = ctx;
 
   registerToolConditional(
@@ -45,21 +43,15 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           .describe('Command timeout in milliseconds (default: 120000, max: 300000)'),
       },
     },
+    // Policy: command-bearing — the funnel matches the alias-EXPANDED command
+    // so a destructive command cannot hide behind a command alias.
     async ({ server: serverName, command, cwd, timeout = TIMEOUTS.DEFAULT_COMMAND_TIMEOUT }) => {
       // Cap timeout at maximum allowed
       const cappedTimeout = Math.min(timeout, TIMEOUTS.MAX_COMMAND_TIMEOUT);
 
-      // Expand aliases BEFORE policy evaluation so the user can't bypass a DENY
-      // regex by hiding a destructive command behind an alias.
+      // Expand aliases for execution (the policy funnel expands independently
+      // for its own matching).
       const expandedCommand = expandCommandAlias(command);
-
-      const denied = await applyServerPolicy(
-        serverName,
-        'ssh_execute',
-        { command, cwd },
-        expandedCommand
-      );
-      if (denied) return denied;
 
       try {
         const ssh = await getConnection(serverName);
@@ -107,16 +99,6 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
         const stdout = truncateOutput(result.stdout);
         const stderr = truncateOutput(result.stderr);
 
-        await auditOk(
-          serverName,
-          'ssh_execute',
-          { command, cwd },
-          {
-            code: result.code,
-            success: result.code === 0,
-          }
-        );
-
         return {
           content: [
             {
@@ -131,17 +113,10 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
               }),
             },
           ],
+          // exitCode feeds the funnel's audit entry; MCP clients ignore it.
+          exitCode: result.code,
         };
       } catch (error) {
-        await auditOk(
-          serverName,
-          'ssh_execute',
-          { command, cwd },
-          {
-            success: false,
-            error: error.message,
-          }
-        );
         logger.error('ssh_execute failed', {
           server: serverName,
           error: error.message,
@@ -160,9 +135,11 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
             },
           ],
           isError: true,
+          exitCode: -1,
         };
       }
-    }
+    },
+    { commandArg: 'command', expandAlias: true }
   );
 
   registerToolConditional(
@@ -177,9 +154,6 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
       },
     },
     async ({ server: serverName, localPath, remotePath }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_upload', { localPath, remotePath });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -195,8 +169,6 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           duration: `${Date.now() - startTime}ms`,
         });
 
-        await auditOk(serverName, 'ssh_upload', { localPath, remotePath }, { success: true });
-
         return {
           content: [
             {
@@ -206,15 +178,6 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           ],
         };
       } catch (error) {
-        await auditOk(
-          serverName,
-          'ssh_upload',
-          { localPath, remotePath },
-          {
-            success: false,
-            error: error.message,
-          }
-        );
         logger.logTransfer('upload', serverName, localPath, remotePath, {
           success: false,
           error: error.message,
@@ -228,7 +191,9 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
@@ -280,7 +245,11 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           ],
         };
       }
-    }
+    },
+    // Policy: EXEMPT BY DESIGN — read-only on the remote side; must stay
+    // usable on readonly/restricted servers. Declared so it can never be
+    // confused with a forgotten gate (issue #6).
+    { gate: 'exempt' }
   );
 
   registerToolConditional(
@@ -324,14 +293,6 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
       checksum = false,
       timeout = 30000,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_sync', {
-        source,
-        destination,
-        dryRun,
-        delete: deleteFiles,
-      });
-      if (denied) return denied;
-
       try {
         await getConnection(serverName);
         // resolveServer expands aliases so auth fields are found even when the
@@ -658,7 +619,9 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(

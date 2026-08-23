@@ -31,7 +31,7 @@ import {
 } from '../database-manager.ts';
 
 export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolContext) {
-  const { register: registerToolConditional, getConnection, applyServerPolicy } = ctx;
+  const { register: registerToolConditional, getConnection } = ctx;
 
   registerToolConditional(
     'ssh_db_dump',
@@ -66,14 +66,6 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
       compress = true,
       tables,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_db_dump', {
-        type,
-        database,
-        outputFile,
-        tables,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -168,7 +160,9 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(
@@ -202,14 +196,6 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
       dbPort,
       drop = true,
     }) => {
-      const denied = await applyServerPolicy(serverName, 'ssh_db_import', {
-        type,
-        database,
-        inputFile,
-        drop,
-      });
-      if (denied) return denied;
-
       try {
         const ssh = await getConnection(serverName);
 
@@ -295,7 +281,9 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
-    }
+    },
+    // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
+    {}
   );
 
   registerToolConditional(

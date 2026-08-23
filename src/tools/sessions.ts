@@ -7,7 +7,7 @@ import { logger } from '../logger.ts';
 import { createSession, getSession, listSessions, closeSession } from '../session-manager.ts';
 
 export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolContext) {
-  const { register: registerToolConditional, getConnection, applyServerPolicy } = ctx;
+  const { register: registerToolConditional, getConnection } = ctx;
 
   registerToolConditional(
     'ssh_session_start',
@@ -73,15 +73,6 @@ export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolCon
       try {
         const session = getSession(sessionId);
 
-        // Resolve the session's underlying server to its policy.
-        const denied = await applyServerPolicy(
-          session.serverName,
-          'ssh_session_send',
-          { session: sessionId, command },
-          command
-        );
-        if (denied) return denied;
-
         const startTime = Date.now();
         const result = await session.execute(command, { timeout });
         const duration = Date.now() - startTime;
@@ -135,6 +126,21 @@ export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolCon
           ],
         };
       }
+    },
+    // Policy: the session's underlying server is the subject (not args.server);
+    // command-bearing — the funnel matches the command against readonly/
+    // restricted patterns.
+    {
+      serverFrom: (args) => {
+        try {
+          return getSession(args.session)?.serverName;
+        } catch {
+          // Unknown/closed session: skip the gate; the handler surfaces the
+          // error from getSession itself (same response as before).
+          return undefined;
+        }
+      },
+      commandArg: 'command',
     }
   );
 
