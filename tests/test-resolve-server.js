@@ -43,7 +43,9 @@ function assertTrue(cond, message) {
   if (!cond) throw new Error(message);
 }
 
-console.log('\n' + YELLOW + 'Running resolveServer tests (issue #1: alias policy bypass)...' + NC + '\n');
+console.log(
+  '\n' + YELLOW + 'Running resolveServer tests (issue #1: alias policy bypass)...' + NC + '\n'
+);
 
 const ALIASES = { prod: 'production-web', staging_alias: 'staging' };
 

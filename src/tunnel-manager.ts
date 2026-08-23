@@ -34,11 +34,7 @@ export interface TunnelableConnection {
   /** Local/dynamic forwarding: open a channel to dstAddr:dstPort. */
   forwardOut(srcAddr: string, srcPort: number, dstAddr: string, dstPort: number): Promise<any>;
   /** Remote forwarding: ask the server to listen on remoteAddr:remotePort. */
-  forwardIn(
-    remoteAddr: string,
-    remotePort: number,
-    callback?: (err?: Error) => void
-  ): unknown;
+  forwardIn(remoteAddr: string, remotePort: number, callback?: (err?: Error) => void): unknown;
   /** Remove a remote forwarding request. */
   unforwardIn(remoteAddr: string, remotePort: number): unknown;
   /** Incoming remote-forwarded connections. */

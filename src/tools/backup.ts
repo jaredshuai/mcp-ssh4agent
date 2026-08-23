@@ -1,63 +1,10 @@
-// Auto-split from src/index.js (candidate 3). Tool definitions for the
-// backup group — bodies moved verbatim; see src/tool-registry.ts for the
-// authoritative group membership. Infrastructure (connection pool, config
-// loading, policy gate) arrives via the ctx argument at registration time.
+// Backup & restore tools (ssh_backup_*). Infrastructure arrives via ctx at
+// registration time.
 
 import { z } from 'zod';
-import fs from 'fs';
 import path from 'path';
-import os from 'os';
-import crypto from 'crypto';
-import SSHManager from '../ssh-manager.ts';
-import {
-  getTempFilename,
-  buildDeploymentStrategy,
-  detectDeploymentNeeds,
-} from '../deploy-helper.ts';
-import { resolveServerName, addAlias, removeAlias, listAliases } from '../server-aliases.ts';
-import {
-  expandCommandAlias,
-  addCommandAlias,
-  removeCommandAlias,
-  listCommandAliases,
-  suggestAliases,
-} from '../command-aliases.ts';
-import { TIMEOUTS, truncateOutput, formatJSONResponse, formatDuration } from '../config.ts';
-import { initializeHooks, executeHook, toggleHook, listHooks } from '../hooks-system.ts';
-import {
-  loadProfile,
-  listProfiles,
-  setActiveProfile,
-  getActiveProfileName,
-} from '../profile-loader.ts';
+import { executeHook } from '../hooks-system.ts';
 import { logger } from '../logger.ts';
-import { shSingleQuote, buildCdPrefix, buildSudoPipeline } from '../shell-quote.ts';
-import { parseRsyncStats } from '../rsync-stats.ts';
-import { toRsyncLocalPath } from '../rsync-path.ts';
-import { createSession, getSession, listSessions, closeSession } from '../session-manager.ts';
-import {
-  getGroup,
-  createGroup,
-  updateGroup,
-  deleteGroup,
-  addServersToGroup,
-  removeServersFromGroup,
-  listGroups,
-  executeOnGroup,
-} from '../server-groups.ts';
-import { createTunnel, listTunnels, closeTunnel, closeServerTunnels } from '../tunnel-manager.ts';
-import {
-  getHostKeyFingerprint,
-  isHostKnown,
-  getCurrentHostKey,
-  removeHostKey,
-  addHostKey,
-  updateHostKey,
-  hasHostKeyChanged,
-  listKnownHosts,
-  detectSSHKeyError,
-  extractHostFromSSHError,
-} from '../ssh-key-manager.ts';
 import {
   BACKUP_TYPES,
   DEFAULT_BACKUP_DIR,
@@ -76,46 +23,6 @@ import {
   buildCleanupCommand,
   buildCronScheduleCommand,
 } from '../backup-manager.ts';
-import {
-  HEALTH_STATUS,
-  buildServiceStatusCommand,
-  parseServiceStatus,
-  buildProcessListCommand,
-  parseProcessList,
-  buildKillProcessCommand,
-  buildProcessInfoCommand,
-  createAlertConfig,
-  buildSaveAlertConfigCommand,
-  buildLoadAlertConfigCommand,
-  checkAlertThresholds,
-  buildComprehensiveHealthCheckCommand,
-  parseComprehensiveHealthCheck,
-  resolveServiceName,
-} from '../health-monitor.ts';
-import {
-  DB_TYPES,
-  buildMySQLDumpCommand as buildDBMySQLDumpCommand,
-  buildPostgreSQLDumpCommand as buildDBPostgreSQLDumpCommand,
-  buildMongoDBDumpCommand as buildDBMongoDBDumpCommand,
-  buildMySQLImportCommand,
-  buildPostgreSQLImportCommand,
-  buildMongoDBRestoreCommand,
-  buildMySQLListDatabasesCommand,
-  buildMySQLListTablesCommand,
-  buildPostgreSQLListDatabasesCommand,
-  buildPostgreSQLListTablesCommand,
-  buildMongoDBListDatabasesCommand,
-  buildMongoDBListCollectionsCommand,
-  buildMySQLQueryCommand,
-  buildPostgreSQLQueryCommand,
-  buildMongoDBQueryCommand,
-  isSafeQuery,
-  countQueryRows,
-  parseDatabaseList,
-  parseTableList,
-  parseSize,
-  formatBytes,
-} from '../database-manager.ts';
 
 export function registerBackupTools(ctx: import('../tool-registry.ts').ToolContext) {
   const { register: registerToolConditional, getConnection, applyServerPolicy } = ctx;
