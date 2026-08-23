@@ -211,6 +211,7 @@ async function testDispatcherUsage() {
   process.exitCode = 0;
   await captureStdout(() => cmd_codex('bogus'));
   assert.strictEqual(process.exitCode, 1, 'unknown codex subcommand exits 1');
+  process.exitCode = 0;
   ok('codex dispatcher usage errors (no subcommand / unknown subcommand → exit 1)');
 }
 
