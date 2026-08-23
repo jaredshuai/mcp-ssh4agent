@@ -53,12 +53,6 @@ function resolveConfigHome(): string {
   return SSH4AGENT_HOME;
 }
 
-const CONFIG_HOME: string = resolveConfigHome();
-
-export const SSH4AGENT_CONFIG: string = path.join(CONFIG_HOME, 'config.json');
-
-export const SSH4AGENT_ALIASES: string = path.join(CONFIG_HOME, 'aliases.json');
-
 // Resolve .env through the ONE shared fallback chain (src/env-path.ts):
 // SSH_ENV_PATH → SSH4AGENT_ENV (deprecated alias) → ~/.ssh4agent/.env →
 // legacy ~/.ssh-manager/.env → $PWD/.env → ~/.env → <package root>/.env →
@@ -68,12 +62,33 @@ export const SSH4AGENT_ALIASES: string = path.join(CONFIG_HOME, 'aliases.json');
 // The chain documents the legacy dir as a READ-ONLY fallback, so when it is
 // the resolved file we migrate it into the config home once (copy, then use
 // the new path for reads AND writes) instead of mutating the legacy file.
+//
+// Guards (PR #9 review):
+// - An explicit SSH_ENV_PATH / SSH4AGENT_ENV override is respected verbatim:
+//   migration only runs when the legacy file was reached through the
+//   fallback chain, never when the user pointed at it directly.
+// - The CLI's own config.json/aliases.json must move in the SAME step:
+//   this migration creates ~/.ssh4agent, which flips resolveConfigHome()
+//   below to the new directory — without the copy, the legacy settings
+//   would be orphaned behind a fresh default config.
 let resolvedEnvPath: string = resolveEnvFilePath();
 const homeEnvPath = path.join(SSH4AGENT_HOME, '.env');
-if (resolvedEnvPath !== homeEnvPath && path.dirname(resolvedEnvPath) === LEGACY_HOME) {
+const envOverrideSet = Boolean(process.env.SSH_ENV_PATH || process.env.SSH4AGENT_ENV);
+if (
+  !envOverrideSet &&
+  resolvedEnvPath !== homeEnvPath &&
+  path.dirname(resolvedEnvPath) === LEGACY_HOME
+) {
   try {
     fs.mkdirSync(SSH4AGENT_HOME, { recursive: true });
     fs.copyFileSync(resolvedEnvPath, homeEnvPath);
+    for (const file of ['config.json', 'aliases.json']) {
+      const from = path.join(LEGACY_HOME, file);
+      const to = path.join(SSH4AGENT_HOME, file);
+      if (fs.existsSync(from) && !fs.existsSync(to)) {
+        fs.copyFileSync(from, to);
+      }
+    }
     print_info(`Migrated legacy config ${resolvedEnvPath} → ${homeEnvPath}`);
     resolvedEnvPath = homeEnvPath;
   } catch {
@@ -81,6 +96,16 @@ if (resolvedEnvPath !== homeEnvPath && path.dirname(resolvedEnvPath) === LEGACY_
   }
 }
 export const SSH4AGENT_ENV: string = resolvedEnvPath;
+
+// Computed AFTER the migration above: when the migration created
+// ~/.ssh4agent (with .env + config.json), the CLI must read AND write the
+// new home immediately — resolving first would point this invocation at
+// the legacy dir and lose any config written before the next run.
+const CONFIG_HOME: string = resolveConfigHome();
+
+export const SSH4AGENT_CONFIG: string = path.join(CONFIG_HOME, 'config.json');
+
+export const SSH4AGENT_ALIASES: string = path.join(CONFIG_HOME, 'aliases.json');
 
 // ── init_config: ensure config dir + default config.json exist ──────────────
 export function init_config(): void {
@@ -182,11 +207,14 @@ export function get_server_config(server: string, field: string): string | null 
 // Raw-line existence check that ALSO sees names the MCP loader silently
 // drops (e.g. `bad-name` — invalid in env-var syntax). load_servers() lists
 // those entries, so remove flows must recognize them too for the
-// documented remove-and-readd recovery to work.
+// documented remove-and-readd recovery to work. The match is
+// case-insensitive: hand-authored files may use any casing
+// (`SSH_SERVER_Prod_HOST=`) while load_servers() lowercases, so a
+// case-sensitive marker would make remove unable to find what list shows.
 export function has_server_entry(server: string): boolean {
   if (!fs.existsSync(SSH4AGENT_ENV)) return false;
-  const marker = `SSH_SERVER_${server.toUpperCase()}_HOST=`;
-  return readEnvLines().some((l) => l.startsWith(marker));
+  const markerRe = new RegExp(`^SSH_SERVER_${escapeRegex(server)}_HOST=`, 'i');
+  return readEnvLines().some((l) => markerRe.test(l));
 }
 
 // The SSH dial coordinates every CLI ssh/rsync/tunnel invocation needs.
@@ -344,11 +372,12 @@ export function update_server_in_env(
 
 // ── remove_server_from_env ───────────────────────────────────────────────────
 // Note (matches bash grep -v): removes ONLY the SSH_SERVER_<NAME>_ lines,
-// leaving the `# Server: name` comment behind.
+// leaving the `# Server: name` comment behind. Case-insensitive for the
+// same reason as has_server_entry(): hand-authored entries may use any
+// casing while the CLI addresses servers by their lowercased name.
 export function remove_server_from_env(name: string): boolean {
-  const nameUpper = name.toUpperCase();
-  const marker = `SSH_SERVER_${nameUpper}_HOST=`;
-  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => l.startsWith(marker))) {
+  const markerRe = new RegExp(`^SSH_SERVER_${escapeRegex(name)}_HOST=`, 'i');
+  if (!fs.existsSync(SSH4AGENT_ENV) || !readEnvLines().some((l) => markerRe.test(l))) {
     print_error(`Server '${name}' not found`);
     return false;
   }
@@ -357,7 +386,7 @@ export function remove_server_from_env(name: string): boolean {
   } catch {
     /* ignore */
   }
-  const lineRe = new RegExp(`^SSH_SERVER_${nameUpper}_`);
+  const lineRe = new RegExp(`^SSH_SERVER_${escapeRegex(name)}_`, 'i');
   const kept = readEnvLines().filter((l) => !lineRe.test(l));
   fs.writeFileSync(SSH4AGENT_ENV, kept.join('\n') + '\n', 'utf8');
   print_success(`Server '${name}' removed successfully`);

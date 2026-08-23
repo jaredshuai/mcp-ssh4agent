@@ -39,6 +39,37 @@ async function main() {
   assert.strictEqual(stateFiles.readStateFileText('.missing.json'), null);
   ok('absent state file reads as null');
 
+  // ── permissions are TIGHTENED, not just set at creation (PR #9) ────────
+  // Node's `mode` option only applies when the path is created: a file or
+  // dir that already exists with 0644/0755 (upgraded install) must be
+  // re-tightened by an explicit chmod, or credential-bearing state stays
+  // readable by other local users.
+  const mode = (p) => fs.statSync(p).mode & 0o777;
+  fs.chmodSync(home, 0o755);
+  fs.writeFileSync(path.join(home, '.loose.json'), '{"x":1}', { mode: 0o644 });
+  fs.chmodSync(path.join(home, '.loose.json'), 0o644);
+  assert.strictEqual(stateFiles.writeStateFileText('.loose.json', '{"x":2}'), true);
+  assert.strictEqual(
+    mode(path.join(home, '.loose.json')),
+    0o600,
+    'existing file re-tightened to 0600'
+  );
+  assert.strictEqual(mode(home), 0o700, 'existing state dir re-tightened to 0700');
+  ok('writes tighten pre-existing loose file/dir permissions');
+
+  // The migration path must tighten too: a legacy file lands with 0600 even
+  // when the state dir was loose.
+  fs.chmodSync(home, 0o755);
+  fs.writeFileSync(path.join(legacy, '.migrate-perms.json'), 'secret');
+  stateFiles.readStateFileText('.migrate-perms.json');
+  assert.strictEqual(
+    mode(path.join(home, '.migrate-perms.json')),
+    0o600,
+    'migrated file tightened to 0600'
+  );
+  assert.strictEqual(mode(home), 0o700, 'state dir tightened by the migration path');
+  ok('migration tightens permissions of the state dir and migrated file');
+
   // ── legacy install-dir file migrates on first read ─────────────────────
   fs.writeFileSync(path.join(legacy, '.server-aliases.json'), JSON.stringify({ prod: 'web-1' }));
   const migrated = stateFiles.readStateFileText('.server-aliases.json');
@@ -94,7 +125,10 @@ async function main() {
   // Nothing ever lands in the legacy (install) directory except our fixtures.
   const legacyEntries = fs
     .readdirSync(legacy)
-    .filter((f) => f !== '.server-aliases.json' && f !== '.server-groups.json');
+    .filter(
+      (f) =>
+        f !== '.server-aliases.json' && f !== '.server-groups.json' && f !== '.migrate-perms.json'
+    );
   assert.deepStrictEqual(legacyEntries, [], 'no module writes to the legacy dir');
 
   delete process.env.SSH4AGENT_HOME;

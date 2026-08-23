@@ -75,6 +75,7 @@ export function readStateFileText(name: string): string | null {
     try {
       fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
       fs.writeFileSync(target, content, { encoding: 'utf8', mode: 0o600 });
+      tightenPermissions(target);
     } catch {
       /* migration is best-effort */
     }
@@ -94,12 +95,29 @@ export function writeStateFileText(name: string, content: string): boolean {
   try {
     // 0700/0600: state files (command history especially) can embed
     // credentials, so neither the dir nor the files may be readable by
-    // other local users.
-    fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(stateFilePath(name), content, { encoding: 'utf8', mode: 0o600 });
+    // other local users. `mode` only applies at CREATION time, so a
+    // pre-existing permissive dir/file from an upgraded install must be
+    // re-tightened with an explicit chmod.
+    const dir = stateDir();
+    const target = stateFilePath(name);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(target, content, { encoding: 'utf8', mode: 0o600 });
+    tightenPermissions(target, dir);
     return true;
   } catch (error) {
     console.error(`Error writing state file ${stateFilePath(name)}: ${error.message}`);
     return false;
   }
+}
+
+/**
+ * chmod 0600 file / 0700 dir. Separate from the `mode` options above
+ * because those only take effect when Node itself creates the path — an
+ * existing file with 0644 keeps its permissions through writeFileSync,
+ * leaving credential-bearing state readable by other local users
+ * (PR #9 review: upgraded installs must not keep loose permissions).
+ */
+function tightenPermissions(file: string, dir: string = stateDir()): void {
+  fs.chmodSync(dir, 0o700);
+  fs.chmodSync(file, 0o600);
 }
