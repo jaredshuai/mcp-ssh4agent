@@ -443,7 +443,8 @@ export async function interactive_mode(): Promise<void> {
       // Quick Connect
       const sel = await select_server_menu('Quick Connect');
       if (sel !== null) {
-        print_info(`Connecting to ${sel}...`);
+        // No "Connecting to..." here — cmd_ssh (via spawnInteractiveSsh)
+        // already prints it once.
         cmd_ssh(sel);
       }
     } else if (choice === '3') {
