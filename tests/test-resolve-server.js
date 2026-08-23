@@ -129,6 +129,19 @@ test('resolveServerName keeps ambiguity detection', () => {
   assertTrue(threw, 'ambiguous partial match should throw');
 });
 
+// ── cased alias targets (PR #9) ───────────────────────────────────────────────
+
+test('cased alias target resolves to the lowercased config key', () => {
+  // Config keys are lowercased on load; an alias stored as `web -> Prod-Web`
+  // must resolve to `prod-web` or the config lookup misses and a live
+  // server is misreported as a stale alias.
+  const aliases = { web: 'Prod-Web' };
+  const servers = { 'prod-web': { name: 'prod-web', host: '10.0.0.3' } };
+  const resolved = resolveServer('web', servers, aliases);
+  assertEqual(resolved.name, 'prod-web', 'alias target must be lowercased');
+  assertEqual(resolved.config.host, '10.0.0.3', 'config lookup must succeed through the alias');
+});
+
 // ── summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${YELLOW}resolveServer tests: ${passedTests} passed, ${failedTests} failed${NC}\n`);

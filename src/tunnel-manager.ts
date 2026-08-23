@@ -42,8 +42,10 @@ export interface TunnelableConnection {
     event: 'tcp connection',
     listener: (info: TcpConnectionInfo, accept: () => any) => void
   ): unknown;
-  /** Detach a previously-registered listener (tunnel teardown). Optional. */
-  removeListener?(
+  /** Detach a previously-registered listener (tunnel teardown /
+   * re-registration on reconnect). MANDATORY: an adapter without it cannot
+   * stop a closed tunnel from receiving later 'tcp connection' events. */
+  removeListener(
     event: 'tcp connection',
     listener: (info: TcpConnectionInfo, accept: () => any) => void
   ): unknown;
@@ -274,7 +276,15 @@ class SSHTunnel {
     });
     await forwarded;
 
-    // Handle incoming connections from remote (handler stored for teardown)
+    // Handle incoming connections from remote (handler stored for teardown).
+    // A reconnect runs start() → here again on the SAME emitter: detach the
+    // handler a previous run registered first, or listeners accumulate and
+    // every forwarded connection is dispatched (and accept()ed) once per
+    // stale handler — close() could only ever detach the latest one
+    // (PR #9 review).
+    if (this.tcpHandler) {
+      this.ssh.removeListener('tcp connection', this.tcpHandler);
+    }
     this.tcpHandler = (info, accept) => {
       if (info.destPort !== remotePort) return;
 
@@ -487,14 +497,12 @@ class SSHTunnel {
 
     // Cancel remote forwarding if needed: detach the handler FIRST so a
     // shared connection never dispatches later 'tcp connection' events to
-    // this dead tunnel, then unforward.
+    // this dead tunnel, then unforward. removeListener is mandatory on
+    // TunnelableConnection — a silent skip would leave a closed tunnel
+    // live on the emitter.
     if (this.type === TUNNEL_TYPES.REMOTE) {
       if (this.tcpHandler) {
-        try {
-          this.ssh.removeListener?.('tcp connection', this.tcpHandler);
-        } catch {
-          /* optional capability */
-        }
+        this.ssh.removeListener('tcp connection', this.tcpHandler);
         this.tcpHandler = null;
       }
       this.ssh.unforwardIn(this.config.remoteHost, this.config.remotePort);

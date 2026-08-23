@@ -8,7 +8,7 @@
 
 import './lib/isolated-home.js'; // must precede src imports: isolates SSH4AGENT_HOME
 import assert from 'assert';
-import { ConnectionPool } from '../src/connection-pool.ts';
+import { ConnectionPool, execCommandWithTimeout } from '../src/connection-pool.ts';
 
 let passed = 0;
 function ok(label) {
@@ -241,7 +241,7 @@ async function main() {
   {
     const created = [];
     /** @type {(v?: undefined) => void} */
-    let releaseConnect = () => {};
+    let releaseConnect = () => undefined;
     const gate = new Promise((resolve) => {
       releaseConnect = resolve;
     });
@@ -289,6 +289,67 @@ async function main() {
     assert.strictEqual(created[0].disposed, true, 'failed client disposed, not leaked');
     assert.strictEqual(pool.size, 0);
     ok('failed connection setup disposes the SSH client before rethrowing');
+  }
+
+  // ── a post-connect hook failure clears the pooled entry (PR #9) ────────
+  {
+    const created = [];
+    const pool = makePool({ 'pool-hook-1': { host: '10.7.0.1' } }, created, {
+      executeHook: async (event) => {
+        if (event === 'post-connect') throw new Error('hook exploded');
+      },
+    });
+    await assert.rejects(() => pool.get('pool-hook-1'), /hook exploded/);
+    assert.strictEqual(created[0].disposed, true, 'client disposed after hook failure');
+    assert.strictEqual(pool.size, 0, 'no dead entry left in the pool');
+    assert.strictEqual((await pool.status()).servers.length, 0, 'bookkeeping fully cleared');
+    ok('post-connect hook failure routes through close() — no dead pooled entry');
+  }
+
+  // ── disposeAll during an in-flight connect cannot resurrect the pool ───
+  {
+    const created = [];
+    /** @type {(v?: undefined) => void} */
+    let releaseConnect = () => undefined;
+    const gate = new Promise((resolve) => {
+      releaseConnect = resolve;
+    });
+    const pool = new ConnectionPool({
+      loadServers: async () => ({ 'pool-shut-1': { host: '10.6.0.1' } }),
+      createConnection: () => {
+        const conn = makeFakeConn();
+        conn.connect = async () => {
+          await gate; // hold the dial open across the disposeAll below
+        };
+        created.push(conn);
+        return conn;
+      },
+    });
+    const pending = pool.get('pool-shut-1');
+    await new Promise((resolve) => setImmediate(resolve));
+    pool.disposeAll(); // shutdown while the dial is still in flight
+    releaseConnect();
+    await assert.rejects(() => pending, /Failed to connect to pool-shut-1/);
+    assert.strictEqual(created[0].disposed, true, 'in-flight client disposed after disposal');
+    assert.strictEqual(pool.size, 0, 'a resolved attempt must not re-populate the pool');
+    await assert.rejects(() => pool.get('pool-shut-1'), /disposed/);
+    ok('disposeAll during an in-flight connect rejects it and keeps the pool empty');
+  }
+
+  // ── a timed-out Windows command evicts the connection (PR #9) ──────────
+  {
+    const created = [];
+    const pool = makePool({ 'pool-win-1': { host: '10.5.0.1', platform: 'windows' } }, created);
+    const conn = await pool.get('pool-win-1');
+    conn.execCommand = async () => {
+      throw new Error('Command timeout after 5000ms');
+    };
+    await assert.rejects(() =>
+      execCommandWithTimeout(pool, conn, 'Get-Date', { platform: 'windows' }, 5000)
+    );
+    assert.strictEqual(pool.size, 0, 'timed-out Windows command must evict the connection');
+    assert.strictEqual(conn.disposed, true, 'evicted connection disposed');
+    ok('timed-out Windows command evicts the pooled connection like the POSIX path');
   }
 
   console.log(`\n✅ connection pool tests passed (${passed} checks)`);

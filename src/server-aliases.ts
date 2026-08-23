@@ -39,9 +39,12 @@ function saveAliases(aliases) {
 export function resolveServerName(nameOrAlias, servers, aliasesOverride?) {
   const aliases = aliasesOverride ?? loadAliases();
 
-  // Check if it's an alias
+  // Check if it's an alias. The target is lowercased because it names a
+  // server, and config keys are lowercased on load: returning `Prod-Web`
+  // verbatim makes every later `servers[name]` lookup miss and a live
+  // server is misreported as a stale alias (PR #9 review).
   if (aliases[nameOrAlias]) {
-    return aliases[nameOrAlias];
+    return aliases[nameOrAlias].toLowerCase();
   }
 
   // Check if it's a direct server name

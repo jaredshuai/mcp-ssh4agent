@@ -64,6 +64,11 @@ function makeFakeConnection() {
       assert.strictEqual(event, 'tcp connection', 'tunnels only subscribe to tcp connection');
       state.tcpHandlers.push(listener);
     },
+    removeListener(event, listener) {
+      assert.strictEqual(event, 'tcp connection', 'tunnels only detach tcp connection');
+      const i = state.tcpHandlers.indexOf(listener);
+      if (i !== -1) state.tcpHandlers.splice(i, 1);
+    },
     /** Test hook: simulate the remote side opening a connection. */
     emitTcpConnection(info) {
       const socket = new PassThrough();
@@ -139,6 +144,21 @@ async function main() {
   remoteSocket.destroy();
   ok('connections for a foreign remote port are ignored');
 
+  // ── reconnect must not accumulate handlers ──────────────────────────────
+  // reconnect() re-runs start() → startRemoteForwarding() on the SAME
+  // emitter; the previous 'tcp connection' handler must be detached or
+  // every forwarded connection is dispatched once per stale handler.
+  assert.strictEqual(state.tcpHandlers.length, 1, 'one handler after initial start');
+  const reconnected = await tunnel.reconnect();
+  assert.strictEqual(reconnected, true, 'reconnect succeeds');
+  assert.strictEqual(state.forwardInCalls.length, 2, 'reconnect re-requests forwardIn');
+  assert.strictEqual(
+    state.tcpHandlers.length,
+    1,
+    'reconnect detaches the stale handler instead of stacking listeners'
+  );
+  ok('reconnect re-registers exactly one tcp connection handler');
+
   // ── teardown unforwards ──────────────────────────────────────────────────
   const tunnelId = tunnel.id;
   closeTunnel(tunnelId);
@@ -151,6 +171,11 @@ async function main() {
     remoteAddr: REMOTE.host,
     remotePort: REMOTE.port,
   });
+  assert.strictEqual(
+    state.tcpHandlers.length,
+    0,
+    'closing a remote tunnel must detach its tcp connection handler'
+  );
   assert.strictEqual(listTunnels().length, 0, 'closed tunnel leaves the registry');
   ok('closeTunnel unforwards the remote port and deregisters the tunnel');
 
@@ -160,7 +185,9 @@ async function main() {
     forwardIn(remoteAddr, remotePort, callback) {
       callback(new Error('administratively prohibited'));
     },
-    on() {},
+    on() {
+      /* no-op: this fake never receives forwarded connections */
+    },
   };
   await assert.rejects(
     () =>

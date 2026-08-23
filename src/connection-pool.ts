@@ -80,6 +80,8 @@ export class ConnectionPool {
   #jumpDeps = new Map<string, string>();
   /** In-flight connection attempts, keyed by canonical name. */
   #pending = new Map<string, Promise<PoolConnection>>();
+  /** Set by disposeAll() — after this, no connection may enter the pool. */
+  #disposed = false;
 
   constructor(options: ConnectionPoolOptions) {
     this.#options = options;
@@ -99,6 +101,9 @@ export class ConnectionPool {
    * dead ones are replaced transparently.
    */
   async get(serverName: string): Promise<PoolConnection> {
+    if (this.#disposed) {
+      throw new Error('Connection pool has been disposed');
+    }
     const servers = await this.#options.loadServers();
 
     await Promise.resolve(this.#options.executeHook?.('pre-connect', { server: serverName }));
@@ -183,6 +188,13 @@ export class ConnectionPool {
         await ssh.connect();
       }
 
+      // disposeAll() may have run while this attempt was in flight — the
+      // pool must not resurrect a connection after shutdown. Throwing here
+      // routes to the catch below, which disposes the client.
+      if (this.#disposed) {
+        throw new Error('pool disposed during connect');
+      }
+
       this.#connections.set(name, ssh);
       this.#timestamps.set(name, Date.now());
       this.#setupKeepalive(name, ssh);
@@ -199,13 +211,19 @@ export class ConnectionPool {
       return ssh;
     } catch (error) {
       logger.logConnection(serverName, 'failed', { error: error.message });
-      // Never leak a half-built connection: dispose the SSH client (which
-      // also tears down its ProxyCommand socket / jump stream) before the
-      // hooks and rethrow.
-      try {
-        ssh.dispose();
-      } catch {
-        /* best-effort */
+      // Never leak a half-built connection. Failures BEFORE pooling need a
+      // manual dispose (which also tears down the ProxyCommand socket /
+      // jump stream); failures AFTER pooling (e.g. the post-connect hook)
+      // must also clear the map entry, timestamp and keepalive — close()
+      // is the single guardian of that cleanup invariant.
+      if (this.#connections.get(name) === ssh) {
+        this.close(name);
+      } else {
+        try {
+          ssh.dispose();
+        } catch {
+          /* best-effort */
+        }
       }
       await Promise.resolve(
         this.#options.executeHook?.('on-error', {
@@ -367,6 +385,11 @@ export class ConnectionPool {
 
   /** Close everything (shutdown path). */
   disposeAll(): void {
+    this.#disposed = true;
+    // Drop in-flight attempts from the registry: #connect re-checks
+    // #disposed once its dial resolves, disposes the client and rejects —
+    // a connection must never re-populate the pool after disposal.
+    this.#pending.clear();
     for (const [name, ssh] of this.#connections) {
       try {
         ssh.dispose();
@@ -451,11 +474,21 @@ export async function execCommandWithTimeout(
     const b64 = utf16le.toString('base64');
     // -OutputFormat Text prevents stderr/info streams from being CLIXML-encoded
     const wrappedCommand = `powershell -NoProfile -OutputFormat Text -EncodedCommand ${b64}`;
-    return ssh.execCommand(wrappedCommand, {
-      ...otherOptions,
-      execOptions: { ...(otherOptions.execOptions || {}) },
-      timeout: timeoutMs,
-    });
+    try {
+      return await ssh.execCommand(wrappedCommand, {
+        ...otherOptions,
+        execOptions: { ...(otherOptions.execOptions || {}) },
+        timeout: timeoutMs,
+      });
+    } catch (error) {
+      // Same eviction as the POSIX timeout path below: a timed-out
+      // command leaves the connection unusable, so it must not stay
+      // pooled (PR #9 review).
+      if (error.message.includes('timeout')) {
+        pool.invalidate(ssh);
+      }
+      throw error;
+    }
   }
 
   // For commands that might hang, use the system's timeout command if available.
