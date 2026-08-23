@@ -121,20 +121,11 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
   const {
     register: registerToolConditional,
     getConnection,
-    closeConnection,
     execCommandWithTimeout,
     loadServerConfig,
     resolveServer,
-    getServerConfig,
     applyServerPolicy,
-    auditOk,
-    isConnectionValid,
-    cleanupOldConnections,
-    connections,
-    connectionTimestamps,
-    keepaliveIntervals,
-    CONNECTION_TIMEOUT,
-    KEEPALIVE_INTERVAL,
+    pool,
   } = ctx;
 
   registerToolConditional(
@@ -1051,27 +1042,13 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       try {
         switch (action) {
           case 'status': {
-            const activeConnections = [];
-            const now = Date.now();
-
-            for (const [serverName, ssh] of connections.entries()) {
-              const timestamp = connectionTimestamps.get(serverName);
-              const ageMinutes = Math.floor((now - timestamp) / 1000 / 60);
-              const isValid = await isConnectionValid(ssh);
-
-              activeConnections.push({
-                server: serverName,
-                status: isValid ? '✅ Active' : '❌ Dead',
-                age: `${ageMinutes} minutes`,
-                keepalive: keepaliveIntervals.has(serverName) ? '✅' : '❌',
-              });
-            }
-
+            const status = await pool.status();
             const statusInfo =
-              activeConnections.length > 0
-                ? activeConnections
+              status.servers.length > 0
+                ? status.servers
                     .map(
-                      (c) => `  ${c.server}: ${c.status} (age: ${c.age}, keepalive: ${c.keepalive})`
+                      (c) =>
+                        `  ${c.server}: ${c.alive ? '✅ Active' : '❌ Dead'} (age: ${Math.floor(c.idleMs / 1000 / 60)} minutes, keepalive: ${c.keepalive ? '✅' : '❌'})`
                     )
                     .join('\n')
                 : '  No active connections';
@@ -1080,7 +1057,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               content: [
                 {
                   type: 'text',
-                  text: `🔌 Connection Pool Status:\n${statusInfo}\n\nSettings:\n  Timeout: ${CONNECTION_TIMEOUT / 1000 / 60} minutes\n  Keepalive: Every ${KEEPALIVE_INTERVAL / 1000 / 60} minutes`,
+                  text: `🔌 Connection Pool Status:\n${statusInfo}\n\nSettings:\n  Timeout: ${status.settings.timeoutMinutes} minutes\n  Keepalive: Every ${status.settings.keepaliveMinutes} minutes`,
                 },
               ],
             };
@@ -1091,12 +1068,11 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               throw new Error('Server name is required for reconnect action');
             }
 
-            const normalizedName = server.toLowerCase();
-            if (connections.has(normalizedName)) {
-              closeConnection(normalizedName);
+            if (pool.has(server)) {
+              pool.close(server);
             }
 
-            await getConnection(server);
+            await pool.get(server);
             return {
               content: [
                 {
@@ -1112,7 +1088,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               throw new Error('Server name is required for disconnect action');
             }
 
-            closeConnection(server);
+            pool.close(server);
             return {
               content: [
                 {
@@ -1124,23 +1100,12 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           }
 
           case 'cleanup': {
-            const oldCount = connections.size;
-            cleanupOldConnections();
-
-            // Also check and remove dead connections
-            for (const [serverName, ssh] of connections.entries()) {
-              const isValid = await isConnectionValid(ssh);
-              if (!isValid) {
-                closeConnection(serverName);
-              }
-            }
-
-            const cleaned = oldCount - connections.size;
+            const cleaned = await pool.sweep();
             return {
               content: [
                 {
                   type: 'text',
-                  text: `🧹 Cleanup complete: ${cleaned} connections closed, ${connections.size} active`,
+                  text: `🧹 Cleanup complete: ${cleaned} connections closed, ${pool.size} active`,
                 },
               ],
             };

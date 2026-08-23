@@ -121,20 +121,11 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
   const {
     register: registerToolConditional,
     getConnection,
-    closeConnection,
     execCommandWithTimeout,
     loadServerConfig,
     resolveServer,
-    getServerConfig,
     applyServerPolicy,
     auditOk,
-    isConnectionValid,
-    cleanupOldConnections,
-    connections,
-    connectionTimestamps,
-    keepaliveIntervals,
-    CONNECTION_TIMEOUT,
-    KEEPALIVE_INTERVAL,
   } = ctx;
 
   registerToolConditional(

@@ -15,10 +15,16 @@
  * args (mirrors the original registerToolConditional JSDoc that lived in
  * src/index.js before the split). The infrastructure members are loosely
  * typed; their definition sites in src/index.ts carry the real types.
+ *
+ * Pooling state is reachable ONLY through the ConnectionPool instance
+ * (issue #3) — no raw Maps leak through this interface anymore. Tools take
+ * just the members they use; nobody destructures a 15-line checklist.
  */
 export interface ToolContext {
   /** Register a tool unless disabled in tool config. */
   register: (toolName: string, schema: any, handler: (args: any, extra?: any) => any) => void;
+  /** The connection pool: get/close/invalidate/status/sweep/... (src/connection-pool.ts). */
+  pool: any;
   getConnection: any;
   closeConnection: any;
   execCommandWithTimeout: any;
@@ -28,13 +34,7 @@ export interface ToolContext {
   getServerConfig: any;
   applyServerPolicy: any;
   auditOk: any;
-  isConnectionValid: any;
   cleanupOldConnections: any;
-  connections: any;
-  connectionTimestamps: any;
-  keepaliveIntervals: any;
-  CONNECTION_TIMEOUT: number;
-  KEEPALIVE_INTERVAL: number;
 }
 
 /**

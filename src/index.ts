@@ -9,7 +9,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { ServerConfigManager } from './server-config-manager.ts';
-import { resolveServer, listAliases } from './server-aliases.ts';
+import { resolveServer } from './server-aliases.ts';
 import { formatJSONResponse } from './config.ts';
 import { initializeHooks, executeHook } from './hooks-system.ts';
 import { getActiveProfileName } from './profile-loader.ts';
@@ -18,6 +18,7 @@ import { setServerConfigProvider } from './server-groups.ts';
 import { loadToolConfig, isToolEnabled } from './tool-config-manager.ts';
 import { evaluatePolicy } from './policy.ts';
 import { auditLog } from './audit.ts';
+import { ConnectionPool, execCommandWithTimeout } from './connection-pool.ts';
 import type { ToolContext } from './tool-registry.ts';
 import { registerCoreTools } from './tools/core.ts';
 import { registerSessionsTools } from './tools/sessions.ts';
@@ -118,33 +119,28 @@ try {
   logger.info('Using default configuration (all tools enabled)');
 }
 
-// Map to store active connections
-const connections = new Map();
-
-// Map to store connection timestamps for timeout management
-const connectionTimestamps = new Map();
-
-// Connection timeout in milliseconds (30 minutes)
-const CONNECTION_TIMEOUT = 30 * 60 * 1000;
-
-// Keepalive interval in milliseconds (5 minutes)
-const KEEPALIVE_INTERVAL = 5 * 60 * 1000;
-
-// Map to store keepalive intervals
-const keepaliveIntervals = new Map();
-
-// Extra grace window so the remote `timeout` wrapper can exit cleanly
-// and return its timeout exit code before the local SSH exec timeout fires.
-const WRAPPED_COMMAND_TIMEOUT_GRACE_MS = 5000;
-
-// Map to track proxy jump dependencies (target -> jump server)
-const jumpDependencies = new Map();
-
 // Load server configuration (backward compatibility wrapper)
 async function loadServerConfig() {
   // This function is kept for backward compatibility
   return serverConfigManager.getServers();
 }
+
+// ── Connection pool (deep module — src/connection-pool.ts) ────────────────────
+// All pooling concerns (reuse, keepalive, jump chains, ProxyCommand, idle
+// cleanup, timeout execution) live behind four operations plus lifecycle
+// helpers; the raw Maps are private to the pool (issue #3).
+
+const pool = new ConnectionPool({
+  loadServers: () => loadServerConfig(),
+  createConnection: (serverConfig) => new SSHManager(serverConfig),
+  executeHook,
+});
+
+const getConnection = (serverName: string) => pool.get(serverName);
+const closeConnection = (serverName: string) => pool.close(serverName);
+const execWithTimeout = (ssh: any, command: string, options: any, timeoutMs: number) =>
+  execCommandWithTimeout(pool, ssh, command, options, timeoutMs);
+const cleanupOldConnections = () => pool.cleanupAged();
 
 // ── Per-server security policy plumbing (v3.5.0+) ──────────────────────────────
 //
@@ -202,353 +198,6 @@ async function auditOk(serverName, toolName, args, executionResult) {
   auditLog(serverConfig, toolName, args, { allowed: true }, executionResult);
 }
 
-// Execute command with timeout - using child_process timeout for real kill
-async function execCommandWithTimeout(
-  ssh: any,
-  command: string,
-  options: {
-    rawCommand?: boolean;
-    platform?: string;
-    execOptions?: Record<string, any>;
-    [key: string]: any;
-  } = {},
-  timeoutMs = 30000
-) {
-  // Pass through rawCommand and platform if specified
-  const { rawCommand, platform = 'linux', ...otherOptions } = options;
-
-  // Windows targets: encode the command as PowerShell -EncodedCommand (UTF-16
-  // LE base64). This is the standard approach (used by Ansible / Chef / Puppet)
-  // because cmd.exe's quoting rules are inconsistent across versions and break
-  // commands containing $vars, $(...) subexpressions, double-quoted strings,
-  // pipes, etc. Base64 sidesteps all escape issues entirely.
-  if (platform === 'windows' && !rawCommand) {
-    // Suppress progress (avoids CLIXML sentinels in stderr) + force UTF-8 stdout
-    const prelude =
-      "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;";
-    const fullPSCommand = `${prelude} ${command}`;
-    const utf16le = Buffer.from(fullPSCommand, 'utf16le');
-    const b64 = utf16le.toString('base64');
-    // -OutputFormat Text prevents stderr/info streams from being CLIXML-encoded
-    const wrappedCommand = `powershell -NoProfile -OutputFormat Text -EncodedCommand ${b64}`;
-    return ssh.execCommand(wrappedCommand, {
-      ...otherOptions,
-      execOptions: { ...(otherOptions.execOptions || {}) },
-    });
-  }
-
-  // For commands that might hang, use the system's timeout command if available.
-  // Note: the `!isWindows` guard that existed here previously is intentionally
-  // removed. Windows targets return early above (the `if (platform === 'windows'
-  // && !rawCommand)` block), so by the time execution reaches this line it is
-  // guaranteed to be a Linux/macOS target. The behaviour is identical; the old
-  // guard was made redundant by the early-return path.
-  const useSystemTimeout = timeoutMs > 0 && timeoutMs < 300000 && !rawCommand; // Max 5 minutes, not for raw commands
-
-  if (useSystemTimeout) {
-    // Wrap command with timeout command (works on Linux/Mac)
-    const timeoutSeconds = Math.ceil(timeoutMs / 1000);
-    const wrappedCommand = `timeout ${timeoutSeconds} sh -c '${command.replace(/'/g, "'\\''")}'`;
-
-    try {
-      const result = await ssh.execCommand(wrappedCommand, {
-        ...otherOptions,
-        timeout: timeoutMs + WRAPPED_COMMAND_TIMEOUT_GRACE_MS,
-      });
-
-      // Check if timeout occurred (exit code 124 on Linux, 124 or 143 on Mac)
-      if (result.code === 124 || result.code === 143) {
-        throw new Error(`Command timeout after ${timeoutMs}ms: ${command.substring(0, 100)}...`);
-      }
-
-      return result;
-    } catch (error) {
-      // If timeout occurred, remove connection from pool
-      if (error.message.includes('timeout')) {
-        invalidateConnection(ssh);
-      }
-      throw error;
-    }
-  } else {
-    // No timeout or very long timeout, execute normally
-    return ssh.execCommand(command, { ...options, timeout: timeoutMs });
-  }
-}
-
-// Check if a connection is still valid
-async function isConnectionValid(ssh) {
-  try {
-    return await ssh.ping();
-  } catch (error) {
-    logger.debug('Connection validation failed', { error: error.message });
-    return false;
-  }
-}
-
-// Setup keepalive for a connection
-function setupKeepalive(serverName, ssh) {
-  // Clear existing keepalive if any
-  if (keepaliveIntervals.has(serverName)) {
-    clearInterval(keepaliveIntervals.get(serverName));
-  }
-
-  // Set up new keepalive interval
-  const interval = setInterval(async () => {
-    try {
-      const isValid = await isConnectionValid(ssh);
-      if (!isValid) {
-        logger.warn(`Connection to ${serverName} lost, will reconnect on next use`);
-        closeConnection(serverName);
-      } else {
-        // Update timestamp on successful keepalive
-        connectionTimestamps.set(serverName, Date.now());
-        logger.debug('Keepalive successful', { server: serverName });
-      }
-    } catch (error) {
-      logger.error(`Keepalive failed for ${serverName}`, { error: error.message });
-    }
-  }, KEEPALIVE_INTERVAL);
-
-  // Don't let the keepalive timer keep the process alive on its own. As a stdio
-  // MCP server we must exit when our transport closes; an active interval would
-  // otherwise pin the event loop and leave the process orphaned.
-  if (typeof interval.unref === 'function') interval.unref();
-
-  keepaliveIntervals.set(serverName, interval);
-}
-
-// Close a connection and clean up
-function closeConnection(serverName) {
-  const normalizedName = serverName.toLowerCase();
-
-  // Clear keepalive interval
-  if (keepaliveIntervals.has(normalizedName)) {
-    clearInterval(keepaliveIntervals.get(normalizedName));
-    keepaliveIntervals.delete(normalizedName);
-  }
-
-  // Close SSH connection
-  const ssh = connections.get(normalizedName);
-  if (ssh) {
-    ssh.dispose();
-    connections.delete(normalizedName);
-  }
-
-  // Remove timestamp
-  connectionTimestamps.delete(normalizedName);
-
-  // Clean up jump dependency tracking
-  jumpDependencies.delete(normalizedName);
-
-  logger.logConnection(serverName, 'closed');
-}
-
-// Remove a pooled connection by instance identity. Used when only the SSH
-// handle is at hand (e.g. the command running on it timed out) rather than
-// the server name it is pooled under. Delegates to closeConnection so the
-// keepalive timer, timestamp and jump-dependency records are all cleaned
-// up consistently — the inline cleanup this replaced missed jumpDependencies.
-function invalidateConnection(ssh) {
-  for (const [name, conn] of connections.entries()) {
-    if (conn === ssh) {
-      logger.warn(`Removing unhealthy connection for ${name}`);
-      closeConnection(name);
-      break;
-    }
-  }
-}
-
-// Clean up old connections
-function cleanupOldConnections() {
-  const now = Date.now();
-  for (const [serverName, timestamp] of connectionTimestamps.entries()) {
-    if (now - timestamp > CONNECTION_TIMEOUT) {
-      logger.info(`Connection to ${serverName} timed out, closing`, {
-        timeout: CONNECTION_TIMEOUT,
-      });
-      closeConnection(serverName);
-    }
-  }
-}
-
-// Create a socket from a proxy command (e.g., "ncat --proxy 127.0.0.1:1080 --proxy-type socks5 %h %p")
-// The command is executed through the system shell, matching OpenSSH ProxyCommand semantics,
-// so quoted arguments and shell metacharacters work as users expect.
-async function createProxyCommandSocket(proxyCommand, host, port) {
-  const { spawn } = await import('child_process');
-  const { Duplex } = await import('stream');
-
-  const cmd = proxyCommand.replace(/%h/g, host).replace(/%p/g, port.toString());
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, {
-      shell: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    // Cast: Node accepts a {readable, writable} pair here, but the bundled
-    // types only model the stream/iterable overloads.
-    const socket = Duplex.from({
-      readable: child.stdout,
-      writable: child.stdin,
-      allowHalfOpen: false,
-    } as any);
-
-    // Forward proxy stderr to the MCP server's stderr for debugging
-    child.stderr.on('data', (chunk) => {
-      process.stderr.write(`[proxy-command] ${chunk}`);
-    });
-
-    let settled = false;
-    const settle = (fn, arg) => {
-      if (settled) return;
-      settled = true;
-      fn(arg);
-    };
-
-    socket.on('close', () => {
-      if (!child.killed) child.kill();
-    });
-
-    child.on('error', (err) => settle(reject, err));
-    child.on('spawn', () => settle(resolve, socket));
-    child.on('exit', (code, signal) => {
-      // Only surface unexpected exits — a kill() after a successful connection is normal.
-      if (!settled && code !== 0) {
-        settle(
-          reject,
-          new Error(`Proxy command exited with code ${code}${signal ? ` (${signal})` : ''}`)
-        );
-      } else if (settled && code !== 0 && !signal && !socket.destroyed) {
-        socket.destroy(new Error(`Proxy command exited with code ${code}`));
-      }
-    });
-  });
-}
-
-// Get or create SSH connection with reconnection support
-async function getConnection(serverName) {
-  const servers = await loadServerConfig();
-
-  // Execute pre-connect hook
-  await executeHook('pre-connect', { server: serverName });
-
-  // Resolve through the single resolution interface (alias → name → prefix →
-  // domain), so connections and policy always see the same canonical server.
-  const resolved = resolveServer(serverName, servers);
-
-  if (!resolved) {
-    const availableServers = Object.keys(servers);
-    const aliases = listAliases();
-    const aliasInfo =
-      aliases.length > 0
-        ? ` Aliases: ${aliases.map((a) => `${a.alias}->${a.target}`).join(', ')}`
-        : '';
-    throw new Error(
-      `Server "${serverName}" not found. Available servers: ${availableServers.join(', ') || 'none'}.${aliasInfo}`
-    );
-  }
-
-  const normalizedName = resolved.name;
-
-  // Check if we have an existing connection
-  if (connections.has(normalizedName)) {
-    const existingSSH = connections.get(normalizedName);
-
-    // Verify the connection is still valid
-    const isValid = await isConnectionValid(existingSSH);
-
-    if (isValid) {
-      // Update timestamp and return existing connection
-      connectionTimestamps.set(normalizedName, Date.now());
-      return existingSSH;
-    } else {
-      // Connection is dead, remove it
-      logger.info(`Connection to ${serverName} lost, reconnecting`);
-      closeConnection(normalizedName);
-    }
-  }
-
-  // Create new connection
-  const serverConfig = resolved.config;
-  const ssh = new SSHManager(serverConfig);
-
-  try {
-    if (serverConfig.proxyJump) {
-      const jumpServerName = serverConfig.proxyJump.toLowerCase();
-
-      // Validate jump server exists
-      if (!servers[jumpServerName]) {
-        throw new Error(
-          `Proxy jump server "${serverConfig.proxyJump}" not found. ` +
-            `Available servers: ${Object.keys(servers).join(', ')}`
-        );
-      }
-
-      // Detect circular proxy jumps
-      const visited = new Set([normalizedName]);
-      let current = jumpServerName;
-      while (current) {
-        if (visited.has(current)) {
-          throw new Error(`Circular proxy jump detected: ${[...visited, current].join(' -> ')}`);
-        }
-        visited.add(current);
-        current = servers[current]?.proxyJump?.toLowerCase() || null;
-      }
-
-      // Connect to jump server (recursive — handles chained jumps)
-      const jumpSSH = await getConnection(serverConfig.proxyJump);
-
-      // Create forwarded stream through the jump server
-      const stream = await jumpSSH.forwardOut(
-        '127.0.0.1',
-        0,
-        serverConfig.host,
-        serverConfig.port || 22
-      );
-
-      // Connect target through the forwarded stream
-      await ssh.connect({ sock: stream });
-      jumpDependencies.set(normalizedName, jumpServerName);
-      ssh.jumpConnection = jumpSSH;
-    } else if (serverConfig.proxyCommand) {
-      // Create socket via proxy command (e.g., SOCKS5 proxy)
-      const socket = await createProxyCommandSocket(
-        serverConfig.proxyCommand,
-        serverConfig.host,
-        serverConfig.port || 22
-      );
-      await ssh.connect({ sock: socket });
-    } else {
-      await ssh.connect();
-    }
-
-    connections.set(normalizedName, ssh);
-    connectionTimestamps.set(normalizedName, Date.now());
-
-    // Setup keepalive
-    setupKeepalive(normalizedName, ssh);
-
-    logger.logConnection(serverName, 'established', {
-      host: serverConfig.host,
-      port: serverConfig.port,
-      method: serverConfig.password ? 'password' : 'key',
-      proxyJump: serverConfig.proxyJump || null,
-      proxyCommand: serverConfig.proxyCommand ? '<set>' : null,
-    });
-
-    // Execute post-connect hook
-    await executeHook('post-connect', { server: serverName });
-  } catch (error) {
-    logger.logConnection(serverName, 'failed', { error: error.message });
-    // Execute error hook
-    await executeHook('on-error', { server: serverName, error: error.message });
-    throw new Error(`Failed to connect to ${serverName}: ${error.message}`);
-  }
-
-  return connections.get(normalizedName);
-}
-
 // Server version reported to MCP clients — derived from package.json so it
 // always reflects the real build instead of a literal that drifts across
 // releases. Resolves both in-repo (src/../package.json) and installed, since
@@ -598,21 +247,16 @@ function registerToolConditional(
 // the tool files free of circular dependencies on this entry point.
 const toolContext: ToolContext = {
   register: registerToolConditional,
+  pool,
   getConnection,
   closeConnection,
-  execCommandWithTimeout,
+  execCommandWithTimeout: execWithTimeout,
   loadServerConfig,
   resolveServer: resolveServerEntry,
   getServerConfig,
   applyServerPolicy,
   auditOk,
-  isConnectionValid,
   cleanupOldConnections,
-  connections,
-  connectionTimestamps,
-  keepaliveIntervals,
-  CONNECTION_TIMEOUT,
-  KEEPALIVE_INTERVAL,
 };
 
 registerCoreTools(toolContext);
@@ -627,14 +271,7 @@ function shutdown(reason) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.error(`\n🔌 Closing SSH connections (${reason})...`);
-  for (const [name, ssh] of connections) {
-    try {
-      ssh.dispose();
-      console.error(`  Closed connection to ${name}`);
-    } catch (error) {
-      console.error(`  Error closing ${name}: ${error.message}`);
-    }
-  }
+  pool.disposeAll();
   // Best-effort flush of any final stdout the host may still read, but never
   // hang if it has already stopped reading: a short unref'd timer forces exit
   // regardless, so this can't reintroduce a stuck process.

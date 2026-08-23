@@ -118,23 +118,7 @@ import {
 } from '../database-manager.ts';
 
 export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolContext) {
-  const {
-    register: registerToolConditional,
-    getConnection,
-    closeConnection,
-    execCommandWithTimeout,
-    loadServerConfig,
-    getServerConfig,
-    applyServerPolicy,
-    auditOk,
-    isConnectionValid,
-    cleanupOldConnections,
-    connections,
-    connectionTimestamps,
-    keepaliveIntervals,
-    CONNECTION_TIMEOUT,
-    KEEPALIVE_INTERVAL,
-  } = ctx;
+  const { register: registerToolConditional, getConnection, applyServerPolicy } = ctx;
 
   registerToolConditional(
     'ssh_session_start',

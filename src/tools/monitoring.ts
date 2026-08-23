@@ -121,19 +121,9 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
   const {
     register: registerToolConditional,
     getConnection,
-    closeConnection,
     execCommandWithTimeout,
     loadServerConfig,
-    getServerConfig,
     applyServerPolicy,
-    auditOk,
-    isConnectionValid,
-    cleanupOldConnections,
-    connections,
-    connectionTimestamps,
-    keepaliveIntervals,
-    CONNECTION_TIMEOUT,
-    KEEPALIVE_INTERVAL,
   } = ctx;
 
   registerToolConditional(
