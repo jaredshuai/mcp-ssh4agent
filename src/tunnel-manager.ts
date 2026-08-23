@@ -11,6 +11,44 @@ import { logger } from './logger.ts';
 const tunnels = new Map();
 
 /**
+ * The seam between SSHTunnel and whatever SSH connection drives it.
+ *
+ * Signatures follow ssh2's Client (`forwardIn` / `unforwardIn` /
+ * 'tcp connection'), not invented: before this interface existed the field
+ * was `any`, so the remote-tunnel path called `forwardIn` on the SSHManager
+ * wrapper — which never implemented it — and crashed at runtime with
+ * `TypeError: forwardIn is not a function` (issue #2).
+ *
+ * Two implementations make the seam real: SSHManager (forwards to its
+ * internal ssh2 Client) and the in-memory fake used by
+ * tests/test-tunnel-remote.js.
+ */
+export interface TcpConnectionInfo {
+  destIP: string;
+  destPort: number;
+  srcIP: string;
+  srcPort: number;
+}
+
+export interface TunnelableConnection {
+  /** Local/dynamic forwarding: open a channel to dstAddr:dstPort. */
+  forwardOut(srcAddr: string, srcPort: number, dstAddr: string, dstPort: number): Promise<any>;
+  /** Remote forwarding: ask the server to listen on remoteAddr:remotePort. */
+  forwardIn(
+    remoteAddr: string,
+    remotePort: number,
+    callback?: (err?: Error) => void
+  ): unknown;
+  /** Remove a remote forwarding request. */
+  unforwardIn(remoteAddr: string, remotePort: number): unknown;
+  /** Incoming remote-forwarded connections. */
+  on(
+    event: 'tcp connection',
+    listener: (info: TcpConnectionInfo, accept: () => any) => void
+  ): unknown;
+}
+
+/**
  * Bind a local server, rejecting when the bind fails.
  *
  * `net.Server#listen` does NOT pass an error to its callback — the callback
@@ -61,8 +99,8 @@ const TUNNEL_STATES = {
 class SSHTunnel {
   id: string;
   serverName: string;
-  // ssh2 Client; the library ships no bundled types, keep it loose.
-  ssh: any;
+  // Anything that can drive tunnels: SSHManager wrapping ssh2, or the test fake.
+  ssh: TunnelableConnection;
   type: string;
   // Tunnel config shape varies by type (local/remote/dynamic).
   config: any;
@@ -486,7 +524,7 @@ class SSHTunnel {
 /**
  * Create a new SSH tunnel
  */
-export async function createTunnel(serverName, ssh, config) {
+export async function createTunnel(serverName: string, ssh: TunnelableConnection, config: any) {
   const tunnelId = `tunnel_${Date.now()}_${randomUUID().substring(0, 8)}`;
 
   // Validate config

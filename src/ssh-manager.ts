@@ -554,6 +554,26 @@ class SSHManager {
     });
   }
 
+  // Remote-forwarding surface required by TunnelableConnection
+  // (src/tunnel-manager.ts). These forward verbatim to the ssh2 Client —
+  // before they existed, remote tunnels crashed with
+  // `TypeError: forwardIn is not a function` (issue #2).
+
+  forwardIn(remoteAddr: string, remotePort: number, callback?: (err?: Error) => void) {
+    if (!this.connected) {
+      throw new Error('Not connected to SSH server');
+    }
+    return this.client.forwardIn(remoteAddr, remotePort, callback);
+  }
+
+  unforwardIn(remoteAddr: string, remotePort: number) {
+    return this.client.unforwardIn(remoteAddr, remotePort);
+  }
+
+  on(event: string, listener: (...args: any[]) => void) {
+    return this.client.on(event, listener);
+  }
+
   async ping() {
     try {
       // Use `echo ping` WITHOUT quotes: cmd.exe echoes surrounding quotes
