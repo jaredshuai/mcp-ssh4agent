@@ -37,6 +37,7 @@
     "test:cli": "node tests/test-cli-commands.js",
     "test:resolve": "node tests/test-resolve-server.js",
     "test:tunnelremote": "node tests/test-tunnel-remote.js",
+    "test:tunnelguard": "node tests/test-tunnel-guard.js",
     "test:pool": "node tests/test-connection-pool.js",
     "test:dumpcmd": "node tests/test-dump-command-builder.js",
     "test:funnel": "node tests/test-policy-funnel.js",

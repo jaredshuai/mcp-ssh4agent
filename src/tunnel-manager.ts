@@ -51,6 +51,13 @@ export interface TunnelableConnection {
     event: 'tcp connection',
     listener: (info: TcpConnectionInfo, accept: () => any) => void
   ): unknown;
+  /**
+   * Tear the connection down. Optional because the tunnel test fakes don't
+   * need it — but every real adapter must provide it: close() disposes the
+   * connection the tunnel owns, and without this the connection leaks until
+   * process exit.
+   */
+  dispose?(): void;
 }
 
 /**
@@ -539,6 +546,21 @@ class SSHTunnel {
       this.ssh.unforwardIn(this.config.remoteHost, this.config.remotePort);
     }
 
+    // The tunnel OWNS its dedicated connection (ssh_tunnel_create dials it
+    // directly, outside the ConnectionPool) — disposing it here is the fix
+    // for the leak where a closed tunnel kept its SSH connection (and any
+    // remote forwardIn listener) alive until process exit. If tunnels ever
+    // move onto pooled/shared connections, THIS is the line to revisit.
+    // Optional-call: the TunnelableConnection seam makes dispose optional
+    // (test fakes may omit it); dispose() itself is idempotent.
+    try {
+      this.ssh.dispose?.();
+    } catch (error) {
+      logger.warn(`Error disposing connection for tunnel ${this.id}`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     tunnels.delete(this.id);
   }
 
@@ -662,6 +684,22 @@ export function closeServerTunnels(serverName) {
       tunnel.close();
       closedCount++;
     }
+  }
+
+  return closedCount;
+}
+
+/**
+ * Close every active tunnel. The shutdown path (src/index.ts) calls this
+ * BEFORE pool.disposeAll(): a remote tunnel's unforwardIn must go out over
+ * its own still-live connection, so tunnels tear down first.
+ */
+export function closeAllTunnels() {
+  let closedCount = 0;
+
+  for (const [, tunnel] of tunnels.entries()) {
+    tunnel.close();
+    closedCount++;
   }
 
   return closedCount;

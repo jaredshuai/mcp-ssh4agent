@@ -848,7 +848,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
     'ssh_tunnel_create',
     {
       description:
-        'Opens a new SSH connection to the named server and starts a port-forwarding or SOCKS proxy tunnel that keeps running until closed. The type parameter selects local forward, remote forward, or dynamic SOCKS5 proxy. localPort is always required; remoteHost and remotePort are required for local and remote types but ignored for dynamic. localHost defaults to 127.0.0.1. Returns a tunnel ID used later to close it.',
+        'Opens a new SSH connection to the named server and starts a port-forwarding or SOCKS proxy tunnel that keeps running until closed. The type parameter selects local forward, remote forward, or dynamic SOCKS5 proxy. localPort is always required; remoteHost and remotePort are required for local and remote types but ignored for dynamic. localHost defaults to 127.0.0.1. Returns a tunnel ID used later to close it. Not supported on servers reachable only through proxy_jump or proxy_command: those requests fail with an explicit error suggesting an ssh_execute-based port forward on the jump host instead.',
       inputSchema: {
         server: z.string().describe('Server name or alias'),
         type: z.enum(['local', 'remote', 'dynamic']).describe('Tunnel type'),
@@ -867,6 +867,22 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
         }
 
         const serverConfig = resolved.config;
+
+        // Tunnel connections dial directly (they own their connection), so
+        // they cannot traverse proxyJump/proxyCommand — only the
+        // ConnectionPool implements those. Fail LOUDLY instead of letting
+        // the direct dial hang on an unreachable target and time out
+        // obscurely.
+        if (serverConfig.proxyJump || serverConfig.proxyCommand) {
+          const via = serverConfig.proxyJump
+            ? `proxy_jump "${serverConfig.proxyJump}"`
+            : 'proxy_command';
+          throw new Error(
+            `Server "${resolved.name}" is reachable only through ${via}, and tunnels do not support it. ` +
+              'Run the port forward on the jump host itself via ssh_execute instead.'
+          );
+        }
+
         const ssh = new SSHManager(serverConfig);
         await ssh.connect();
 

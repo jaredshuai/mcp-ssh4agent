@@ -14,7 +14,7 @@
 import assert from 'assert';
 import net from 'net';
 import { PassThrough } from 'stream';
-import { createTunnel, closeTunnel, listTunnels } from '../src/tunnel-manager.ts';
+import { createTunnel, closeTunnel, listTunnels, closeAllTunnels } from '../src/tunnel-manager.ts';
 
 let passed = 0;
 function ok(label) {
@@ -48,6 +48,7 @@ function makeFakeConnection() {
     forwardInCalls: [],
     unforwardInCalls: [],
     tcpHandlers: [],
+    disposeCalls: 0,
   };
   const fake = {
     async forwardOut(srcAddr, srcPort, dstAddr, dstPort) {
@@ -68,6 +69,9 @@ function makeFakeConnection() {
       assert.strictEqual(event, 'tcp connection', 'tunnels only detach tcp connection');
       const i = state.tcpHandlers.indexOf(listener);
       if (i !== -1) state.tcpHandlers.splice(i, 1);
+    },
+    dispose() {
+      state.disposeCalls++;
     },
     /** Test hook: simulate the remote side opening a connection. */
     emitTcpConnection(info) {
@@ -198,7 +202,10 @@ async function main() {
     'closing a remote tunnel must detach its tcp connection handler'
   );
   assert.strictEqual(listTunnels().length, 0, 'closed tunnel leaves the registry');
-  ok('closeTunnel unforwards, detaches, and kills established remote-forward sockets');
+  assert.strictEqual(state.disposeCalls, 1, 'closing a tunnel must dispose the connection it owns');
+  ok(
+    'closeTunnel unforwards, detaches, kills established remote-forward sockets, disposes the connection'
+  );
 
   // ── forwardIn failure surfaces as a rejected createTunnel ────────────────
   const failing = {
@@ -251,6 +258,42 @@ async function main() {
     );
     closeTunnel(lt.id);
     ok('local tunnel activeConnections is exact across close/error teardown');
+  }
+
+  // ── closeAllTunnels: the shutdown path closes every tunnel (incl. dispose) ──
+  // shutdown() calls this BEFORE pool.disposeAll(): tunnels own connections
+  // the pool never sees, so without this call they leak bound local ports and
+  // remote forwardIn listeners until process exit.
+  {
+    const p1 = await freePort();
+    const p2 = await freePort();
+    const t1 = await createTunnel('fake-a', fake, {
+      type: 'local',
+      localHost: HOST,
+      localPort: p1,
+      remoteHost: '10.9.8.7',
+      remotePort: 9001,
+    });
+    const t2 = await createTunnel('fake-b', fake, {
+      type: 'local',
+      localHost: HOST,
+      localPort: p2,
+      remoteHost: '10.9.8.7',
+      remotePort: 9002,
+    });
+    assert.strictEqual(listTunnels().length, 2, 'two tunnels active before closeAllTunnels');
+    const disposedBefore = state.disposeCalls;
+    const closed = closeAllTunnels();
+    assert.strictEqual(closed, 2, 'closeAllTunnels reports every closed tunnel');
+    assert.strictEqual(listTunnels().length, 0, 'registry empty after closeAllTunnels');
+    assert.strictEqual(
+      state.disposeCalls,
+      disposedBefore + 2,
+      'closeAllTunnels disposes each tunnel connection'
+    );
+    assert.strictEqual(t1.state, 'closed', 'tunnel 1 closed');
+    assert.strictEqual(t2.state, 'closed', 'tunnel 2 closed');
+    ok('closeAllTunnels closes and disposes every tunnel (shutdown path)');
   }
 
   await closeServer(echoServer);

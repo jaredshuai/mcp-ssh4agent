@@ -19,6 +19,7 @@ import { loadToolConfig, isToolEnabled } from './tool-config-manager.ts';
 import { evaluatePolicy } from './policy.ts';
 import { auditLog } from './audit.ts';
 import { ConnectionPool, execCommandWithTimeout } from './connection-pool.ts';
+import { closeAllTunnels } from './tunnel-manager.ts';
 import { resolveEnvFilePath } from './env-path.ts';
 import type { ToolContext, ToolPolicy } from './tool-registry.ts';
 import { wrapWithPolicy } from './tool-registry.ts';
@@ -257,6 +258,16 @@ function shutdown(reason) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.error(`\n🔌 Closing SSH connections (${reason})...`);
+  // Tunnels BEFORE the pool: a remote tunnel's unforwardIn must be sent over
+  // its own still-live connection, and tunnels own connections outside the
+  // pool — disposeAll() never touched them, which leaked bound local ports
+  // and remote forwardIn listeners until process exit.
+  try {
+    const closed = closeAllTunnels();
+    if (closed > 0) console.error(`🔌 Closed ${closed} SSH tunnel(s)`);
+  } catch (error) {
+    console.error(`Warning: tunnel teardown failed: ${error?.message ?? error}`);
+  }
   pool.disposeAll();
   // Best-effort flush of any final stdout the host may still read, but never
   // hang if it has already stopped reading: a short unref'd timer forces exit
