@@ -7,9 +7,7 @@ Profiles allow you to configure command aliases and hooks for specific project t
 - `default.json` - Basic SSH operations (minimal setup)
 - `frappe.json` - Frappe/ERPNext specific commands and hooks
 - `docker.json` - Docker container management
-- `kubernetes.json` - Kubernetes cluster operations
 - `nodejs.json` - Node.js application deployment
-- `python.json` - Python application deployment
 
 ## Creating Custom Profiles
 

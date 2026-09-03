@@ -34,7 +34,6 @@ node cli/ssh-manager.ts --help
 
 **Optional:**
 - `rsync` - For `ssh4agent sync` (not bundled on Windows; install separately if needed)
-- `jq` - For JSON configuration management
 - `sshpass` - For password authentication testing
 
 ## Usage
@@ -108,7 +107,12 @@ ssh4agent exec prod1 "df -h | grep /var"
 
 ### Server Configuration (.env)
 
-Servers are stored in `.env` file in your project root:
+Servers are stored in a `.env` file resolved through a shared fallback chain:
+`SSH_ENV_PATH` → `SSH4AGENT_ENV` (deprecated alias) → `~/.ssh4agent/.env`
+(default, created by `ssh4agent server add`) → legacy `~/.ssh-manager/.env`
+(read-only fallback) → `./​.env` → `~/.env` → project-root `.env`.
+
+Example server entries:
 
 ```env
 # Production Server
@@ -234,22 +238,22 @@ on macOS/Linux). If your shell can't find it:
 
 ### Missing optional dependencies
 
-`rsync` / `jq` / `sshpass` are optional — install only what you need:
+`rsync` / `sshpass` are optional — install only what you need:
 
 ```bash
 # macOS
-brew install jq sshpass
+brew install sshpass
 
 # Ubuntu/Debian
-sudo apt-get install jq sshpass
+sudo apt-get install sshpass
 
 # RHEL/CentOS/Fedora
-sudo dnf install jq sshpass
+sudo dnf install sshpass
 ```
 
 On Windows, `rsync` is not bundled — install it via MSYS2, Scoop
-(`scoop install rsync`), or WSL if you need `ssh4agent sync`. `jq` is
-available via Scoop/Chocolatey; `sshpass` has no native Windows build.
+(`scoop install rsync`), or WSL if you need `ssh4agent sync`.
+`sshpass` has no native Windows build.
 
 ## Contributing
 

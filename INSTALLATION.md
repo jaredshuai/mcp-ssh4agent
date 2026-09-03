@@ -25,8 +25,8 @@ npm install
 # 3. Install the CLI globally (npm link)
 npm run install-cli
 
-# 4. Install to Claude Code
-claude mcp add ssh4agent node $(pwd)/src/index.ts
+# 4. Install to Claude Code (use the absolute path to your checkout)
+claude mcp add ssh4agent node /absolute/path/to/mcp-ssh4agent/src/index.ts
 ```
 
 ## 🔧 Server Configuration
@@ -101,18 +101,14 @@ Open Claude Code and try:
 
 ### CLI not found
 
-```bash
-# Add to your PATH
-echo 'export PATH="$PATH:/usr/local/bin"' >> ~/.bashrc
-source ~/.bashrc
-```
+The `ssh4agent` shim lives in npm's global bin directory (`%APPDATA%\npm` on Windows; `/usr/local/bin` or `~/.npm-global/bin` on macOS/Linux). Make sure that directory is on your `PATH`, then restart your terminal.
 
 ### Servers not showing
 
 ```bash
-# Check .env file location
-export SSH4AGENT_ENV="$(pwd)/.env"
-ssh4agent server list
+# Point at a specific .env file (SSH_ENV_PATH is the canonical override;
+# SSH4AGENT_ENV is a deprecated alias that still works)
+SSH_ENV_PATH=/path/to/.env ssh4agent server list
 ```
 
 ### Permission denied
@@ -127,18 +123,18 @@ chmod 600 ~/.ssh/your_key
 ```bash
 # Restart Claude Code and re-add
 claude mcp remove ssh4agent
-claude mcp add ssh4agent node $(pwd)/src/index.ts
+claude mcp add ssh4agent node /absolute/path/to/mcp-ssh4agent/src/index.ts
 ```
 
 ## 🌍 Environment Variables
 
-Set these in your shell profile (`~/.bashrc` or `~/.zshrc`):
+Set these in your shell profile (`~/.bashrc` / `~/.zshrc` on macOS/Linux; user environment variables on Windows):
 
 ```bash
-# Point to your .env file
-export SSH4AGENT_ENV="/path/to/your/.env"
+# Point to your .env file (canonical override)
+export SSH_ENV_PATH="/path/to/your/.env"
 
-# Optional: Set default log level
+# Optional: set default log level
 export SSH_LOG_LEVEL="INFO"
 ```
 
@@ -148,7 +144,7 @@ To share with your team:
 
 ```bash
 # Create project configuration
-claude mcp add ssh4agent --scope project node $(pwd)/src/index.ts
+claude mcp add ssh4agent --scope project -- npx -y mcp-ssh4agent
 ```
 
 This creates `.mcp.json` that can be committed to Git.

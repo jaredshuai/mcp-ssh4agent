@@ -5,9 +5,13 @@
 The MCP SSH4Agent now includes advanced deployment features that solve common deployment challenges:
 
 - ✅ Automatic permission handling
+
 - ✅ Secure sudo execution
+
 - ✅ Server aliases for easier access
+
 - ✅ Batch file deployments
+
 - ✅ Automatic backups before deployment
 
 ## New Tools
@@ -80,9 +84,13 @@ A typical end-to-end deployment of a couple of module files into a running app:
 ```
 
 The deployment tool automatically:
+
 - Uploads to a temp location first
+
 - Moves files to the correct location
+
 - Handles permissions if needed
+
 - Creates backups of existing files
 
 ### Web Application Deployment
@@ -112,6 +120,7 @@ The deployment tool automatically:
 ⚠️ **Never** pass sudo passwords directly in commands. Instead:
 
 **Option A: Configure in .env (Recommended)**
+
 ```env
 SSH_SERVER_PRODUCTION_SUDO_PASSWORD=your_password
 ```
@@ -122,14 +131,19 @@ Configure passwordless sudo for specific commands on your server.
 ### 2. Sensitive File Handling
 
 The deployment tool automatically:
+
 - Never logs passwords in output
+
 - Masks sensitive information in logs
+
 - Uses secure temp file locations
 
 ### 3. Backup Strategy
 
 Always enabled by default:
+
 - Creates timestamped backups before overwriting
+
 - Format: `original_file.bak.YYYYMMDD_HHMMSS`
 
 ## Troubleshooting
@@ -139,6 +153,7 @@ Always enabled by default:
 **Problem**: Can't write to system directories
 
 **Solution**: Use `ssh_deploy` with proper options:
+
 ```json
 {
   "options": {
@@ -153,6 +168,7 @@ Always enabled by default:
 **Problem**: "Server 'host.example.com' not found"
 
 **Solution**: Use configured name or create an alias:
+
 ```
 "Create alias 'host.example.com' for myapp"
 ```
@@ -162,6 +178,7 @@ Always enabled by default:
 **Problem**: Files uploaded but changes not visible
 
 **Solution**: Ensure service restart:
+
 ```json
 {
   "options": {
@@ -230,13 +247,20 @@ The single-command flow replaces the manual process of upload-to-tmp,
 chown, chmod, mv, restart — all handled by `ssh_deploy` in one shot:
 
 - ✅ Single command deployment
+
 - ✅ Automatic permission/ownership handling
+
 - ✅ Automatic backup before overwriting
+
 - ✅ No sudo password typed in the terminal
 
 ## Support
 
 For issues or questions:
+
 - Check server logs: `"Execute 'tail -f /var/log/syslog' on server"`
-- Test connection: `python tools/test-connection.py servername`
+
+- Test connection: `ssh4agent server test <server>`
+
 - View aliases: `"List server aliases"`
+

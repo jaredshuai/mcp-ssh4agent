@@ -17,7 +17,7 @@ Before creating bug reports, please check existing issues as you might find out 
 - **Provide specific examples**
 - **Describe the behavior you observed and expected**
 - **Include logs and error messages**
-- **Include your environment details** (OS, Node.js version, Python version)
+- **Include your environment details** (OS, Node.js version)
 
 ### Suggesting Enhancements
 
@@ -48,7 +48,6 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 2. Install dependencies:
    ```bash
    npm install
-   pip install -r tools/requirements.txt
    ```
 
 3. Create a branch:
@@ -73,16 +72,12 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ## Style Guidelines
 
-### JavaScript Style
-- Use ES6+ features
-- Use async/await for asynchronous code
-- Add JSDoc comments for functions
-- Use meaningful variable names
+### Code Style
 
-### Python Style
-- Follow PEP 8
-- Use type hints where appropriate
-- Add docstrings to functions and classes
+- The codebase is TypeScript run natively by Node's type stripping (no build step) — use erasable syntax only (no enums, namespaces, or parameter properties), and give relative imports explicit `.ts` extensions
+- Use ES modules and async/await for asynchronous code
+- Linting and formatting are handled by [Biome](https://biomejs.dev/) — run `npm run lint` and `npm run format` before submitting
+- Type-check with `npm run typecheck` (baseline is 0 errors)
 - Use meaningful variable names
 
 ### Commit Messages
@@ -95,7 +90,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 Before submitting a pull request:
 
-1. Test your changes manually
+1. Run the full suite: `npm run test:all` (tests + typecheck + validation)
 2. Ensure existing functionality still works
 3. Test with different server configurations
 4. Verify Claude Code integration works

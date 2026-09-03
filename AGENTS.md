@@ -195,7 +195,7 @@ forward_agent = true                       # Optional: forward local ssh-agent t
 
 ## Key Implementation Details
 
-1. **Connection Pooling**: The server maintains persistent SSH connections in a `Map` (the `connections` map in `src/index.ts`) to avoid reconnection overhead
+1. **Connection Pooling**: The server maintains persistent SSH connections in the `ConnectionPool` class (`src/connection-pool.ts`, instantiated as `pool` in `src/index.ts`) to avoid reconnection overhead; tools reach pooling state only through that instance
 
 2. **Server Resolution**: Server names are resolved through aliases first, then direct lookup. Names are normalized to lowercase (see `resolveServerName` in `src/server-aliases.ts`)
 
@@ -203,9 +203,9 @@ forward_agent = true                       # Optional: forward local ssh-agent t
 
 4. **Deployment Strategy**: The deploy helper detects permission issues and automatically creates scripts for sudo execution when needed
 
-5. **Environment Loading**: Uses dotenv to load configuration from `.env`, resolved via the same fallback chain as the CLI (see `resolveEnvFilePath` in `src/index.ts`; `SSH_ENV_PATH` overrides the chain)
+5. **Environment Loading**: Uses dotenv to load configuration from `.env`, resolved via the same fallback chain as the CLI (see `resolveEnvFilePath` in `src/env-path.ts`, imported by `src/index.ts`; `SSH_ENV_PATH` overrides the chain, `SSH4AGENT_ENV` is a deprecated alias)
 
-6. **Proxy Command Support**: Custom proxy commands (SOCKS5, ssh -W, etc.) are executed locally to establish connections, with proper error handling and timeout management (see `createProxyCommandSocket` in `src/index.ts`)
+6. **Proxy Command Support**: Custom proxy commands (SOCKS5, ssh -W, etc.) are executed locally to establish connections, with proper error handling and timeout management (see `createProxyCommandSocket` in `src/proxy-command.ts`, used by the connection pool)
 
 7. **Server Groups**: Membership is the union of two sources — the explicit lists in `.server-groups.json` (created via `ssh_group_manage`, which also hold strategy/delay/stopOnError) and the per-server `group` field of the SSH config. Config-derived groups are resolved at read time, never written to `.server-groups.json`, and are read-only for `ssh_group_manage`. `src/index.ts` injects the loaded config into the group layer via `setServerConfigProvider()`; without it the module can only see `.env` servers (src/server-groups.ts)
 

@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh4agent.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh4agent)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh4agent.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh4agent)
-[![Version](https://img.shields.io/badge/Version-3.8.0-brightgreen?style=for-the-badge)](https://github.com/jaredshuai/mcp-ssh4agent/releases/tag/v3.8.0)
+[![Version](https://img.shields.io/badge/Version-4.0.0-brightgreen?style=for-the-badge)](https://github.com/jaredshuai/mcp-ssh4agent/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -22,44 +22,53 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.8.0
+## 🎉 What's New in v4.0.0
 
-**👥 Groups that live in your config, `ssh_sync` fixed on Windows, and a crash that took the whole server down** (Released: August 14, 2026)
+**🏷️ Full rebrand: `ssh-manager` / `mcp-ssh-manager` → `ssh4agent` / `mcp-ssh4agent`**
 
-- **New optional `group` field per server** ([#56](https://github.com/jaredshuai/mcp-ssh4agent/pull/56) — contributed by [@ice616](https://github.com/ice616), requested in [#55](https://github.com/jaredshuai/mcp-ssh4agent/issues/55)) — tag a server with `group = "production"` and it *is* in that group: `ssh_execute_group` and `ssh_group_manage list` resolve members straight from your `.env`/TOML, so there is no `.server-groups.json` to maintain and the grouping travels with the config when you export it to another tool. Membership is the **union** of both sources, so groups you already store keep working untouched.
-- **🪟 `ssh_sync` works from a Windows host** ([#59](https://github.com/jaredshuai/mcp-ssh4agent/pull/59) — contributed by [@2836603852](https://github.com/2836603852)) — a local path like `C:\project` reached MSYS2 rsync unchanged, which read `C:` as a remote host and tried to SSH into a machine named `c`. Drive-letter, UNC and extended-length paths are now converted for the rsync argument only, while Node keeps the native path for its filesystem checks.
-- **💥 A tunnel on a busy port no longer kills the MCP server** — `ssh_tunnel_create` on an already-bound port hit an unhandled `'error'` event and took the entire process down with it, dropping every pooled SSH connection and open session. It now returns a normal error.
-- **🔒 Security: `@modelcontextprotocol/sdk` floor raised to `^1.30.0`** — the previous range still allowed versions carrying three published advisories, one of them high. `npm audit` is clean, and the `uuid` dependency is gone in favour of Node's built-in `crypto.randomUUID()`.
-- **🧪 JSDoc type-checking in CI** (`npm run typecheck`) — TypeScript now runs as a static checker over the plain JavaScript. **No build step, no `dist/`, nothing changes for users**; it found two of the bugs above on the day it landed.
+- **BREAKING** — bin commands are now `ssh4agent` and `mcp-ssh4agent`, and the MCP server registers as `ssh4agent`. Re-add it in your agent — auto-approval patterns become `mcp__ssh4agent__*`.
+- **📁 Config directory**: `~/.ssh4agent` — an existing `~/.ssh-manager` keeps loading as a read-only fallback until the new directory exists.
+- **🔤 Env vars**: `SSH_MANAGER_*` are now `SSH4AGENT_*`; the log file is `.ssh4agent.log`.
+- **⚠️ Remote-side paths changed with no migration**: alert configs live at `/etc/ssh4agent-alerts.json`, backups under `/var/backups/ssh4agent`, scheduled scripts at `/usr/local/bin/ssh4agent-backup-*` — re-run `ssh_alert_setup` and `ssh_backup_schedule` on hosts configured with earlier code.
 
-```env
-SSH_SERVER_WEB1_GROUP=production
-```
-
-[Read full changelog →](CHANGELOG.md#380---2026-08-14)
+[Read full changelog →](CHANGELOG.md#400---unreleased)
 
 ---
 
 ## Previous Releases
 
 <details>
-<summary><b>📜 Release history — v3.7.0 down to v1.0.0</b> (click to expand)</summary>
+<summary><b>📜 Release history — v3.8.0 down to v1.0.0</b> (click to expand)</summary>
+
+### v3.8.0 - Groups that live in your config, `ssh_sync` fixed on Windows (August 14, 2026)
+
+- **👥 New optional `group` field per server** (contributed by @ice616) — tag a server with `group = "production"` and it *is* in that group: `ssh_execute_group` and `ssh_group_manage list` resolve members straight from your `.env`/TOML. Membership is the **union** of the config tag and any stored `.server-groups.json` list, so groups you already store keep working untouched.
+- **🪟 `ssh_sync` works from a Windows host** (contributed by @2836603852) — drive-letter, UNC and extended-length paths are now converted for the rsync argument only, while Node keeps the native path for its filesystem checks.
+- **💥 A tunnel on a busy port no longer kills the MCP server** — `ssh_tunnel_create` on an already-bound port now returns a normal error instead of taking the whole process down.
+- **🔒 Security: `@modelcontextprotocol/sdk` floor raised to `^1.30.0`** — the previous range still allowed versions carrying three published advisories, one of them high. `npm audit` is clean.
+- **🧪 Static type-checking added to CI** (`npm run typecheck`) — it found two of the bugs above on the day it landed.
+
+```env
+SSH_SERVER_WEB1_GROUP=production
+```
+
+[Full changelog →](CHANGELOG.md#380---2026-08-14)
 
 ### v3.7.0 - Per-server SSH agent forwarding (July 13, 2026)
 
-- **🔗 New opt-in `FORWARD_AGENT` / `forward_agent` option** ([#53](https://github.com/jaredshuai/mcp-ssh4agent/pull/53) — requested by [@raphaelbahat](https://github.com/raphaelbahat) in [#52](https://github.com/jaredshuai/mcp-ssh4agent/issues/52)) — the equivalent of OpenSSH's `ForwardAgent yes`, per server: processes on the remote host authenticate to *other* SSH hosts with the keys in your local `ssh-agent`, without copying any private key. Requires a running agent and defaults to `false`. [Full changelog →](CHANGELOG.md#370---2026-07-13)
+- **🔗 New opt-in `FORWARD_AGENT` / `forward_agent` option** (#53 — requested by [@raphaelbahat](https://github.com/raphaelbahat) in #52) — the equivalent of OpenSSH's `ForwardAgent yes`, per server: processes on the remote host authenticate to *other* SSH hosts with the keys in your local `ssh-agent`, without copying any private key. Requires a running agent and defaults to `false`. [Full changelog →](CHANGELOG.md#370---2026-07-13)
 
 ### v3.6.7 - Security: command injection fix in the database helpers (July 11, 2026)
 
-- **🔒 Every `ssh_db_*` argument is now shell-quoted** ([#51](https://github.com/jaredshuai/mcp-ssh4agent/pull/51) — responsibly disclosed by **Ugur Ozer, Aeon AI Risk Management** (http://airiskmanagement.ca), see [#48](https://github.com/jaredshuai/mcp-ssh4agent/issues/48)) — caller-controlled values (`ssh_db_list` most notably, which stayed allowed in `readonly`/`restricted` modes) were interpolated into shell-evaluated strings, allowing arbitrary command execution on the SSH target. A centralized `shellQuote()` now wraps every value across all 15 builders, guarded by a 648-combination injection test. [Full changelog →](CHANGELOG.md#367---2026-07-11)
+- **🔒 Every `ssh_db_*` argument is now shell-quoted** (#51 — responsibly disclosed by **Ugur Ozer, Aeon AI Risk Management** (http://airiskmanagement.ca), see #48) — caller-controlled values (`ssh_db_list` most notably, which stayed allowed in `readonly`/`restricted` modes) were interpolated into shell-evaluated strings, allowing arbitrary command execution on the SSH target. A centralized `shellQuote()` now wraps every value across all 15 builders, guarded by a 648-combination injection test. [Full changelog →](CHANGELOG.md#367---2026-07-11)
 
 ### v3.6.6 - `SUDO_PASSWORD` / `DEFAULT_DIR` / `ssh_sync` key auth work again (July 11, 2026)
 
-- **🔑 camelCase config field reads** ([#50](https://github.com/jaredshuai/mcp-ssh4agent/pull/50) — thanks [@egoan82](https://github.com/egoan82)) — since the v3.0.0 ConfigLoader refactor, `ssh_execute_sudo` ignored `SUDO_PASSWORD`, `DEFAULT_DIR` was ignored by `ssh_execute`/`ssh_group_execute`/`ssh_list_servers`, and `ssh_sync` never passed the configured SSH key to rsync. All aligned with the loader's camelCase fields, with a regression test locking the loader output shape. [Full changelog →](CHANGELOG.md#366---2026-07-11)
+- **🔑 camelCase config field reads** (#50 — thanks [@egoan82](https://github.com/egoan82)) — since the v3.0.0 ConfigLoader refactor, `ssh_execute_sudo` ignored `SUDO_PASSWORD`, `DEFAULT_DIR` was ignored by `ssh_execute`/`ssh_group_execute`/`ssh_list_servers`, and `ssh_sync` never passed the configured SSH key to rsync. All aligned with the loader's camelCase fields, with a regression test locking the loader output shape. [Full changelog →](CHANGELOG.md#366---2026-07-11)
 
 ### v3.6.5 - `ssh_db_query` shell-injection security fix + real row_count (June 30, 2026)
 
-- **🔒 Queries are delivered on stdin via a single-quoted heredoc** ([#44](https://github.com/jaredshuai/mcp-ssh4agent/pull/44), [#45](https://github.com/jaredshuai/mcp-ssh4agent/pull/45) — thanks [@technophile77](https://github.com/technophile77)) — the remote shell no longer parses backticks/`$(…)` inside queries (which corrupted backtick identifiers **and** let the "SELECT-only" tool run arbitrary shell commands), and `row_count` now reflects each engine's real output instead of counting wrapper lines. [Full changelog →](CHANGELOG.md#365---2026-06-30)
+- **🔒 Queries are delivered on stdin via a single-quoted heredoc** (#44, #45 — thanks [@technophile77](https://github.com/technophile77)) — the remote shell no longer parses backticks/`$(…)` inside queries (which corrupted backtick identifiers **and** let the "SELECT-only" tool run arbitrary shell commands), and `row_count` now reflects each engine's real output instead of counting wrapper lines. [Full changelog →](CHANGELOG.md#365---2026-06-30)
 
 ### v3.6.4 - Internal cleanup + a dead-code quality gate (June 18, 2026)
 
@@ -67,7 +76,7 @@ SSH_SERVER_WEB1_GROUP=production
 
 ### v3.6.3 - `ssh_sync` reports the real transfer count (June 18, 2026)
 
-- **📊 No more false "No files needed to be transferred"** ([#42](https://github.com/jaredshuai/mcp-ssh4agent/pull/42) — thanks [@MakksSh](https://github.com/MakksSh)) — fixed rsync `--stats` parsing: `--stats` is always passed now, and rsync 2.x/3.x wording, openrsync's `B` suffix, and locale separators are all handled. [Full changelog →](CHANGELOG.md#363---2026-06-18)
+- **📊 No more false "No files needed to be transferred"** (#42 — thanks [@MakksSh](https://github.com/MakksSh)) — fixed rsync `--stats` parsing: `--stats` is always passed now, and rsync 2.x/3.x wording, openrsync's `B` suffix, and locale separators are all handled. [Full changelog →](CHANGELOG.md#363---2026-06-18)
 
 ### v3.6.2 - Richer tool descriptions (June 9, 2026)
 
@@ -75,16 +84,16 @@ SSH_SERVER_WEB1_GROUP=production
 
 ### v3.6.1 - Teardown hygiene follow-up (June 9, 2026)
 
-- **🔌 Module-level timers no longer pin the event loop** (follow-up to [#41](https://github.com/jaredshuai/mcp-ssh4agent/pull/41)) — `tunnel-manager.js` and `session-manager.js` registered module-level `setInterval`s that were never `unref()`'d, so importing either module kept Node's event loop alive. Both are now `unref()`'d. [Full changelog →](CHANGELOG.md#361---2026-06-09)
+- **🔌 Module-level timers no longer pin the event loop** (follow-up to #41) — `tunnel-manager.js` and `session-manager.js` registered module-level `setInterval`s that were never `unref()`'d, so importing either module kept Node's event loop alive. Both are now `unref()`'d. [Full changelog →](CHANGELOG.md#361---2026-06-09)
 
 ### v3.6.0 - Live config hot reload + stdio lifecycle fix (June 9, 2026)
 
-- **♻️ Configuration hot reload** ([#40](https://github.com/jaredshuai/mcp-ssh4agent/pull/40) — thanks [@EnjoySR](https://github.com/EnjoySR)) — add or edit a server in your `.env`/TOML and the running MCP server picks it up on the next call, no restart. A `ServerConfigManager` reloads lazily on file-signature change (path + `mtime` + size); a failed reload keeps the last known-good config; real `process.env` vars keep top priority. No watcher, no polling.
-- **🔌 No more orphaned stdio processes** ([#41](https://github.com/jaredshuai/mcp-ssh4agent/pull/41) — thanks [@LegendaryGatz](https://github.com/LegendaryGatz)) — a stdio MCP server is torn down by stdin EOF / SIGTERM, not SIGINT; with only a `SIGINT` handler every session leaked a ~83 MB node process. Shutdown is now idempotent across `SIGINT`/`SIGTERM`/`SIGHUP`/stdin-close, timers are `unref()`'d, and the process exits **~10 ms** after teardown instead of never. [Full changelog →](CHANGELOG.md#360---2026-06-09)
+- **♻️ Configuration hot reload** (#40 — thanks [@EnjoySR](https://github.com/EnjoySR)) — add or edit a server in your `.env`/TOML and the running MCP server picks it up on the next call, no restart. A `ServerConfigManager` reloads lazily on file-signature change (path + `mtime` + size); a failed reload keeps the last known-good config; real `process.env` vars keep top priority. No watcher, no polling.
+- **🔌 No more orphaned stdio processes** (#41 — thanks [@LegendaryGatz](https://github.com/LegendaryGatz)) — a stdio MCP server is torn down by stdin EOF / SIGTERM, not SIGINT; with only a `SIGINT` handler every session leaked a ~83 MB node process. Shutdown is now idempotent across `SIGINT`/`SIGTERM`/`SIGHUP`/stdin-close, timers are `unref()`'d, and the process exits **~10 ms** after teardown instead of never. [Full changelog →](CHANGELOG.md#360---2026-06-09)
 
 ### v3.5.1 - Robust SSH ping health-check on Windows/OpenSSH (May 26, 2026)
 
-- **🪟 Healthy Windows sessions no longer reported as `Dead`** ([#39](https://github.com/jaredshuai/mcp-ssh4agent/pull/39) — thanks [@username77](https://github.com/username77)) — the liveness probe ran `echo "ping"` and `cmd.exe` echoed the quotes literally, failing a strict `=== 'ping'` check and needlessly rebuilding live connections. Now uses `echo ping` parsed by a null-safe `isPingAlive(stdout)` helper (CRLF/quote/case-normalized), covered by `tests/test-ssh-ping.js`. [Full changelog →](CHANGELOG.md#351---2026-05-26)
+- **🪟 Healthy Windows sessions no longer reported as `Dead`** (#39 — thanks [@username77](https://github.com/username77)) — the liveness probe ran `echo "ping"` and `cmd.exe` echoed the quotes literally, failing a strict `=== 'ping'` check and needlessly rebuilding live connections. Now uses `echo ping` parsed by a null-safe `isPingAlive(stdout)` helper (CRLF/quote/case-normalized), covered by `tests/test-ssh-ping.js`. [Full changelog →](CHANGELOG.md#351---2026-05-26)
 
 ### v3.5.0 - Per-server security modes — `readonly` / `restricted` + audit log (May 18, 2026)
 
@@ -100,7 +109,7 @@ A second authorization layer that filters tool invocations **inside the MCP serv
 
 ### v3.4.1 - Modern OpenSSH 9.x compatibility (May 16, 2026)
 
-- **🔐 Expanded SSH algorithm list — handshake against OpenSSH 9.x out of the box** ([#32](https://github.com/jaredshuai/mcp-ssh4agent/pull/32))
+- **🔐 Expanded SSH algorithm list — handshake against OpenSSH 9.x out of the box** (#32)
   - **KEX**: `curve25519-sha256` (+`@libssh.org`), `diffie-hellman-group15-sha512`, `diffie-hellman-group16-sha512`
   - **Server host key**: `rsa-sha2-512`, `rsa-sha2-256` (RFC 8332)
   - **Cipher**: `aes128-gcm@openssh.com`, `aes256-gcm@openssh.com`
@@ -109,50 +118,50 @@ A second authorization layer that filters tool invocations **inside the MCP serv
 
 ### v3.4.0 - Windows OpenSSH support + shell-agnostic session sync (May 7, 2026)
 
-- **🪟 Windows OpenSSH encoding & syntax fixes** — UTF-16LE base64 PowerShell payloads (Ansible-style) + `Set-Location` replacing `cd && ` ([#31](https://github.com/jaredshuai/mcp-ssh4agent/pull/31), thanks [@WenKingSu](https://github.com/WenKingSu))
-- **🎯 Marker-based SSH session sync** — UUID v4 protocol boundaries with `ECHO: 0` PTY, real `$?` exit codes, no more "Timeout waiting for shell prompt" on custom/slow/AIX shells ([#30](https://github.com/jaredshuai/mcp-ssh4agent/pull/30), thanks [@MakksSh](https://github.com/MakksSh))
+- **🪟 Windows OpenSSH encoding & syntax fixes** — UTF-16LE base64 PowerShell payloads (Ansible-style) + `Set-Location` replacing `cd && ` (#31, thanks [@WenKingSu](https://github.com/WenKingSu))
+- **🎯 Marker-based SSH session sync** — UUID v4 protocol boundaries with `ECHO: 0` PTY, real `$?` exit codes, no more "Timeout waiting for shell prompt" on custom/slow/AIX shells (#30, thanks [@MakksSh](https://github.com/MakksSh))
 
 ### v3.3.0 - ProxyCommand & Critical Fixes (May 2, 2026)
 
-- **🔌 ProxyCommand support** for SOCKS5 / custom proxy commands ([#24](https://github.com/jaredshuai/mcp-ssh4agent/pull/24))
-- **⏱️ `ssh_execute` timeout silently capped at 30 s** — fixed ([#28](https://github.com/jaredshuai/mcp-ssh4agent/issues/28), [#29](https://github.com/jaredshuai/mcp-ssh4agent/pull/29))
-- **🪟 Windows global install `/bin/bash` shim error** — fixed ([#22](https://github.com/jaredshuai/mcp-ssh4agent/issues/22), [#23](https://github.com/jaredshuai/mcp-ssh4agent/pull/23))
-- **🔧 `server add` blocked by missing `rsync`** — `rsync` now optional ([#26](https://github.com/jaredshuai/mcp-ssh4agent/pull/26))
-- **🔡 Hyphenated server names silently dropped** — validation hardened ([#25](https://github.com/jaredshuai/mcp-ssh4agent/issues/25), [#27](https://github.com/jaredshuai/mcp-ssh4agent/pull/27))
+- **🔌 ProxyCommand support** for SOCKS5 / custom proxy commands (#24)
+- **⏱️ `ssh_execute` timeout silently capped at 30 s** — fixed (#28, #29)
+- **🪟 Windows global install `/bin/bash` shim error** — fixed (#22, #23)
+- **🔧 `server add` blocked by missing `rsync`** — `rsync` now optional (#26)
+- **🔡 Hyphenated server names silently dropped** — validation hardened (#25, #27)
 
 ### v3.2.2 - Global Install Fix & CLI Binary (April 7, 2026)
 
-- **🔧 Global install fixed**: `.env` path resolution now uses a fallback chain instead of hardcoded `__dirname` — works correctly with `npm install -g` ([#16](https://github.com/jaredshuai/mcp-ssh4agent/issues/16), [#19](https://github.com/jaredshuai/mcp-ssh4agent/issues/19))
+- **🔧 Global install fixed**: `.env` path resolution now uses a fallback chain instead of hardcoded `__dirname` — works correctly with `npm install -g` (#16, #19)
   - Fallback chain: `~/.ssh4agent/.env` → `cwd/.env` → `~/.env` → project `.env`
   - Auto-creates `~/.ssh4agent/.env` on first `ssh4agent server add`
-- **📦 `ssh4agent` CLI registered as binary**: `npm install -g` now creates both `mcp-ssh4agent` and `ssh4agent` commands ([#18](https://github.com/jaredshuai/mcp-ssh4agent/issues/18))
+- **📦 `ssh4agent` CLI registered as binary**: `npm install -g` now creates both `mcp-ssh4agent` and `ssh4agent` commands (#18)
 - **⚡ Race condition fix**: Server config is now fully loaded before the MCP server accepts requests
 
 ### v3.2.0 - ProxyJump / Bastion Host Support (March 18, 2026)
 
-- **🔀 ProxyJump support**: Connect to servers behind bastion/jump hosts with a simple `PROXYJUMP` config field ([#15](https://github.com/jaredshuai/mcp-ssh4agent/issues/15))
+- **🔀 ProxyJump support**: Connect to servers behind bastion/jump hosts with a simple `PROXYJUMP` config field (#15)
   - Chain multiple jumps (A → B → C) via recursive connections
   - Circular dependency detection prevents infinite loops
   - All tools work transparently through jump hosts
-- **📦 npx support fixed**: `npx mcp-ssh4agent` now works correctly ([#14](https://github.com/jaredshuai/mcp-ssh4agent/issues/14))
+- **📦 npx support fixed**: `npx mcp-ssh4agent` now works correctly (#14)
 
 ### v3.1.5 - SSH Agent & Passphrase Support (March 5, 2026)
 
 - **🔑 SSH Agent support**: Automatically uses `ssh-agent` when `SSH_AUTH_SOCK` is available — passphrase-protected keys work transparently
 - **🔐 Passphrase configuration**: New `passphrase` field for both `.env` and TOML formats
 
-Thanks to [@snjax](https://github.com/snjax) for the original contribution ([#12](https://github.com/jaredshuai/mcp-ssh4agent/pull/12)).
+Thanks to [@snjax](https://github.com/snjax) for the original contribution (#12).
 
 ### v3.1.4 - Windows SSH Host Support (February 22, 2026)
 
-- **🪟 Windows SSH host fix**: Commands no longer fail on Windows hosts running OpenSSH ([#10](https://github.com/jaredshuai/mcp-ssh4agent/issues/10))
+- **🪟 Windows SSH host fix**: Commands no longer fail on Windows hosts running OpenSSH (#10)
 - New per-server `platform` config field (`SSH_SERVER_FOO_PLATFORM=windows` or `platform = "windows"` in TOML)
 - When `platform=windows`, the Linux `timeout`/`sh -c` command wrapper is skipped and the SSH library's native timeout is used instead
 - All tools (`ssh_execute`, `ssh_tail`, `ssh_monitor`, `ssh_deploy`, `ssh_execute_sudo`, `ssh_group_execute`) are platform-aware
 
 ### v3.1.2 - Windows Compatibility Fix (February 9, 2026)
 
-- **🪟 Windows support**: Fixed crash on Windows where `process.env.HOME` is undefined ([#8](https://github.com/jaredshuai/mcp-ssh4agent/issues/8))
+- **🪟 Windows support**: Fixed crash on Windows where `process.env.HOME` is undefined (#8)
 - Now uses `os.homedir()` for cross-platform compatibility (Linux, macOS, Windows)
 
 ### v3.1.0 - Tool Activation System (November 15, 2025)
@@ -551,6 +560,72 @@ Upload files to remote servers.
 Download files from remote servers.
 - Parameters: `server`, `remote_path`, `local_path`
 
+#### `ssh_sync`
+Synchronize files/directories between local and remote using rsync over SSH.
+- Parameters: `server`, `source`, `destination` (each with a `local:` or `remote:` prefix), `exclude`, `dryRun`, `delete`, `compress`, `verbose`, `checksum`, `timeout`
+- Reports parsed rsync transfer statistics
+- Password authentication requires `sshpass`; blocked on `readonly`/`restricted` servers
+
+### Persistent Sessions
+
+#### `ssh_session_start`
+Start a persistent SSH session that keeps shell state (working directory, env vars) across commands.
+- Parameters: `server`, `name` (optional session name)
+
+#### `ssh_session_send`
+Send a command to an existing session.
+- Parameters: `session` (session ID), `command`, `timeout` (default 30000 ms)
+
+#### `ssh_session_list`
+List all active sessions.
+- Parameters: `server` (optional filter)
+
+#### `ssh_session_close`
+Close a session.
+- Parameters: `session` (session ID, or `"all"` to close every session)
+
+### SSH Tunnels
+
+#### `ssh_tunnel_create`
+Create an SSH tunnel.
+- Parameters: `server`, `type` (`local` / `remote` / `dynamic` SOCKS), `localPort`, `remoteHost`, `remotePort`
+
+#### `ssh_tunnel_list`
+List active tunnels.
+- Parameters: `server` (optional filter)
+
+#### `ssh_tunnel_close`
+Close tunnels.
+- Parameters: `server` (optional — closes all tunnels for that server)
+
+### Server Groups
+
+#### `ssh_execute_group`
+Execute a command across all servers in a group.
+- Parameters: `group` (e.g. `production`, `all`), `command`, `cwd`, `strategy` (`parallel` / `sequential` / `rolling`), `delay`, `stopOnError`
+
+#### `ssh_group_manage`
+Create, update, delete, and inspect named server groups.
+- Actions: `create`, `update`, `delete`, `list`, `add-servers`, `remove-servers`
+- Parameters: `action`, `name`, `servers`, `description`, `strategy`, `delay`, `stopOnError`
+- Groups implied by the per-server `group` config field are listed read-only
+
+### Connection & Host Key Management
+
+#### `ssh_connection_status`
+Inspect and manage the pooled SSH connections held by the server process.
+- Actions: `status`, `reconnect`, `disconnect`, `cleanup`
+- Parameters: `action`, `server` (required for `reconnect`/`disconnect`)
+
+#### `ssh_key_manage`
+Manage SSH host key fingerprints in your local `known_hosts`.
+- Actions: `verify`, `check`, `list` (read-only), `accept`, `remove` (mutating)
+- Parameters: `action`, `server`, `autoAccept` (use with caution)
+
+#### `ssh_history`
+View the command execution history.
+- Parameters: `limit` (default 20), `server` (optional filter)
+
 ### Backup & Restore Tools (v2.1+) 🔄
 
 #### `ssh_backup_create`
@@ -600,6 +675,16 @@ Configure health monitoring alerts and thresholds.
 - Actions: set (configure), get (view), check (test thresholds)
 - Configurable CPU, memory, and disk thresholds
 - Automatic alert triggering when thresholds exceeded
+
+#### `ssh_monitor`
+Read-only snapshot of system resources (top, free, df, ss, ps).
+- Parameters: `server`, `type` (`overview` / `cpu` / `memory` / `disk` / `network` / `process`, default `overview`), `interval`, `duration`
+- Targets Linux tooling; output may be empty on Windows hosts
+
+#### `ssh_tail`
+Tail a remote log file, optionally filtered.
+- Parameters: `server`, `file`, `lines` (default 10), `follow` (default true), `grep`
+- In follow mode output streams to the server process stderr; set `follow: false` to get the last N lines back directly
 
 ### Database Management Tools (v2.3+) 🗄️
 
@@ -752,15 +837,20 @@ The `ssh4agent` CLI (TypeScript, run natively via Node type stripping — see [c
 mcp-ssh4agent/
 ├── src/
 │   ├── index.ts              # Main MCP server (37 tools)
+│   ├── tool-registry.ts      # Tool groups, policy funnel (wrapWithPolicy)
+│   ├── tools/                # MCP tool definitions (6 groups)
+│   ├── connection-pool.ts    # Pooled SSH connections (ConnectionPool)
 │   ├── ssh-manager.ts        # SSH connection handling
 │   ├── config-loader.ts      # .env & TOML config loading
+│   ├── server-fields.ts      # Single source of truth for config field names
+│   ├── env-path.ts           # Shared .env fallback chain
+│   ├── policy.ts             # Per-server security modes (readonly/restricted)
 │   ├── session-manager.ts    # Persistent SSH sessions
 │   ├── backup-manager.ts     # Backup & restore
 │   ├── health-monitor.ts     # Health checks & alerts
 │   ├── database-manager.ts   # Database operations
 │   ├── tunnel-manager.ts     # SSH tunnel management
 │   ├── server-groups.ts      # Group operations
-│   ├── tools/                # MCP tool definitions (6 groups)
 │   └── ...
 ├── cli/
 │   ├── ssh-manager.ts         # CLI main entry (TypeScript, node shebang)
@@ -991,8 +1081,6 @@ MCP_SSH_COMPACT_JSON=true
 # Use: tail -n 100 huge-log.txt
 # Or: grep ERROR huge-log.txt | tail -n 50
 ```
-
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for complete guide.
 
 ### MCP Tools Not Available
 

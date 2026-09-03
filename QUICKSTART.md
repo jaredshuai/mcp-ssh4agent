@@ -30,7 +30,7 @@ Enter:
 ## 3️⃣ Install to Claude Code (1 minute)
 
 ```bash
-claude mcp add ssh4agent node $(pwd)/src/index.ts
+claude mcp add ssh4agent node /absolute/path/to/mcp-ssh4agent/src/index.ts
 ```
 
 ## 4️⃣ Test It! (1 minute)
@@ -63,9 +63,9 @@ ssh4agent sync push myserver ./app /var/www/  # Upload files
 
 ## 💡 Pro Tips
 
-1. **Set environment variable** in `~/.bashrc` or `~/.zshrc`:
+1. **Set environment variable** in your shell profile (`~/.bashrc` / `~/.zshrc` on macOS/Linux; user environment variables on Windows):
    ```bash
-   export SSH4AGENT_ENV="/path/to/your/.env"
+   export SSH_ENV_PATH="/path/to/your/.env"
    ```
 
 2. **Create shortcuts**:
