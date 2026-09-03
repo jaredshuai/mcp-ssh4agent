@@ -220,28 +220,21 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           location: backupFile,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  backup_id: backupId,
-                  type,
-                  size,
-                  size_human: `${(size / 1024 / 1024).toFixed(2)} MB`,
-                  location: backupFile,
-                  metadata_path: metadataPath,
-                  created_at: metadata.created_at,
-                  retention_days: retention,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return JSON.stringify(
+          {
+            success: true,
+            backup_id: backupId,
+            type,
+            size,
+            size_human: `${(size / 1024 / 1024).toFixed(2)} MB`,
+            location: backupFile,
+            metadata_path: metadataPath,
+            created_at: metadata.created_at,
+            retention_days: retention,
+          },
+          null,
+          2
+        );
       } catch (error) {
         logger.error('Backup creation failed', {
           server: serverName,
@@ -256,15 +249,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Backup failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     },
     // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
@@ -306,47 +291,33 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         // Parse backups list
         const backups = parseBackupsList(result.stdout);
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  count: backups.length,
-                  backups: backups.map((b) => ({
-                    id: b.id,
-                    type: b.type,
-                    created_at: b.created_at,
-                    database: b.database,
-                    paths: b.paths,
-                    size: b.size,
-                    size_human: b.size ? `${(b.size / 1024 / 1024).toFixed(2)} MB` : 'unknown',
-                    compressed: b.compressed,
-                    retention_days: b.retention,
-                    status: b.status,
-                  })),
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return JSON.stringify(
+          {
+            success: true,
+            count: backups.length,
+            backups: backups.map((b) => ({
+              id: b.id,
+              type: b.type,
+              created_at: b.created_at,
+              database: b.database,
+              paths: b.paths,
+              size: b.size,
+              size_human: b.size ? `${(b.size / 1024 / 1024).toFixed(2)} MB` : 'unknown',
+              compressed: b.compressed,
+              retention_days: b.retention,
+              status: b.status,
+            })),
+          },
+          null,
+          2
+        );
       } catch (error) {
         logger.error('Failed to list backups', {
           server: serverName,
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to list backups: ${error.message}`,
-            },
-          ],
-        };
+        throw error; // the funnel builds the isError envelope
       }
     }
   );
@@ -436,26 +407,19 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
 
         logger.info(`Backup restored successfully: ${backupId}`);
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  backup_id: backupId,
-                  type: metadata.type,
-                  restored_at: new Date().toISOString(),
-                  original_created: metadata.created_at,
-                  database: database || metadata.database,
-                  paths: metadata.paths,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return JSON.stringify(
+          {
+            success: true,
+            backup_id: backupId,
+            type: metadata.type,
+            restored_at: new Date().toISOString(),
+            original_created: metadata.created_at,
+            database: database || metadata.database,
+            paths: metadata.paths,
+          },
+          null,
+          2
+        );
       } catch (error) {
         logger.error('Restore failed', {
           server: serverName,
@@ -470,15 +434,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Restore failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     },
     // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
@@ -594,28 +550,21 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           retention,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  name,
-                  schedule,
-                  type,
-                  database,
-                  paths,
-                  retention_days: retention,
-                  script_path: scriptPath,
-                  next_run: 'Use crontab -l to see next run time',
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return JSON.stringify(
+          {
+            success: true,
+            name,
+            schedule,
+            type,
+            database,
+            paths,
+            retention_days: retention,
+            script_path: scriptPath,
+            next_run: 'Use crontab -l to see next run time',
+          },
+          null,
+          2
+        );
       } catch (error) {
         logger.error('Failed to schedule backup', {
           server: serverName,
@@ -623,15 +572,7 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to schedule backup: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     },
     // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.

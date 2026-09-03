@@ -73,93 +73,75 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ limit = 20, server, success, search }) => {
-      try {
-        // Get history from logger
-        let history = logger.getHistory(limit * 2); // Get more to account for filtering
+      // Get history from logger
+      let history = logger.getHistory(limit * 2); // Get more to account for filtering
 
-        // Apply filters
-        if (server) {
-          history = history.filter((h) => h.server?.toLowerCase().includes(server.toLowerCase()));
-        }
-
-        if (success !== undefined) {
-          history = history.filter((h) => h.success === success);
-        }
-
-        if (search) {
-          history = history.filter((h) => h.command?.toLowerCase().includes(search.toLowerCase()));
-        }
-
-        // Limit results
-        history = history.slice(-limit);
-
-        // Format output
-        let output = '📜 SSH Command History\n';
-        output += `Showing last ${history.length} commands`;
-
-        const filters = [];
-        if (server) filters.push(`server: ${server}`);
-        if (success !== undefined) filters.push(success ? 'successful only' : 'failed only');
-        if (search) filters.push(`search: ${search}`);
-
-        if (filters.length > 0) {
-          output += ` (filtered: ${filters.join(', ')})`;
-        }
-
-        output += '\n' + '━'.repeat(60) + '\n\n';
-
-        if (history.length === 0) {
-          output += 'No commands found matching the criteria.\n';
-        } else {
-          history.forEach((entry, index) => {
-            const time = new Date(entry.timestamp).toLocaleString();
-            const status = entry.success ? '✅' : '❌';
-            const duration = entry.duration || 'N/A';
-
-            output += `${history.length - index}. ${status} [${time}]\n`;
-            output += `   Server: ${entry.server || 'unknown'}\n`;
-            output += `   Command: ${entry.command?.substring(0, 100) || 'N/A'}`;
-            if (entry.command && entry.command.length > 100) {
-              output += '...';
-            }
-            output += '\n';
-            output += `   Duration: ${duration}`;
-
-            if (!entry.success && entry.error) {
-              output += `\n   Error: ${entry.error}`;
-            }
-
-            output += '\n\n';
-          });
-        }
-
-        output += '━'.repeat(60) + '\n';
-        output += `Total commands in history: ${logger.getHistory(1000).length}\n`;
-
-        logger.info('Command history retrieved', {
-          limit,
-          filters: filters.length,
-          results: history.length,
-        });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: output,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Error retrieving history: ${error.message}`,
-            },
-          ],
-        };
+      // Apply filters
+      if (server) {
+        history = history.filter((h) => h.server?.toLowerCase().includes(server.toLowerCase()));
       }
+
+      if (success !== undefined) {
+        history = history.filter((h) => h.success === success);
+      }
+
+      if (search) {
+        history = history.filter((h) => h.command?.toLowerCase().includes(search.toLowerCase()));
+      }
+
+      // Limit results
+      history = history.slice(-limit);
+
+      // Format output
+      let output = '📜 SSH Command History\n';
+      output += `Showing last ${history.length} commands`;
+
+      const filters = [];
+      if (server) filters.push(`server: ${server}`);
+      if (success !== undefined) filters.push(success ? 'successful only' : 'failed only');
+      if (search) filters.push(`search: ${search}`);
+
+      if (filters.length > 0) {
+        output += ` (filtered: ${filters.join(', ')})`;
+      }
+
+      output += '\n' + '━'.repeat(60) + '\n\n';
+
+      if (history.length === 0) {
+        output += 'No commands found matching the criteria.\n';
+      } else {
+        history.forEach((entry, index) => {
+          const time = new Date(entry.timestamp).toLocaleString();
+          const status = entry.success ? '✅' : '❌';
+          const duration = entry.duration || 'N/A';
+
+          output += `${history.length - index}. ${status} [${time}]\n`;
+          output += `   Server: ${entry.server || 'unknown'}\n`;
+          output += `   Command: ${entry.command?.substring(0, 100) || 'N/A'}`;
+          if (entry.command && entry.command.length > 100) {
+            output += '...';
+          }
+          output += '\n';
+          output += `   Duration: ${duration}`;
+
+          if (!entry.success && entry.error) {
+            output += `\n   Error: ${entry.error}`;
+          }
+
+          output += '\n\n';
+        });
+      }
+
+      output += '━'.repeat(60) + '\n';
+      output += `Total commands in history: ${logger.getHistory(1000).length}\n`;
+
+      logger.info('Command history retrieved', {
+        limit,
+        filters: filters.length,
+        results: history.length,
+      });
+
+      return output;
     }
   );
 
@@ -298,28 +280,14 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           ...result.summary,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: output,
-            },
-          ],
-        };
+        return output;
       } catch (error) {
         logger.error('Group execution failed', {
           group: groupName,
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Group execution error: ${error.message}`,
-            },
-          ],
-        };
+        throw error; // the funnel builds the isError envelope
       }
     },
     // Policy: MANUAL — each group member is evaluated independently inside
@@ -469,14 +437,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           servers: servers?.length,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: output,
-            },
-          ],
-        };
+        return output;
       } catch (error) {
         logger.error('Group management failed', {
           action,
@@ -484,14 +445,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Group management error: ${error.message}`,
-            },
-          ],
-        };
+        throw error; // the funnel builds the isError envelope
       }
     }
   );
@@ -527,91 +481,72 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ server, files, options = {} }: any) => {
-      try {
-        const ssh = await getConnection(server);
+      const ssh = await getConnection(server);
 
-        // Execute pre-deploy hook
-        await executeHook('pre-deploy', {
-          server: server,
-          files: files.map((f) => f.local).join(', '),
-        });
+      // Execute pre-deploy hook
+      await executeHook('pre-deploy', {
+        server: server,
+        files: files.map((f) => f.local).join(', '),
+      });
 
-        const deployments = [];
-        const results = [];
+      const deployments = [];
+      const results = [];
 
-        // Prepare deployment for each file
-        for (const file of files) {
-          const tempFile = getTempFilename(path.basename(file.local));
-          const needs = detectDeploymentNeeds(file.remote);
+      // Prepare deployment for each file
+      for (const file of files) {
+        const tempFile = getTempFilename(path.basename(file.local));
+        const needs = detectDeploymentNeeds(file.remote);
 
-          // Merge detected needs with user options
-          const deployOptions = {
-            ...options,
-            owner: options.owner || needs.suggestedOwner,
-            permissions: options.permissions || needs.suggestedPerms,
-          };
+        // Merge detected needs with user options
+        const deployOptions = {
+          ...options,
+          owner: options.owner || needs.suggestedOwner,
+          permissions: options.permissions || needs.suggestedPerms,
+        };
 
-          const strategy = buildDeploymentStrategy(file.remote, deployOptions);
+        const strategy = buildDeploymentStrategy(file.remote, deployOptions);
 
-          // Upload file to temp location first
-          await ssh.putFile(file.local, tempFile);
-          results.push(`✅ Uploaded ${path.basename(file.local)} to temp location`);
+        // Upload file to temp location first
+        await ssh.putFile(file.local, tempFile);
+        results.push(`✅ Uploaded ${path.basename(file.local)} to temp location`);
 
-          // Execute deployment strategy
-          const deployResolved = await resolveServer(server);
-          const deployServerConfig = deployResolved?.config;
-          for (const step of strategy.steps) {
-            const command = step.command.replace('{{tempFile}}', tempFile);
+        // Execute deployment strategy
+        const deployResolved = await resolveServer(server);
+        const deployServerConfig = deployResolved?.config;
+        for (const step of strategy.steps) {
+          const command = step.command.replace('{{tempFile}}', tempFile);
 
-            const result = await execCommandWithTimeout(
-              ssh,
-              command,
-              { platform: deployServerConfig?.platform },
-              15000
-            );
+          const result = await execCommandWithTimeout(
+            ssh,
+            command,
+            { platform: deployServerConfig?.platform },
+            15000
+          );
 
-            if (result.code !== 0 && step.type !== 'backup') {
-              throw new Error(`${step.type} failed: ${result.stderr}`);
-            }
-
-            if (step.type !== 'cleanup') {
-              results.push(`✅ ${step.type}: ${file.remote}`);
-            }
+          if (result.code !== 0 && step.type !== 'backup') {
+            throw new Error(`${step.type} failed: ${result.stderr}`);
           }
 
-          deployments.push({
-            local: file.local,
-            remote: file.remote,
-            tempFile,
-            strategy,
-          });
+          if (step.type !== 'cleanup') {
+            results.push(`✅ ${step.type}: ${file.remote}`);
+          }
         }
 
-        // Execute post-deploy hook
-        await executeHook('post-deploy', {
-          server: server,
-          files: files.map((f) => f.remote).join(', '),
+        deployments.push({
+          local: file.local,
+          remote: file.remote,
+          tempFile,
+          strategy,
         });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `🚀 Deployment successful!\n\n${results.join('\n')}`,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Deployment failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
       }
+
+      // Execute post-deploy hook
+      await executeHook('post-deploy', {
+        server: server,
+        files: files.map((f) => f.remote).join(', '),
+      });
+
+      return `🚀 Deployment successful!\n\n${results.join('\n')}`;
     },
     // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
     {}
@@ -632,58 +567,41 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ server, command, password, cwd, timeout = 30000 }) => {
-      try {
-        const ssh = await getConnection(server);
-        const resolvedEntry = await resolveServer(server);
-        const serverConfig = resolvedEntry?.config;
+      const ssh = await getConnection(server);
+      const resolvedEntry = await resolveServer(server);
+      const serverConfig = resolvedEntry?.config;
 
-        // Build the full command. Quoting is centralized in shell-quote.js:
-        // passwords and directories go through buildSudoPipeline/buildCdPrefix
-        // so special characters can never break out of their quoting.
-        const platform = serverConfig?.platform || 'linux';
-        const sudoPassword = password || serverConfig?.sudoPassword;
+      // Build the full command. Quoting is centralized in shell-quote.js:
+      // passwords and directories go through buildSudoPipeline/buildCdPrefix
+      // so special characters can never break out of their quoting.
+      const platform = serverConfig?.platform || 'linux';
+      const sudoPassword = password || serverConfig?.sudoPassword;
 
-        let fullCommand;
-        let maskedCommand;
-        if (sudoPassword) {
-          const pipe = buildSudoPipeline(sudoPassword, command);
-          fullCommand = pipe.command;
-          maskedCommand = pipe.masked;
-        } else {
-          fullCommand = command.startsWith('sudo ') ? command : `sudo ${command}`;
-          maskedCommand = fullCommand;
-        }
-
-        // Add working directory if specified
-        const workingDir = cwd || serverConfig?.defaultDir;
-        if (workingDir) {
-          const prefix = buildCdPrefix(workingDir, platform);
-          fullCommand = prefix + fullCommand;
-          maskedCommand = prefix + maskedCommand;
-        }
-
-        const result = await execCommandWithTimeout(ssh, fullCommand, { platform }, timeout);
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `🔐 Sudo command executed\nServer: ${server}\nCommand: ${maskedCommand}\nExit code: ${result.code}\n\nOutput:\n${result.stdout || result.stderr}`,
-            },
-          ],
-          exitCode: result.code,
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Sudo execution failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+      let fullCommand;
+      let maskedCommand;
+      if (sudoPassword) {
+        const pipe = buildSudoPipeline(sudoPassword, command);
+        fullCommand = pipe.command;
+        maskedCommand = pipe.masked;
+      } else {
+        fullCommand = command.startsWith('sudo ') ? command : `sudo ${command}`;
+        maskedCommand = fullCommand;
       }
+
+      // Add working directory if specified
+      const workingDir = cwd || serverConfig?.defaultDir;
+      if (workingDir) {
+        const prefix = buildCdPrefix(workingDir, platform);
+        fullCommand = prefix + fullCommand;
+        maskedCommand = prefix + maskedCommand;
+      }
+
+      const result = await execCommandWithTimeout(ssh, fullCommand, { platform }, timeout);
+
+      return {
+        text: `🔐 Sudo command executed\nServer: ${server}\nCommand: ${maskedCommand}\nExit code: ${result.code}\n\nOutput:\n${result.stdout || result.stderr}`,
+        exitCode: result.code,
+      };
     },
     // Policy: command-bearing — the funnel matches the sudo command against
     // readonly/restricted patterns (tool-level block handled by READONLY_BLOCKED_TOOLS).
@@ -706,96 +624,55 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ action, alias, command }) => {
-      try {
-        switch (action) {
-          case 'add': {
-            if (!alias || !command) {
-              throw new Error('Both alias and command are required for add action');
-            }
-
-            addCommandAlias(alias, command);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ Command alias created: ${alias} -> ${command}`,
-                },
-              ],
-            };
+      switch (action) {
+        case 'add': {
+          if (!alias || !command) {
+            throw new Error('Both alias and command are required for add action');
           }
 
-          case 'remove': {
-            if (!alias) {
-              throw new Error('Alias is required for remove action');
-            }
-
-            removeCommandAlias(alias);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ Command alias removed: ${alias}`,
-                },
-              ],
-            };
-          }
-
-          case 'list': {
-            const aliases = listCommandAliases();
-
-            const aliasInfo = aliases
-              .map(
-                ({ alias, command, isFromProfile, isCustom }) =>
-                  `  ${alias} -> ${command}${isFromProfile ? ' (profile)' : ''}${isCustom ? ' (custom)' : ''}`
-              )
-              .join('\n');
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text:
-                    aliases.length > 0
-                      ? `📝 Command aliases:\n${aliasInfo}`
-                      : '📝 No command aliases configured',
-                },
-              ],
-            };
-          }
-
-          case 'suggest': {
-            if (!command) {
-              throw new Error('Command search term is required for suggest action');
-            }
-
-            const suggestions = suggestAliases(command);
-
-            const suggestionInfo = suggestions
-              .map(({ alias, command }) => `  ${alias} -> ${command}`)
-              .join('\n');
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text:
-                    suggestions.length > 0
-                      ? `💡 Suggested aliases for "${command}":\n${suggestionInfo}`
-                      : `💡 No aliases found matching "${command}"`,
-                },
-              ],
-            };
-          }
+          addCommandAlias(alias, command);
+          return `✅ Command alias created: ${alias} -> ${command}`;
         }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Command alias operation failed: ${error.message}`,
-            },
-          ],
-        };
+
+        case 'remove': {
+          if (!alias) {
+            throw new Error('Alias is required for remove action');
+          }
+
+          removeCommandAlias(alias);
+          return `✅ Command alias removed: ${alias}`;
+        }
+
+        case 'list': {
+          const aliases = listCommandAliases();
+
+          const aliasInfo = aliases
+            .map(
+              ({ alias, command, isFromProfile, isCustom }) =>
+                `  ${alias} -> ${command}${isFromProfile ? ' (profile)' : ''}${isCustom ? ' (custom)' : ''}`
+            )
+            .join('\n');
+
+          return aliases.length > 0
+            ? `📝 Command aliases:\n${aliasInfo}`
+            : '📝 No command aliases configured';
+        }
+
+        case 'suggest': {
+          if (!command) {
+            throw new Error('Command search term is required for suggest action');
+          }
+
+          const suggestions = suggestAliases(command);
+
+          const suggestionInfo = suggestions
+            .map(({ alias, command }) => `  ${alias} -> ${command}`)
+            .join('\n');
+
+          return suggestions.length > 0
+            ? `💡 Suggested aliases for "${command}":\n${suggestionInfo}`
+            : `💡 No aliases found matching "${command}"`;
+        }
       }
     }
   );
@@ -812,87 +689,45 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ action, hook }) => {
-      try {
-        switch (action) {
-          case 'list': {
-            const hooks = listHooks();
+      switch (action) {
+        case 'list': {
+          const hooks = listHooks();
 
-            const hooksInfo = hooks
-              .map(
-                ({ name, enabled, description, actionCount }) =>
-                  `  ${enabled ? '✅' : '⭕'} ${name}: ${description} (${actionCount} actions)`
-              )
-              .join('\n');
+          const hooksInfo = hooks
+            .map(
+              ({ name, enabled, description, actionCount }) =>
+                `  ${enabled ? '✅' : '⭕'} ${name}: ${description} (${actionCount} actions)`
+            )
+            .join('\n');
 
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text:
-                    hooks.length > 0
-                      ? `🎣 Available hooks:\n${hooksInfo}`
-                      : '🎣 No hooks configured',
-                },
-              ],
-            };
-          }
-
-          case 'enable': {
-            if (!hook) {
-              throw new Error('Hook name is required for enable action');
-            }
-
-            toggleHook(hook, true);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ Hook enabled: ${hook}`,
-                },
-              ],
-            };
-          }
-
-          case 'disable': {
-            if (!hook) {
-              throw new Error('Hook name is required for disable action');
-            }
-
-            toggleHook(hook, false);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `⭕ Hook disabled: ${hook}`,
-                },
-              ],
-            };
-          }
-
-          case 'status': {
-            const hooks = listHooks();
-            const enabledHooks = hooks.filter((h) => h.enabled);
-            const disabledHooks = hooks.filter((h) => !h.enabled);
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `🎣 Hook status:\n  Enabled: ${enabledHooks.map((h) => h.name).join(', ') || 'none'}\n  Disabled: ${disabledHooks.map((h) => h.name).join(', ') || 'none'}`,
-                },
-              ],
-            };
-          }
+          return hooks.length > 0 ? `🎣 Available hooks:\n${hooksInfo}` : '🎣 No hooks configured';
         }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Hook operation failed: ${error.message}`,
-            },
-          ],
-        };
+
+        case 'enable': {
+          if (!hook) {
+            throw new Error('Hook name is required for enable action');
+          }
+
+          toggleHook(hook, true);
+          return `✅ Hook enabled: ${hook}`;
+        }
+
+        case 'disable': {
+          if (!hook) {
+            throw new Error('Hook name is required for disable action');
+          }
+
+          toggleHook(hook, false);
+          return `⭕ Hook disabled: ${hook}`;
+        }
+
+        case 'status': {
+          const hooks = listHooks();
+          const enabledHooks = hooks.filter((h) => h.enabled);
+          const disabledHooks = hooks.filter((h) => !h.enabled);
+
+          return `🎣 Hook status:\n  Enabled: ${enabledHooks.map((h) => h.name).join(', ') || 'none'}\n  Disabled: ${disabledHooks.map((h) => h.name).join(', ') || 'none'}`;
+        }
       }
     }
   );
@@ -909,75 +744,41 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ action, profile }) => {
-      try {
-        switch (action) {
-          case 'list': {
-            const profiles = listProfiles();
+      switch (action) {
+        case 'list': {
+          const profiles = listProfiles();
 
-            const profileInfo = profiles
-              .map(
-                (p) =>
-                  `  ${p.name}: ${p.description} (${p.aliasCount} aliases, ${p.hookCount} hooks)`
-              )
-              .join('\n');
+          const profileInfo = profiles
+            .map(
+              (p) => `  ${p.name}: ${p.description} (${p.aliasCount} aliases, ${p.hookCount} hooks)`
+            )
+            .join('\n');
 
-            const current = getActiveProfileName();
+          const current = getActiveProfileName();
 
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text:
-                    profiles.length > 0
-                      ? `📚 Available profiles (current: ${current}):\n${profileInfo}`
-                      : '📚 No profiles found',
-                },
-              ],
-            };
+          return profiles.length > 0
+            ? `📚 Available profiles (current: ${current}):\n${profileInfo}`
+            : '📚 No profiles found';
+        }
+
+        case 'switch': {
+          if (!profile) {
+            throw new Error('Profile name is required for switch action');
           }
 
-          case 'switch': {
-            if (!profile) {
-              throw new Error('Profile name is required for switch action');
-            }
-
-            if (setActiveProfile(profile)) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `✅ Switched to profile: ${profile}\n⚠️  Restart Claude Code to apply profile changes`,
-                  },
-                ],
-              };
-            } else {
-              throw new Error(`Failed to switch to profile: ${profile}`);
-            }
-          }
-
-          case 'current': {
-            const current = getActiveProfileName();
-            const profile = loadProfile();
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `📦 Current profile: ${current}\n📝 Description: ${profile.description || 'No description'}\n🔧 Aliases: ${Object.keys(profile.commandAliases || {}).length}\n🎣 Hooks: ${Object.keys(profile.hooks || {}).length}`,
-                },
-              ],
-            };
+          if (setActiveProfile(profile)) {
+            return `✅ Switched to profile: ${profile}\n⚠️  Restart Claude Code to apply profile changes`;
+          } else {
+            throw new Error(`Failed to switch to profile: ${profile}`);
           }
         }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Profile operation failed: ${error.message}`,
-            },
-          ],
-        };
+
+        case 'current': {
+          const current = getActiveProfileName();
+          const profile = loadProfile();
+
+          return `📦 Current profile: ${current}\n📝 Description: ${profile.description || 'No description'}\n🔧 Aliases: ${Object.keys(profile.commandAliases || {}).length}\n🎣 Hooks: ${Object.keys(profile.hooks || {}).length}`;
+        }
       }
     }
   );
@@ -996,88 +797,48 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ action, server }) => {
-      try {
-        switch (action) {
-          case 'status': {
-            const status = await pool.status();
-            const statusInfo =
-              status.servers.length > 0
-                ? status.servers
-                    .map(
-                      (c) =>
-                        `  ${c.server}: ${c.alive ? '✅ Active' : '❌ Dead'} (age: ${Math.floor(c.idleMs / 1000 / 60)} minutes, keepalive: ${c.keepalive ? '✅' : '❌'})`
-                    )
-                    .join('\n')
-                : '  No active connections';
+      switch (action) {
+        case 'status': {
+          const status = await pool.status();
+          const statusInfo =
+            status.servers.length > 0
+              ? status.servers
+                  .map(
+                    (c) =>
+                      `  ${c.server}: ${c.alive ? '✅ Active' : '❌ Dead'} (age: ${Math.floor(c.idleMs / 1000 / 60)} minutes, keepalive: ${c.keepalive ? '✅' : '❌'})`
+                  )
+                  .join('\n')
+              : '  No active connections';
 
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `🔌 Connection Pool Status:\n${statusInfo}\n\nSettings:\n  Timeout: ${status.settings.timeoutMinutes} minutes\n  Keepalive: Every ${status.settings.keepaliveMinutes} minutes`,
-                },
-              ],
-            };
-          }
-
-          case 'reconnect': {
-            if (!server) {
-              throw new Error('Server name is required for reconnect action');
-            }
-
-            if (pool.has(server)) {
-              pool.close(server);
-            }
-
-            await pool.get(server);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `♻️  Reconnected to ${server}`,
-                },
-              ],
-            };
-          }
-
-          case 'disconnect': {
-            if (!server) {
-              throw new Error('Server name is required for disconnect action');
-            }
-
-            pool.close(server);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `🔌 Disconnected from ${server}`,
-                },
-              ],
-            };
-          }
-
-          case 'cleanup': {
-            const cleaned = await pool.sweep();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `🧹 Cleanup complete: ${cleaned} connections closed, ${pool.size} active`,
-                },
-              ],
-            };
-          }
+          return `🔌 Connection Pool Status:\n${statusInfo}\n\nSettings:\n  Timeout: ${status.settings.timeoutMinutes} minutes\n  Keepalive: Every ${status.settings.keepaliveMinutes} minutes`;
         }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Connection management failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+
+        case 'reconnect': {
+          if (!server) {
+            throw new Error('Server name is required for reconnect action');
+          }
+
+          if (pool.has(server)) {
+            pool.close(server);
+          }
+
+          await pool.get(server);
+          return `♻️  Reconnected to ${server}`;
+        }
+
+        case 'disconnect': {
+          if (!server) {
+            throw new Error('Server name is required for disconnect action');
+          }
+
+          pool.close(server);
+          return `🔌 Disconnected from ${server}`;
+        }
+
+        case 'cleanup': {
+          const cleaned = await pool.sweep();
+          return `🧹 Cleanup complete: ${cleaned} connections closed, ${pool.size} active`;
+        }
       }
     }
   );
@@ -1143,24 +904,10 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           local: `${config.localHost}:${localPort}`,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: output,
-            },
-          ],
-        };
+        return output;
       } catch (error) {
         logger.error('Failed to create tunnel', { error: error.message });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Tunnel creation failed: ${error.message}`,
-            },
-          ],
-        };
+        throw error; // the funnel builds the isError envelope
       }
     }
   );
@@ -1190,14 +937,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
         const tunnels = listTunnels(resolvedName);
 
         if (tunnels.length === 0) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: '📋 No active tunnels',
-              },
-            ],
-          };
+          return '📋 No active tunnels';
         }
 
         let output = '📋 Active SSH Tunnels\n';
@@ -1226,25 +966,10 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
         output += '━'.repeat(60) + '\n';
         output += `Total tunnels: ${tunnels.length}`;
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: output,
-            },
-          ],
-        };
+        return output;
       } catch (error) {
         logger.error('Failed to list tunnels', { error: error.message });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to list tunnels: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     }
   );
@@ -1292,25 +1017,10 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
           });
         }
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: output,
-            },
-          ],
-        };
+        return output;
       } catch (error) {
         logger.error('Failed to close tunnel', { error: error.message });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to close tunnel: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     }
   );
@@ -1378,14 +1088,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               output +=
                 "Use 'ssh_key_manage' with action 'accept' to update the key if you trust this change.";
 
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: output,
-                  },
-                ],
-              };
+              return output;
             } else {
               let output = `✅ SSH host key verified for ${server} (${host}:${port})\n`;
               output += `Reason: ${verification.reason}\n`;
@@ -1394,14 +1097,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
                 output += "\nℹ️  Host not in known_hosts. Use 'accept' action to add it.";
               }
 
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: output,
-                  },
-                ],
-              };
+              return output;
             }
           }
 
@@ -1423,14 +1119,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
 
               logger.info('SSH host key updated', { server: resolvedName, host, port });
 
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `✅ SSH host key updated for ${server} (${host}:${port})\nThe new key has been accepted and saved.`,
-                  },
-                ],
-              };
+              return `✅ SSH host key updated for ${server} (${host}:${port})\nThe new key has been accepted and saved.`;
             } else {
               // Add new key
               await addHostKey(host, port);
@@ -1445,14 +1134,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
 
               logger.info('SSH host key added', { server: resolvedName, host, port });
 
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `✅ SSH host key added for ${server} (${host}:${port})\nThe key has been saved to known_hosts.`,
-                  },
-                ],
-              };
+              return `✅ SSH host key added for ${server} (${host}:${port})\nThe key has been saved to known_hosts.`;
             }
           }
 
@@ -1461,14 +1143,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
 
             logger.info('SSH host key removed', { server: resolvedName, host, port });
 
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ SSH host key removed for ${server} (${host}:${port})`,
-                },
-              ],
-            };
+            return `✅ SSH host key removed for ${server} (${host}:${port})`;
           }
 
           case 'check': {
@@ -1497,14 +1172,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
               output += '  ❌ Could not fetch keys from server\n';
             }
 
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: output,
-                },
-              ],
-            };
+            return output;
           }
 
           case 'list': {
@@ -1542,14 +1210,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
             output += '━'.repeat(60) + '\n';
             output += `Total: ${knownHosts.length} hosts`;
 
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: output,
-                },
-              ],
-            };
+            return output;
           }
 
           default:
@@ -1558,15 +1219,7 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       } catch (error) {
         logger.error('SSH key management failed', { action, server, error: error.message });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ SSH key management error: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     },
     // Policy: only accept/remove mutate local known_hosts; verify/list/check
@@ -1587,79 +1240,46 @@ export function registerAdvancedTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ action, alias, server }) => {
-      try {
-        switch (action) {
-          case 'add': {
-            if (!alias || !server) {
-              throw new Error('Both alias and server are required for add action');
-            }
-
-            const resolved = await resolveServer(server);
-
-            if (!resolved) {
-              throw new Error(`Server "${server}" not found`);
-            }
-
-            addAlias(alias, resolved.name);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ Alias created: ${alias} -> ${resolved.name}`,
-                },
-              ],
-            };
+      switch (action) {
+        case 'add': {
+          if (!alias || !server) {
+            throw new Error('Both alias and server are required for add action');
           }
 
-          case 'remove': {
-            if (!alias) {
-              throw new Error('Alias is required for remove action');
-            }
+          const resolved = await resolveServer(server);
 
-            removeAlias(alias);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ Alias removed: ${alias}`,
-                },
-              ],
-            };
+          if (!resolved) {
+            throw new Error(`Server "${server}" not found`);
           }
 
-          case 'list': {
-            const aliases = listAliases();
-            const servers = await loadServerConfig();
-
-            const aliasInfo = aliases
-              .map(({ alias, target }) => {
-                const server = servers[target];
-                return `  ${alias} -> ${target} (${server?.host || 'unknown'})`;
-              })
-              .join('\n');
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text:
-                    aliases.length > 0
-                      ? `📝 Server aliases:\n${aliasInfo}`
-                      : '📝 No aliases configured',
-                },
-              ],
-            };
-          }
+          addAlias(alias, resolved.name);
+          return `✅ Alias created: ${alias} -> ${resolved.name}`;
         }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Alias operation failed: ${error.message}`,
-            },
-          ],
-        };
+
+        case 'remove': {
+          if (!alias) {
+            throw new Error('Alias is required for remove action');
+          }
+
+          removeAlias(alias);
+          return `✅ Alias removed: ${alias}`;
+        }
+
+        case 'list': {
+          const aliases = listAliases();
+          const servers = await loadServerConfig();
+
+          const aliasInfo = aliases
+            .map(({ alias, target }) => {
+              const server = servers[target];
+              return `  ${alias} -> ${target} (${server?.host || 'unknown'})`;
+            })
+            .join('\n');
+
+          return aliases.length > 0
+            ? `📝 Server aliases:\n${aliasInfo}`
+            : '📝 No aliases configured';
+        }
       }
     }
   );

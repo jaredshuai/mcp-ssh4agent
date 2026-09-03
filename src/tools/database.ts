@@ -121,28 +121,21 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           size,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  server: serverName,
-                  type,
-                  database,
-                  output_file: outputFile,
-                  size_bytes: size,
-                  size_human: formatBytes(size),
-                  compressed: compress,
-                  timestamp: new Date().toISOString(),
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return JSON.stringify(
+          {
+            success: true,
+            server: serverName,
+            type,
+            database,
+            output_file: outputFile,
+            size_bytes: size,
+            size_human: formatBytes(size),
+            compressed: compress,
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        );
       } catch (error) {
         logger.error('Database dump failed', {
           server: serverName,
@@ -151,15 +144,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Database dump failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     },
     // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
@@ -245,26 +230,19 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           database,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  server: serverName,
-                  type,
-                  database,
-                  input_file: inputFile,
-                  timestamp: new Date().toISOString(),
-                  message: `Database ${database} imported successfully`,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return JSON.stringify(
+          {
+            success: true,
+            server: serverName,
+            type,
+            database,
+            input_file: inputFile,
+            timestamp: new Date().toISOString(),
+            message: `Database ${database} imported successfully`,
+          },
+          null,
+          2
+        );
       } catch (error) {
         logger.error('Database import failed', {
           server: serverName,
@@ -273,15 +251,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Database import failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope
       }
     },
     // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
@@ -391,14 +361,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           type,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(response, null, 2),
-            },
-          ],
-        };
+        return JSON.stringify(response, null, 2);
       } catch (error) {
         logger.error('Database list failed', {
           server: serverName,
@@ -406,14 +369,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Database list failed: ${error.message}`,
-            },
-          ],
-        };
+        throw error; // the funnel builds the isError envelope
       }
     }
   );
@@ -509,28 +465,21 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           rows: rowCount,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  success: true,
-                  server: serverName,
-                  type,
-                  database,
-                  collection: collection || null,
-                  query,
-                  row_count: rowCount,
-                  output: output,
-                  timestamp: new Date().toISOString(),
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return JSON.stringify(
+          {
+            success: true,
+            server: serverName,
+            type,
+            database,
+            collection: collection || null,
+            query,
+            row_count: rowCount,
+            output: output,
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        );
       } catch (error) {
         logger.error('Database query failed', {
           server: serverName,
@@ -539,14 +488,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Database query failed: ${error.message}`,
-            },
-          ],
-        };
+        throw error; // the funnel builds the isError envelope
       }
     }
   );

@@ -224,28 +224,13 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
           duration: `${Date.now() - startTime}ms`,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `✅ File downloaded successfully\nServer: ${serverName}\nRemote: ${remotePath}\nLocal: ${localPath}`,
-            },
-          ],
-        };
+        return `✅ File downloaded successfully\nServer: ${serverName}\nRemote: ${remotePath}\nLocal: ${localPath}`;
       } catch (error) {
         logger.logTransfer('download', serverName, remotePath, localPath, {
           success: false,
           error: error.message,
         });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Download error: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error; // the funnel builds the isError envelope (gate: exempt)
       }
     },
     // Policy: EXEMPT BY DESIGN — read-only on the remote side; must stay
@@ -295,333 +280,307 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
       checksum = false,
       timeout = 30000,
     }) => {
-      try {
-        await getConnection(serverName);
-        // resolveServer expands aliases so auth fields are found even when the
-        // server is addressed by alias.
-        const resolved = await resolveServer(serverName);
-        const serverConfig = resolved?.config || {};
+      await getConnection(serverName);
+      // resolveServer expands aliases so auth fields are found even when the
+      // server is addressed by alias.
+      const resolved = await resolveServer(serverName);
+      const serverConfig = resolved?.config || {};
 
-        // Check if sshpass is available for password authentication
-        if (!serverConfig.keyPath && serverConfig.password) {
-          // Check if sshpass is installed
-          try {
-            const { execSync } = await import('child_process');
-            execSync('which sshpass', { stdio: 'ignore' });
-          } catch (error) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `❌ Error: ssh_sync with password authentication requires sshpass.\n\nThe server '${serverName}' uses password authentication.\nPlease install sshpass: brew install hudochenkov/sshpass/sshpass (macOS) or apt-get install sshpass (Linux)\n\nAlternatively, use ssh_upload or ssh_download for single file transfers.`,
-                },
-              ],
-            };
-          }
-        }
-
-        // Determine sync direction based on source/destination prefixes
-        const isLocalSource = source.startsWith('local:');
-        const isRemoteSource = source.startsWith('remote:');
-        const isLocalDest = destination.startsWith('local:');
-        const isRemoteDest = destination.startsWith('remote:');
-
-        // Clean paths
-        const cleanSource = source.replace(/^(local:|remote:)/, '');
-        const cleanDest = destination.replace(/^(local:|remote:)/, '');
-
-        // Validate direction
-        if ((isLocalSource && isLocalDest) || (isRemoteSource && isRemoteDest)) {
+      // Check if sshpass is available for password authentication
+      if (!serverConfig.keyPath && serverConfig.password) {
+        // Check if sshpass is installed
+        try {
+          const { execSync } = await import('child_process');
+          execSync('which sshpass', { stdio: 'ignore' });
+        } catch (error) {
           throw new Error(
-            'Source and destination must be different (one local, one remote). Use prefixes: local: or remote:'
+            `ssh_sync with password authentication requires sshpass.\n\nThe server '${serverName}' uses password authentication.\nPlease install sshpass: brew install hudochenkov/sshpass/sshpass (macOS) or apt-get install sshpass (Linux)\n\nAlternatively, use ssh_upload or ssh_download for single file transfers.`
           );
         }
-
-        // If no prefixes, assume old format (local source to remote dest)
-        const direction = isLocalSource || (!isLocalSource && !isRemoteSource) ? 'push' : 'pull';
-
-        // Build rsync command
-        let rsyncOptions = ['-avz'];
-
-        if (!compress) {
-          rsyncOptions = ['-av'];
-        }
-
-        if (checksum) {
-          rsyncOptions.push('--checksum');
-        }
-
-        if (deleteFiles) {
-          rsyncOptions.push('--delete');
-        }
-
-        if (dryRun) {
-          rsyncOptions.push('--dry-run');
-        }
-
-        // Always include --stats so we can parse transfer counts
-        rsyncOptions.push('--stats');
-
-        // Add exclude patterns
-        exclude.forEach((pattern) => {
-          rsyncOptions.push('--exclude', pattern);
-        });
-
-        let localPath;
-        let remotePath;
-
-        if (direction === 'push') {
-          localPath = cleanSource;
-          remotePath = cleanDest;
-
-          // Check if local path exists
-          if (!fs.existsSync(localPath)) {
-            throw new Error(`Local path does not exist: ${localPath}`);
-          }
-        } else {
-          localPath = cleanDest;
-          remotePath = cleanSource;
-        }
-
-        // Native Windows paths must remain unchanged for fs.existsSync() and
-        // logging, but MSYS2 rsync expects drive paths such as /c/project/file.
-        const rsyncLocalPath = toRsyncLocalPath(localPath);
-
-        // Add SSH options for non-interactive mode
-        const sshOptions = [];
-
-        // Different options based on authentication method
-        if (serverConfig.keyPath) {
-          sshOptions.push('-o BatchMode=yes'); // No password prompts
-          sshOptions.push('-o StrictHostKeyChecking=accept-new'); // Accept new keys, reject changed ones
-          sshOptions.push('-o ConnectTimeout=10'); // Connection timeout
-
-          const keyPath = serverConfig.keyPath.replace('~', os.homedir());
-          sshOptions.push(`-i ${keyPath}`);
-        } else {
-          // With sshpass, we don't use BatchMode
-          sshOptions.push('-o StrictHostKeyChecking=accept-new'); // Accept new keys, reject changed ones
-          sshOptions.push('-o ConnectTimeout=10');
-        }
-
-        // port is a number (ConfigLoader parseInt's it), so comparing against the
-        // string '22' never matched and every server got an explicit -p 22.
-        if (serverConfig.port && serverConfig.port !== 22) {
-          sshOptions.push(`-p ${serverConfig.port}`);
-        }
-
-        logger.info(`Starting rsync ${direction}`, {
-          server: serverName,
-          source: direction === 'push' ? localPath : remotePath,
-          destination: direction === 'push' ? remotePath : localPath,
-          dryRun,
-          deleteFiles,
-        });
-
-        const startTime = Date.now();
-
-        // Execute rsync via spawn for non-blocking streaming
-        const { spawn } = await import('child_process');
-
-        return new Promise((resolve, reject) => {
-          let output = '';
-          let errorOutput = '';
-          let killed = false;
-
-          // Build command based on authentication method
-          let rsyncCommand;
-          let rsyncArgs = [];
-          let processEnv = { ...process.env };
-
-          if (serverConfig.password) {
-            // Use sshpass for password authentication
-            rsyncCommand = 'sshpass';
-            rsyncArgs.push('-p', serverConfig.password);
-            rsyncArgs.push('rsync');
-
-            // Add rsync options
-            rsyncOptions.forEach((opt) => rsyncArgs.push(opt));
-
-            // Add SSH command
-            const sshCmd = `ssh ${sshOptions.join(' ')}`;
-            rsyncArgs.push('-e', sshCmd);
-          } else {
-            // Direct rsync for key authentication
-            rsyncCommand = 'rsync';
-
-            // Add rsync options
-            rsyncOptions.forEach((opt) => rsyncArgs.push(opt));
-
-            // Add SSH command with all options
-            const sshCmd = `ssh ${sshOptions.join(' ')}`;
-            rsyncArgs.push('-e', sshCmd);
-
-            processEnv.SSH_ASKPASS = '/bin/false';
-            processEnv.DISPLAY = '';
-          }
-
-          // Add source and destination
-          if (direction === 'push') {
-            rsyncArgs.push(rsyncLocalPath);
-            rsyncArgs.push(`${serverConfig.user}@${serverConfig.host}:${remotePath}`);
-          } else {
-            rsyncArgs.push(`${serverConfig.user}@${serverConfig.host}:${remotePath}`);
-            rsyncArgs.push(rsyncLocalPath);
-          }
-
-          const rsyncProcess = spawn(rsyncCommand, rsyncArgs, {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: processEnv,
-          });
-
-          // Set timeout
-          const timer = setTimeout(() => {
-            killed = true;
-            rsyncProcess.kill('SIGTERM');
-            reject(new Error(`Rsync timeout after ${timeout}ms`));
-          }, timeout);
-
-          // Collect output with size limit
-          rsyncProcess.stdout.on('data', (data) => {
-            const chunk = data.toString();
-            output += chunk;
-            // Limit output size to prevent memory issues
-            if (output.length > 100000) {
-              output = output.slice(-50000);
-            }
-          });
-
-          rsyncProcess.stderr.on('data', (data) => {
-            const chunk = data.toString();
-            errorOutput += chunk;
-            if (errorOutput.length > 50000) {
-              errorOutput = errorOutput.slice(-25000);
-            }
-          });
-
-          rsyncProcess.on('error', (err) => {
-            clearTimeout(timer);
-            reject(new Error(`Failed to start rsync: ${err.message}`));
-          });
-
-          rsyncProcess.on('close', (code) => {
-            clearTimeout(timer);
-
-            if (killed) {
-              return; // Already rejected due to timeout
-            }
-
-            const duration = Date.now() - startTime;
-
-            if (code !== 0) {
-              logger.error(`Rsync ${direction} failed`, {
-                server: serverName,
-                exitCode: code,
-                error: errorOutput,
-                duration: `${duration}ms`,
-              });
-
-              // Check if it's an SSH key error
-              if (detectSSHKeyError(errorOutput)) {
-                const hostInfo = extractHostFromSSHError(errorOutput);
-                let errorMsg = `SSH host key verification failed for ${serverName}.\n`;
-
-                if (hostInfo) {
-                  errorMsg += `Host: ${hostInfo.host}:${hostInfo.port}\n`;
-                }
-
-                errorMsg += '\n📍 To fix this issue:\n';
-                errorMsg += '1. Verify the server identity\n';
-                errorMsg += "2. Use 'ssh_key_manage' tool with action 'verify' to check the key\n";
-                errorMsg +=
-                  "3. Use 'ssh_key_manage' tool with action 'accept' to update the key if you trust the server\n";
-                errorMsg += `\nOriginal error:\n${errorOutput}`;
-
-                reject(new Error(errorMsg));
-              } else {
-                reject(
-                  new Error(
-                    `Rsync failed with exit code ${code}: ${errorOutput || 'Unknown error'}`
-                  )
-                );
-              }
-              return;
-            }
-
-            // Parse rsync output for statistics. Handles rsync 2.x/3.x wording,
-            // GNU "bytes" vs openrsync "B" suffixes, and locale separators.
-            const stats = parseRsyncStats(output, duration);
-
-            logger.info(`Rsync ${direction} completed`, {
-              server: serverName,
-              direction,
-              duration: `${duration}ms`,
-              filesTransferred: stats.filesTransferred,
-              totalSize: stats.totalSize,
-              dryRun,
-            });
-
-            // Format output
-            let resultText = dryRun ? '🔍 Dry run completed\n' : '✅ Sync completed successfully\n';
-            resultText += `Direction: ${direction === 'push' ? 'Local → Remote' : 'Remote → Local'}\n`;
-            resultText += `Server: ${serverName}\n`;
-            resultText += `Source: ${direction === 'push' ? localPath : remotePath}\n`;
-            resultText += `Destination: ${direction === 'push' ? remotePath : localPath}\n`;
-
-            if (stats.filesTransferred > 0) {
-              resultText += `Files transferred: ${stats.filesTransferred}\n`;
-              if (stats.totalSize > 0) {
-                const sizeKB = (stats.totalSize / 1024).toFixed(2);
-                resultText += `Total size: ${sizeKB} KB\n`;
-              }
-              if (stats.speed) {
-                const speedKB = (stats.speed / 1024).toFixed(2);
-                resultText += `Average speed: ${speedKB} KB/s\n`;
-              }
-            } else {
-              resultText += 'No files needed to be transferred\n';
-            }
-
-            resultText += `Time: ${(duration / 1000).toFixed(2)} seconds\n`;
-
-            if (verbose && output.length < 5000) {
-              resultText += '\n📋 Sync statistics:\n';
-              // Only show relevant stats lines
-              const statsLines = output
-                .split('\n')
-                .filter(
-                  (line) =>
-                    line.includes('Number of') ||
-                    line.includes('Total') ||
-                    line.includes('sent') ||
-                    line.includes('received')
-                );
-              if (statsLines.length > 0) {
-                resultText += statsLines.join('\n');
-              }
-            }
-
-            resolve({
-              content: [
-                {
-                  type: 'text',
-                  text: resultText,
-                },
-              ],
-            });
-          });
-        });
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Sync error: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
       }
+
+      // Determine sync direction based on source/destination prefixes
+      const isLocalSource = source.startsWith('local:');
+      const isRemoteSource = source.startsWith('remote:');
+      const isLocalDest = destination.startsWith('local:');
+      const isRemoteDest = destination.startsWith('remote:');
+
+      // Clean paths
+      const cleanSource = source.replace(/^(local:|remote:)/, '');
+      const cleanDest = destination.replace(/^(local:|remote:)/, '');
+
+      // Validate direction
+      if ((isLocalSource && isLocalDest) || (isRemoteSource && isRemoteDest)) {
+        throw new Error(
+          'Source and destination must be different (one local, one remote). Use prefixes: local: or remote:'
+        );
+      }
+
+      // If no prefixes, assume old format (local source to remote dest)
+      const direction = isLocalSource || (!isLocalSource && !isRemoteSource) ? 'push' : 'pull';
+
+      // Build rsync command
+      let rsyncOptions = ['-avz'];
+
+      if (!compress) {
+        rsyncOptions = ['-av'];
+      }
+
+      if (checksum) {
+        rsyncOptions.push('--checksum');
+      }
+
+      if (deleteFiles) {
+        rsyncOptions.push('--delete');
+      }
+
+      if (dryRun) {
+        rsyncOptions.push('--dry-run');
+      }
+
+      // Always include --stats so we can parse transfer counts
+      rsyncOptions.push('--stats');
+
+      // Add exclude patterns
+      exclude.forEach((pattern) => {
+        rsyncOptions.push('--exclude', pattern);
+      });
+
+      let localPath;
+      let remotePath;
+
+      if (direction === 'push') {
+        localPath = cleanSource;
+        remotePath = cleanDest;
+
+        // Check if local path exists
+        if (!fs.existsSync(localPath)) {
+          throw new Error(`Local path does not exist: ${localPath}`);
+        }
+      } else {
+        localPath = cleanDest;
+        remotePath = cleanSource;
+      }
+
+      // Native Windows paths must remain unchanged for fs.existsSync() and
+      // logging, but MSYS2 rsync expects drive paths such as /c/project/file.
+      const rsyncLocalPath = toRsyncLocalPath(localPath);
+
+      // Add SSH options for non-interactive mode
+      const sshOptions = [];
+
+      // Different options based on authentication method
+      if (serverConfig.keyPath) {
+        sshOptions.push('-o BatchMode=yes'); // No password prompts
+        sshOptions.push('-o StrictHostKeyChecking=accept-new'); // Accept new keys, reject changed ones
+        sshOptions.push('-o ConnectTimeout=10'); // Connection timeout
+
+        const keyPath = serverConfig.keyPath.replace('~', os.homedir());
+        sshOptions.push(`-i ${keyPath}`);
+      } else {
+        // With sshpass, we don't use BatchMode
+        sshOptions.push('-o StrictHostKeyChecking=accept-new'); // Accept new keys, reject changed ones
+        sshOptions.push('-o ConnectTimeout=10');
+      }
+
+      // port is a number (ConfigLoader parseInt's it), so comparing against the
+      // string '22' never matched and every server got an explicit -p 22.
+      if (serverConfig.port && serverConfig.port !== 22) {
+        sshOptions.push(`-p ${serverConfig.port}`);
+      }
+
+      logger.info(`Starting rsync ${direction}`, {
+        server: serverName,
+        source: direction === 'push' ? localPath : remotePath,
+        destination: direction === 'push' ? remotePath : localPath,
+        dryRun,
+        deleteFiles,
+      });
+
+      const startTime = Date.now();
+
+      // Execute rsync via spawn for non-blocking streaming
+      const { spawn } = await import('child_process');
+
+      return new Promise((resolve, reject) => {
+        let output = '';
+        let errorOutput = '';
+        let killed = false;
+
+        // Build command based on authentication method
+        let rsyncCommand;
+        let rsyncArgs = [];
+        let processEnv = { ...process.env };
+
+        if (serverConfig.password) {
+          // Use sshpass for password authentication
+          rsyncCommand = 'sshpass';
+          rsyncArgs.push('-p', serverConfig.password);
+          rsyncArgs.push('rsync');
+
+          // Add rsync options
+          rsyncOptions.forEach((opt) => rsyncArgs.push(opt));
+
+          // Add SSH command
+          const sshCmd = `ssh ${sshOptions.join(' ')}`;
+          rsyncArgs.push('-e', sshCmd);
+        } else {
+          // Direct rsync for key authentication
+          rsyncCommand = 'rsync';
+
+          // Add rsync options
+          rsyncOptions.forEach((opt) => rsyncArgs.push(opt));
+
+          // Add SSH command with all options
+          const sshCmd = `ssh ${sshOptions.join(' ')}`;
+          rsyncArgs.push('-e', sshCmd);
+
+          processEnv.SSH_ASKPASS = '/bin/false';
+          processEnv.DISPLAY = '';
+        }
+
+        // Add source and destination
+        if (direction === 'push') {
+          rsyncArgs.push(rsyncLocalPath);
+          rsyncArgs.push(`${serverConfig.user}@${serverConfig.host}:${remotePath}`);
+        } else {
+          rsyncArgs.push(`${serverConfig.user}@${serverConfig.host}:${remotePath}`);
+          rsyncArgs.push(rsyncLocalPath);
+        }
+
+        const rsyncProcess = spawn(rsyncCommand, rsyncArgs, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: processEnv,
+        });
+
+        // Set timeout
+        const timer = setTimeout(() => {
+          killed = true;
+          rsyncProcess.kill('SIGTERM');
+          reject(new Error(`Rsync timeout after ${timeout}ms`));
+        }, timeout);
+
+        // Collect output with size limit
+        rsyncProcess.stdout.on('data', (data) => {
+          const chunk = data.toString();
+          output += chunk;
+          // Limit output size to prevent memory issues
+          if (output.length > 100000) {
+            output = output.slice(-50000);
+          }
+        });
+
+        rsyncProcess.stderr.on('data', (data) => {
+          const chunk = data.toString();
+          errorOutput += chunk;
+          if (errorOutput.length > 50000) {
+            errorOutput = errorOutput.slice(-25000);
+          }
+        });
+
+        rsyncProcess.on('error', (err) => {
+          clearTimeout(timer);
+          reject(new Error(`Failed to start rsync: ${err.message}`));
+        });
+
+        rsyncProcess.on('close', (code) => {
+          clearTimeout(timer);
+
+          if (killed) {
+            return; // Already rejected due to timeout
+          }
+
+          const duration = Date.now() - startTime;
+
+          if (code !== 0) {
+            logger.error(`Rsync ${direction} failed`, {
+              server: serverName,
+              exitCode: code,
+              error: errorOutput,
+              duration: `${duration}ms`,
+            });
+
+            // Check if it's an SSH key error
+            if (detectSSHKeyError(errorOutput)) {
+              const hostInfo = extractHostFromSSHError(errorOutput);
+              let errorMsg = `SSH host key verification failed for ${serverName}.\n`;
+
+              if (hostInfo) {
+                errorMsg += `Host: ${hostInfo.host}:${hostInfo.port}\n`;
+              }
+
+              errorMsg += '\n📍 To fix this issue:\n';
+              errorMsg += '1. Verify the server identity\n';
+              errorMsg += "2. Use 'ssh_key_manage' tool with action 'verify' to check the key\n";
+              errorMsg +=
+                "3. Use 'ssh_key_manage' tool with action 'accept' to update the key if you trust the server\n";
+              errorMsg += `\nOriginal error:\n${errorOutput}`;
+
+              reject(new Error(errorMsg));
+            } else {
+              reject(
+                new Error(`Rsync failed with exit code ${code}: ${errorOutput || 'Unknown error'}`)
+              );
+            }
+            return;
+          }
+
+          // Parse rsync output for statistics. Handles rsync 2.x/3.x wording,
+          // GNU "bytes" vs openrsync "B" suffixes, and locale separators.
+          const stats = parseRsyncStats(output, duration);
+
+          logger.info(`Rsync ${direction} completed`, {
+            server: serverName,
+            direction,
+            duration: `${duration}ms`,
+            filesTransferred: stats.filesTransferred,
+            totalSize: stats.totalSize,
+            dryRun,
+          });
+
+          // Format output
+          let resultText = dryRun ? '🔍 Dry run completed\n' : '✅ Sync completed successfully\n';
+          resultText += `Direction: ${direction === 'push' ? 'Local → Remote' : 'Remote → Local'}\n`;
+          resultText += `Server: ${serverName}\n`;
+          resultText += `Source: ${direction === 'push' ? localPath : remotePath}\n`;
+          resultText += `Destination: ${direction === 'push' ? remotePath : localPath}\n`;
+
+          if (stats.filesTransferred > 0) {
+            resultText += `Files transferred: ${stats.filesTransferred}\n`;
+            if (stats.totalSize > 0) {
+              const sizeKB = (stats.totalSize / 1024).toFixed(2);
+              resultText += `Total size: ${sizeKB} KB\n`;
+            }
+            if (stats.speed) {
+              const speedKB = (stats.speed / 1024).toFixed(2);
+              resultText += `Average speed: ${speedKB} KB/s\n`;
+            }
+          } else {
+            resultText += 'No files needed to be transferred\n';
+          }
+
+          resultText += `Time: ${(duration / 1000).toFixed(2)} seconds\n`;
+
+          if (verbose && output.length < 5000) {
+            resultText += '\n📋 Sync statistics:\n';
+            // Only show relevant stats lines
+            const statsLines = output
+              .split('\n')
+              .filter(
+                (line) =>
+                  line.includes('Number of') ||
+                  line.includes('Total') ||
+                  line.includes('sent') ||
+                  line.includes('received')
+              );
+            if (statsLines.length > 0) {
+              resultText += statsLines.join('\n');
+            }
+          }
+
+          resolve(resultText);
+        });
+      });
     },
     // Policy: plain server gate (funnel). Mutating — blocked on readonly/restricted.
     {}
@@ -647,16 +606,7 @@ export function registerCoreTools(ctx: import('../tool-registry.ts').ToolContext
         description: config.description || '',
       }));
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(serverInfo, null, 2),
-          },
-        ],
-      };
+      return JSON.stringify(serverInfo, null, 2);
     }
   );
-
-  // New deploy tool for automated deployment
 }

@@ -100,7 +100,12 @@ async function main() {
       {},
       deps
     );
-    await assert.rejects(() => throwing({ server: 'prod' }), /boom/);
+    // The funnel converts rejections into isError envelopes — a throwing
+    // handler never reaches the MCP transport raw, and its failure is
+    // audited by construction.
+    const errResp = await throwing({ server: 'prod' });
+    assert.strictEqual(errResp.isError, true, 'thrown handler becomes an isError envelope');
+    assert.match(errResp.content[0].text, /boom/, 'error message carried in the envelope');
     assert.strictEqual(calls.audits[1].result.success, false, 'thrown handler audited as failure');
     assert.strictEqual(calls.audits[1].result.error, 'boom');
     ok('audit written on BOTH failure paths (isError response and throw)');
@@ -154,7 +159,13 @@ async function main() {
       {},
       deps
     );
-    await assert.rejects(() => boom({ server: 'prod' }), /handler failed/);
+    const boomResp = await boom({ server: 'prod' });
+    assert.strictEqual(boomResp.isError, true, 'rejection becomes an isError envelope');
+    assert.match(
+      boomResp.content[0].text,
+      /handler failed/,
+      'original error preserved despite the broken audit sink'
+    );
     ok('auditOk throwing is swallowed: outcome and original error preserved');
   }
 
@@ -180,7 +191,7 @@ async function main() {
     ok('auditOk rejecting with a non-Error value is still swallowed');
   }
 
-  // ── a NON-Error HANDLER rejection still audits and rethrows (r3) ──────
+  // ── a NON-Error HANDLER rejection is normalized, not thrown (r3) ──────
   {
     const { calls, deps } = makeDeps();
     const handler = wrapWithPolicy(
@@ -193,17 +204,12 @@ async function main() {
       {},
       deps
     );
-    let rejected = null;
-    try {
-      await handler({ server: 'prod' });
-    } catch (e) {
-      rejected = e;
-    }
-    assert.strictEqual(rejected, null, 'original rejection value rethrown unchanged');
+    const resp = await handler({ server: 'prod' });
+    assert.strictEqual(resp.isError, true, 'non-Error rejection becomes an isError envelope');
     const failure = calls.audits[calls.audits.length - 1];
     assert.strictEqual(failure.result.success, false, 'failure audit entry still written');
     assert.strictEqual(failure.result.error, 'null', 'non-Error rejection normalized to String()');
-    ok('handler rejecting with a non-Error value is audited and rethrown unchanged');
+    ok('handler rejecting with a non-Error value is audited and enveloped');
   }
 
   // ── commandArg + expandAlias ───────────────────────────────────────────
@@ -280,6 +286,68 @@ async function main() {
     assert.strictEqual(calls.policy.length, 0, 'unresolvable subject → no gate');
     assert.strictEqual(calls.audits.length, 1, 'and no audit (no subject)');
     ok('serverFrom derives the policy subject (and skips cleanly when unresolvable)');
+  }
+
+  // ── envelope normalization contract (candidate-1 deepening) ───────────
+  {
+    const { calls, deps } = makeDeps();
+
+    // A plain string becomes a text envelope.
+    const str = wrapWithPolicy('ssh_upload', async () => 'done', {}, deps);
+    const strResp = await str({ server: 'prod' });
+    assert.deepStrictEqual(
+      strResp.content,
+      [{ type: 'text', text: 'done' }],
+      'string return becomes a text envelope'
+    );
+    assert.strictEqual(strResp.isError, undefined, 'success envelope carries no isError');
+
+    // { text, exitCode } keeps the exitCode channel for the audit derivation.
+    const withCode = wrapWithPolicy(
+      'ssh_execute',
+      async () => ({ text: 'ran', exitCode: 3 }),
+      { commandArg: 'command' },
+      deps
+    );
+    const codeResp = await withCode({ server: 'prod', command: 'ls' });
+    assert.strictEqual(codeResp.exitCode, 3, 'exitCode survives normalization');
+    assert.strictEqual(
+      calls.audits[calls.audits.length - 1].result.success,
+      false,
+      'nonzero exitCode still audited as failure after normalization'
+    );
+
+    // A full { content } response passes through untouched.
+    const structured = wrapWithPolicy(
+      'ssh_upload',
+      async () => ({ content: [{ type: 'text', text: 'x' }], isError: true }),
+      {},
+      deps
+    );
+    const structResp = await structured({ server: 'prod' });
+    assert.strictEqual(structResp.isError, true, 'structured response untouched');
+
+    ok('envelope contract: string / {text,exitCode} / {content} all normalize correctly');
+  }
+
+  // ── exempt/manual gates still get envelope normalization ──────────────
+  {
+    const { calls, deps } = makeDeps();
+    for (const gate of /** @type {('exempt' | 'manual')[]} */ (['exempt', 'manual'])) {
+      const throwing = wrapWithPolicy(
+        'ssh_download',
+        async () => {
+          throw new Error('raw failure');
+        },
+        { gate },
+        deps
+      );
+      const resp = await throwing({ server: 'prod' });
+      assert.strictEqual(resp.isError, true, `${gate}: rejection enveloped, not propagated`);
+      assert.match(resp.content[0].text, /raw failure/);
+      assert.strictEqual(calls.audits.length, 0, `${gate}: still no funnel audit`);
+    }
+    ok('exempt/manual: no policy/audit, but a throwing handler is still enveloped');
   }
 
   console.log(`\n✅ policy funnel tests passed (${passed} checks)`);

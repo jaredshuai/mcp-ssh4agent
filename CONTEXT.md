@@ -36,6 +36,10 @@ _Avoid_: command (a "command" is the shell string a Tool runs remotely), functio
 The runtime context (register, getConnection, pool maps, policy gate) the entry point injects into each tool group module. Tool modules never import the entry point.
 _Avoid_: registry handle, DI container
 
+**Registration funnel**:
+The single wrapper (`wrapWithPolicy` in `src/tool-registry.ts`) every Tool passes through at registration. It owns the policy gate, the Audit outcome, and the response envelope: handlers return text (or `{text, exitCode}`) or throw — the funnel builds the MCP envelope, sets `isError`, and records failures. Tools never build envelopes or catch to format errors themselves.
+_Avoid_: middleware, wrapper
+
 **Connection**:
 A live SSH session to a Server, held in the connection pool and reused across Tool calls until timeout or invalidation.
 _Avoid_: session (reserved — see below), link

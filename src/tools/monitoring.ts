@@ -81,14 +81,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
             },
           });
 
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `📜 Tailing ${file} on ${serverName}\nSession ID: ${sessionId}\nShowing last ${lines} lines${grep ? ` (filtered: ${grep})` : ''}\n\n⚠️ Note: In follow mode, output is streamed to stderr.\nTo stop tailing, you'll need to kill the session.`,
-              },
-            ],
-          };
+          return `📜 Tailing ${file} on ${serverName}\nSession ID: ${sessionId}\nShowing last ${lines} lines${grep ? ` (filtered: ${grep})` : ''}\n\n⚠️ Note: In follow mode, output is streamed to stderr.\nTo stop tailing, you'll need to kill the session.`;
         } else {
           // Non-follow mode - just get the output
           const tailServers = await loadServerConfig();
@@ -109,14 +102,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
             lines: result.stdout.split('\n').length,
           });
 
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `📜 Last ${lines} lines of ${file} on ${serverName}${grep ? ` (filtered: ${grep})` : ''}:\n\n${result.stdout}`,
-              },
-            ],
-          };
+          return `📜 Last ${lines} lines of ${file} on ${serverName}${grep ? ` (filtered: ${grep})` : ''}:\n\n${result.stdout}`;
         }
       } catch (error) {
         logger.error(`Tail failed on ${serverName}`, {
@@ -124,15 +110,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Tail error: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error;
       }
     }
   );
@@ -299,29 +277,14 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           formattedOutput += '(Not implemented in this version - would require streaming support)';
         }
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: formattedOutput,
-            },
-          ],
-        };
+        return formattedOutput;
       } catch (error) {
         logger.error(`Monitoring failed on ${serverName}`, {
           type,
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Monitor error: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error;
       }
     }
   );
@@ -401,29 +364,14 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           status: health.overall_status,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(response, null, 2),
-            },
-          ],
-        };
+        return JSON.stringify(response, null, 2);
       } catch (error) {
         logger.error('Health check failed', {
           server: serverName,
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Health check failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error;
       }
     }
   );
@@ -485,29 +433,14 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           stopped,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(response, null, 2),
-            },
-          ],
-        };
+        return JSON.stringify(response, null, 2);
       } catch (error) {
         logger.error('Service status check failed', {
           server: serverName,
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Service status check failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error;
       }
     }
   );
@@ -644,14 +577,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
             throw new Error(`Unknown action: ${action}`);
         }
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(response, null, 2),
-            },
-          ],
-        };
+        return JSON.stringify(response, null, 2);
       } catch (error) {
         logger.error('Process manager failed', {
           server: serverName,
@@ -659,15 +585,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Process manager failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error;
       }
     },
     // Policy: only the `kill` action mutates remote state — gate just that
@@ -839,14 +757,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
             throw new Error(`Unknown action: ${action}`);
         }
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(response, null, 2),
-            },
-          ],
-        };
+        return JSON.stringify(response, null, 2);
       } catch (error) {
         logger.error('Alert setup failed', {
           server: serverName,
@@ -854,15 +765,7 @@ export function registerMonitoringTools(ctx: import('../tool-registry.ts').ToolC
           error: error.message,
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Alert setup failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
+        throw error;
       }
     },
     // Policy: `set` writes config on the remote; `get` and `check` are read-only.

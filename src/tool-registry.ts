@@ -89,11 +89,54 @@ interface PolicyFunnelDeps {
 }
 
 /**
- * Wrap a tool handler with the declared policy gate and audit trail.
+ * The handler contract the funnel enforces (candidate-1 deepening):
+ *
+ *   - return a string            → text envelope
+ *   - return { text, exitCode? } → text envelope, exitCode preserved for audit
+ *   - return { content: [...] }  → passed through (structured responses)
+ *   - throw                      → audited as failure, returned as an
+ *                                  isError envelope (never propagated)
+ *
+ * Before this, every one of the 37 handlers built its own envelope and catch
+ * block; 29 of 38 catch blocks omitted `isError`, so the audit derivation
+ * below recorded their failures as SUCCESSES. Envelope building now lives
+ * here, once.
+ */
+
+/** Coerce a handler's return value into an MCP envelope. */
+function normalizeResponse(result: any): any {
+  if (typeof result === 'string') {
+    return { content: [{ type: 'text', text: result }] };
+  }
+  if (result && typeof result === 'object') {
+    if (Array.isArray(result.content)) return result;
+    if (typeof result.text === 'string') {
+      const envelope: any = { content: [{ type: 'text', text: result.text }] };
+      // exitCode feeds the audit derivation below; MCP clients ignore it.
+      if (typeof result.exitCode === 'number') envelope.exitCode = result.exitCode;
+      return envelope;
+    }
+  }
+  return { content: [{ type: 'text', text: String(result ?? '') }] };
+}
+
+/** Build the isError envelope for a handler rejection. */
+function errorEnvelope(error: unknown): any {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    content: [{ type: 'text', text: `❌ Error: ${message}` }],
+    isError: true,
+  };
+}
+
+/**
+ * Wrap a tool handler with the declared policy gate, audit trail and response
+ * envelope.
  *
  * Pure orchestration — no imports from the entry point, fully unit-testable
- * via injected deps. Returns the original handler untouched for exempt/manual
- * gates so their behavior is explicitly owned by the tool itself.
+ * via injected deps. Exempt/manual gates skip policy and funnel audit (the
+ * tool owns those) but still get envelope normalization, so a throwing
+ * handler can never reach the MCP transport raw under ANY gate.
  */
 export function wrapWithPolicy(
   toolName: string,
@@ -102,7 +145,16 @@ export function wrapWithPolicy(
   deps: PolicyFunnelDeps
 ): (args: any, extra?: any) => any {
   const gate = policyDecl?.gate ?? 'server';
-  if (gate === 'exempt' || gate === 'manual') return handler;
+
+  if (gate === 'exempt' || gate === 'manual') {
+    return async (args, extra) => {
+      try {
+        return normalizeResponse(await handler(args, extra));
+      } catch (error) {
+        return errorEnvelope(error);
+      }
+    };
+  }
 
   return async (args, extra) => {
     const server = policyDecl?.serverFrom ? await policyDecl.serverFrom(args) : args?.server;
@@ -120,22 +172,9 @@ export function wrapWithPolicy(
       if (denied) return denied;
     }
 
+    let response: any;
     try {
-      const response = await handler(args, extra);
-      if (server) {
-        // Failure is derived from BOTH signals: the handler's isError flag
-        // (error responses) and a nonzero exitCode (command-bearing tools
-        // report the command's exit status) — either means the audit entry
-        // must not claim success.
-        const failed =
-          response?.isError === true ||
-          (typeof response?.exitCode === 'number' && response.exitCode !== 0);
-        await safeAudit(deps, server, toolName, args, {
-          success: !failed,
-          code: response?.exitCode,
-        });
-      }
-      return response;
+      response = normalizeResponse(await handler(args, extra));
     } catch (error) {
       if (server) {
         // Same normalization as safeAudit: handlers are seams that may
@@ -145,8 +184,25 @@ export function wrapWithPolicy(
         const message = error instanceof Error ? error.message : String(error);
         await safeAudit(deps, server, toolName, args, { success: false, error: message });
       }
-      throw error;
+      // Return (not rethrow): the envelope carries isError, so the audit
+      // derivation and the MCP client see the failure by construction.
+      return errorEnvelope(error);
     }
+
+    if (server) {
+      // Failure is derived from BOTH signals: the handler's isError flag
+      // (error responses) and a nonzero exitCode (command-bearing tools
+      // report the command's exit status) — either means the audit entry
+      // must not claim success.
+      const failed =
+        response?.isError === true ||
+        (typeof response?.exitCode === 'number' && response.exitCode !== 0);
+      await safeAudit(deps, server, toolName, args, {
+        success: !failed,
+        code: response?.exitCode,
+      });
+    }
+    return response;
   };
 }
 

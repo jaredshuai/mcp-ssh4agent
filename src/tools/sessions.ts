@@ -19,43 +19,21 @@ export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolCon
         name: z.string().optional().describe('Optional session name for identification'),
       },
     },
+    // Envelope + failure audit are the funnel's (src/tool-registry.ts):
+    // return text, or throw.
     async ({ server: serverName, name }) => {
-      try {
-        const ssh = await getConnection(serverName);
-        const session = await createSession(serverName, ssh);
+      const ssh = await getConnection(serverName);
+      const session = await createSession(serverName, ssh);
 
-        const sessionName = name || `Session on ${serverName}`;
+      const sessionName = name || `Session on ${serverName}`;
 
-        logger.info('SSH session started', {
-          id: session.id,
-          server: serverName,
-          name: sessionName,
-        });
+      logger.info('SSH session started', {
+        id: session.id,
+        server: serverName,
+        name: sessionName,
+      });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `🚀 SSH Session Started\n\nSession ID: ${session.id}\nServer: ${serverName}\nName: ${sessionName}\nState: ${session.state}\nWorking Directory: ${session.context.cwd}\n\nUse ssh_session_send to execute commands in this session.\nUse ssh_session_close to terminate the session.`,
-            },
-          ],
-        };
-      } catch (error) {
-        logger.error('Failed to start SSH session', {
-          server: serverName,
-          error: error.message,
-        });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to start session: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      return `🚀 SSH Session Started\n\nSession ID: ${session.id}\nServer: ${serverName}\nName: ${sessionName}\nState: ${session.state}\nWorking Directory: ${session.context.cwd}\n\nUse ssh_session_send to execute commands in this session.\nUse ssh_session_close to terminate the session.`;
     }
   );
 
@@ -233,60 +211,28 @@ export function registerSessionsTools(ctx: import('../tool-registry.ts').ToolCon
       },
     },
     async ({ session: sessionId }) => {
-      try {
-        if (sessionId === 'all') {
-          const sessions = listSessions();
-          const count = sessions.length;
+      if (sessionId === 'all') {
+        const sessions = listSessions();
+        const count = sessions.length;
 
-          sessions.forEach((s) => {
-            try {
-              closeSession(s.id);
-            } catch (err) {
-              // Ignore individual close errors
-            }
-          });
-
-          logger.info('Closed all SSH sessions', { count });
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `🔚 Closed ${count} SSH sessions`,
-              },
-            ],
-          };
-        } else {
-          closeSession(sessionId);
-
-          logger.info('SSH session closed', { session: sessionId });
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `🔚 Session closed: ${sessionId}`,
-              },
-            ],
-          };
-        }
-      } catch (error) {
-        logger.error('Failed to close session', {
-          session: sessionId,
-          error: error.message,
+        sessions.forEach((s) => {
+          try {
+            closeSession(s.id);
+          } catch (err) {
+            // Ignore individual close errors
+          }
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to close session: ${error.message}`,
-            },
-          ],
-        };
+        logger.info('Closed all SSH sessions', { count });
+
+        return `🔚 Closed ${count} SSH sessions`;
       }
+
+      closeSession(sessionId);
+
+      logger.info('SSH session closed', { session: sessionId });
+
+      return `🔚 Session closed: ${sessionId}`;
     }
   );
-
-  // Helper function to format duration
 }
