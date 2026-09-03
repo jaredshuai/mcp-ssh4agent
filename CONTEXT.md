@@ -41,8 +41,12 @@ The single wrapper (`wrapWithPolicy` in `src/tool-registry.ts`) every Tool passe
 _Avoid_: middleware, wrapper
 
 **Connection**:
-A live SSH session to a Server, held in the connection pool and reused across Tool calls until timeout or invalidation.
+A live SSH session to a Server. Pooled connections are held in the connection pool and reused across Tool calls until timeout or invalidation; a Tunnel's connection is dedicated, owned by the tunnel, and disposed when it closes.
 _Avoid_: session (reserved — see below), link
+
+**Tunnel**:
+A port forward (local/remote/SOCKS) driven by its own dedicated Connection, outlived by neither the pool nor other tunnels; torn down together with its Connection (see ADR-0003).
+_Avoid_: channel, forward
 
 **Session**:
 A stateful shell channel (working directory, env vars preserved across sends) created by `ssh_session_start`. Distinct from a pooled Connection.
