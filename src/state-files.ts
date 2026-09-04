@@ -14,6 +14,9 @@
  *   hooks/                   (src/hooks-system.ts scripts)
  *   .ssh-command-history.json(src/logger.ts)
  *   .ssh4agent.log           (src/logger.ts, unless SSH_LOG_FILE)
+ *   .ssh4agent-profile       (src/profile-loader.ts active-profile pointer;
+ *                             the pre-rebrand .ssh-manager-profile migrates
+ *                             too — see getActiveProfileName)
  *
  * Migration: on read, if the file is absent in the state dir but present in
  * the legacy install directory, its content is copied to the state dir

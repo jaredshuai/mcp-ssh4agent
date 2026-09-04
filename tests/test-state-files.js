@@ -167,6 +167,40 @@ async function main() {
   assert.strictEqual(fs.existsSync(path.join(home, 'hooks')), true, 'hooks dir in state dir');
   ok('hooks config + hooks dir live in the state dir');
 
+  // Profile pointer: the active-profile file used to live in the install
+  // dir (`__dirname/..`) — the last #8 holdout. Both legacy names migrate
+  // (.ssh4agent-profile via readStateFileText, pre-rebrand .ssh-manager-profile
+  // explicitly), and setActiveProfile writes into the state dir.
+  fs.writeFileSync(path.join(legacy, '.ssh-manager-profile'), 'minimal');
+  const profiles = await import('../src/profile-loader.ts');
+  assert.strictEqual(
+    profiles.getActiveProfileName(),
+    'minimal',
+    'pre-rebrand .ssh-manager-profile content honored'
+  );
+  assert.strictEqual(
+    fs.existsSync(path.join(home, '.ssh4agent-profile')),
+    true,
+    'profile pointer migrated into the state dir under the new name'
+  );
+  assert.strictEqual(
+    fs.readFileSync(path.join(home, '.ssh4agent-profile'), 'utf8'),
+    'minimal',
+    'migrated pointer holds the legacy selection'
+  );
+  assert.strictEqual(profiles.setActiveProfile('default'), true, 'setActiveProfile succeeds');
+  assert.strictEqual(
+    fs.readFileSync(path.join(home, '.ssh4agent-profile'), 'utf8'),
+    'default',
+    'setActiveProfile persists in the state dir'
+  );
+  assert.strictEqual(
+    profiles.setActiveProfile('no-such-profile'),
+    false,
+    'unknown profile rejected without touching the pointer'
+  );
+  ok('profile pointer lives in the state dir; both legacy names migrate');
+
   // Nothing ever lands in the legacy (install) directory except our fixtures.
   const legacyEntries = fs
     .readdirSync(legacy)
@@ -175,7 +209,8 @@ async function main() {
         f !== '.server-aliases.json' &&
         f !== '.server-groups.json' &&
         f !== '.migrate-perms.json' &&
-        f !== '.ssh4agent.log'
+        f !== '.ssh4agent.log' &&
+        f !== '.ssh-manager-profile'
     );
   assert.deepStrictEqual(legacyEntries, [], 'no module writes to the legacy dir');
 
