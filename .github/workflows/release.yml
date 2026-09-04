@@ -88,7 +88,10 @@ jobs:
           test -d dist/profiles
 
       - name: Publish to npm
-        run: npm publish --provenance
+        # --access public: first publication of a new package name
+        # (provenance cannot be generated for a package that is not yet
+        # public); the flag is harmless on subsequent publishes.
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
