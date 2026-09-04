@@ -29,6 +29,7 @@ on:
 
 permissions:
   contents: write # creating the GitHub Release
+  id-token: write # npm publish --provenance (attestation of the build origin)
 
 jobs:
   release:
