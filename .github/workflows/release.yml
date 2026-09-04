@@ -1,0 +1,112 @@
+# Release pipeline: npm publish + GitHub Release, driven by a version tag.
+#
+# Trigger: push a tag matching 'v*' (e.g. v4.0.0) to origin.
+# The tag must point at a commit whose package.json version matches the tag,
+# and the tag message / release notes come from the CHANGELOG section.
+#
+# Required secret (configure once, see docs/agents/release.md):
+#   NPM_TOKEN — an npm Automation access token (npmjs.com → Access Tokens).
+#
+# Steps: checkout → verify tag/version consistency → full test suite →
+# build (prepack compiles TS → dist/ JS) → pack & inspect → publish to npm →
+# create the GitHub Release with the CHANGELOG notes.
+#
+# The release job runs AFTER the Tests/Quality workflows have passed on the
+# same push (they run on branch pushes; this one only fires on the tag).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. v4.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write # creating the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Never publish from a fork PR — tags only originate from maintainers.
+    if: github.repository == 'jaredshuai/mcp-ssh4agent'
+
+    steps:
+      - name: Checkout (tag)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify tag matches package.json version
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "package.json: ${PKG_VERSION}, tag: ${TAG}"
+          if [ "${PKG_VERSION}" != "${TAG}" ]; then
+            echo "::error::Tag ${TAG} does not match package.json version ${PKG_VERSION}. Bump the version and re-tag."
+            exit 1
+          fi
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npx @biomejs/biome lint .
+
+      - name: Build (prepack: TS → dist/ JS)
+        run: npm run build
+
+      - name: Inspect the package before publishing
+        run: |
+          npm pack --dry-run
+          test -f dist/src/index.js
+          test -f dist/cli/ssh-manager.js
+          test -d dist/profiles
+
+      - name: Publish to npm
+        run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${{ inputs.tag || github.ref_name }}"
+          # Strip the v prefix for the CHANGELOG heading lookup.
+          BARE="${VERSION#v}"
+          node -e '
+            const fs = require("fs");
+            const bare = process.argv[1];
+            const text = fs.readFileSync("CHANGELOG.md", "utf8");
+            const re = new RegExp(`## \\[${bare}\\][^\\n]*\\n([\\s\\S]*?)(?=\\n## \\[|$)`);
+            const m = text.match(re);
+            if (!m) { console.error(`CHANGELOG section for ${bare} not found`); process.exit(1); }
+            fs.writeFileSync(process.argv[2], m[0].trim() + "\n");
+          ' "$BARE" release-notes.md
+
+      - name: Create GitHub Release
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file release-notes.md --verify-tag
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
