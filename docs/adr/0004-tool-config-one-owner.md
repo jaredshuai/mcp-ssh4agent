@@ -17,8 +17,10 @@ Two shape decisions came with it:
   callers — the entry point logs its own summary; the CLI has its `print_*` output.
   This extends the established shared set (server-fields, env-path) that the CLI
   already imports from `src/`; stateful runtime modules stay off-limits.
+
 - **Semantics live in the manager, not per-caller.** Mode transitions materialize
   the current effective state into custom mode before flipping one group;
   reset writes the default (mode: all) rather than deleting; per-tool overrides win
   in every mode. The CLI gets these by calling `enableGroup`/`disableGroup`/
   `replaceConfig`/`reset` instead of hand-writing config JSON.
+
