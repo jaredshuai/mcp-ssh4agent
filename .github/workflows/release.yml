@@ -36,11 +36,17 @@ jobs:
     # Never publish from a fork PR — tags only originate from maintainers.
     if: github.repository == 'jaredshuai/mcp-ssh4agent'
 
+    # The tag being released: the workflow_dispatch input when dispatched,
+    # otherwise the pushed tag itself. Resolved per-step (inputs is empty
+    # on tag pushes) so the job-level `if` stays contexts-valid.
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
     steps:
       - name: Checkout (tag)
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Use Node.js 24
         uses: actions/setup-node@v4
@@ -54,7 +60,7 @@ jobs:
       - name: Verify tag matches package.json version
         run: |
           PKG_VERSION="v$(node -p "require('./package.json').version")"
-          TAG="${{ inputs.tag || github.ref_name }}"
+          TAG="${RELEASE_TAG}"
           echo "package.json: ${PKG_VERSION}, tag: ${TAG}"
           if [ "${PKG_VERSION}" != "${TAG}" ]; then
             echo "::error::Tag ${TAG} does not match package.json version ${PKG_VERSION}. Bump the version and re-tag."
@@ -87,7 +93,7 @@ jobs:
 
       - name: Extract release notes from CHANGELOG
         run: |
-          VERSION="${{ inputs.tag || github.ref_name }}"
+          VERSION="${RELEASE_TAG}"
           # Strip the v prefix for the CHANGELOG heading lookup.
           BARE="${VERSION#v}"
           node -e '
@@ -102,7 +108,7 @@ jobs:
 
       - name: Create GitHub Release
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
+          TAG="${RELEASE_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md
           else
