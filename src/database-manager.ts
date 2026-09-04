@@ -7,6 +7,7 @@
  */
 
 import { shSingleQuote } from './shell-quote.ts';
+import { dumpTempFile } from './dump-command-builder.ts';
 
 // Supported database types
 export const DB_TYPES = {
@@ -42,22 +43,34 @@ export function shellQuote(value) {
 export function buildMySQLImportCommand(options) {
   const { database, user, password, host = 'localhost', port = 3306, inputFile } = options;
 
-  let command = '';
-
-  if (inputFile.endsWith('.gz')) {
-    command = `gunzip -c ${shellQuote(inputFile)} | `;
-  } else {
-    command = `cat ${shellQuote(inputFile)} | `;
-  }
-
-  command += 'mysql';
+  let command = 'mysql';
   if (user) command += ` -u${shellQuote(user)}`;
   if (password) command += ` -p${shellQuote(password)}`;
   if (host) command += ` -h ${shellQuote(host)}`;
   if (port) command += ` -P ${shellQuote(port)}`;
   command += ` ${shellQuote(database)}`;
 
-  return command;
+  if (inputFile.endsWith('.gz')) {
+    // Two-step (issue #12): decompress to a temp file FIRST so gunzip's exit
+    // code is checked by `&&` — the old `gunzip -c X | mysql` pipeline
+    // reported the LAST command's exit code, so a corrupt or truncated
+    // archive exited 0 after mysql consumed the partial stream: a mangled
+    // import reported as success. The mirror of the dump-side fix (#10). A
+    // partial import already applied to the database cannot be rolled back,
+    // but it is no longer reported as successful.
+    const tempFile = dumpTempFile(inputFile);
+    return (
+      `gunzip -c ${shellQuote(inputFile)} > ${shellQuote(tempFile)}` +
+      ` && ${command} < ${shellQuote(tempFile)}` +
+      ` && rm -f ${shellQuote(tempFile)}` +
+      ` || { rm -f ${shellQuote(tempFile)}; exit 1; }`
+    );
+  }
+
+  // Direct redirection instead of the old `cat X | mysql` pipe: a missing
+  // input fails the shell's own redirection instead of being swallowed by
+  // the pipeline (cat errors, mysql succeeds on empty stdin, pipe reports 0).
+  return `${command} < ${shellQuote(inputFile)}`;
 }
 
 /**
@@ -79,11 +92,18 @@ export function buildPostgreSQLImportCommand(options) {
   command += ` -d ${shellQuote(database)}`;
 
   if (inputFile.endsWith('.gz')) {
-    command = `gunzip -c ${shellQuote(inputFile)} | ${command}`;
-  } else {
-    command += ` ${shellQuote(inputFile)}`;
+    // Two-step (issue #12): see buildMySQLImportCommand. The PGPASSWORD=
+    // prefix binds to pg_restore only; gunzip runs before it without it.
+    const tempFile = dumpTempFile(inputFile);
+    return (
+      `gunzip -c ${shellQuote(inputFile)} > ${shellQuote(tempFile)}` +
+      ` && ${command} ${shellQuote(tempFile)}` +
+      ` && rm -f ${shellQuote(tempFile)}` +
+      ` || { rm -f ${shellQuote(tempFile)}; exit 1; }`
+    );
   }
 
+  command += ` ${shellQuote(inputFile)}`;
   return command;
 }
 
@@ -96,6 +116,9 @@ export function buildMongoDBRestoreCommand(options) {
   let command = '';
 
   if (inputPath.endsWith('.tar.gz')) {
+    // && chain, not a pipe: a corrupt archive fails tar and the non-zero exit
+    // code propagates — no pipefail hazard here (verified for issue #12;
+    // see tests/test-dump-command-builder.js).
     const extractDir = inputPath.replace('.tar.gz', '');
     command = `tar -xzf ${shellQuote(inputPath)} -C "$(dirname ${shellQuote(inputPath)})" && `;
     command += 'mongorestore';

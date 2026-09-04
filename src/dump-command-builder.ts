@@ -13,16 +13,17 @@
 import { shSingleQuote } from './shell-quote.ts';
 
 /**
- * Temp file used by the two-step dump → compress pipeline (issue #10).
+ * Temp file used by the two-step dump → compress and decompress → import
+ * pipelines (issues #10 and #12).
  *
- * A `mysqldump ... | gzip > out` pipeline reports the LAST command's exit
- * code, so a failed dump producer (wrong password, missing database, full
- * disk) left an empty or partial archive that the tools marked as a
- * successful backup. The builders now dump to a temp file first — its exit
- * code is checked by `&&` before gzip ever runs — then compress, and a final
- * `||` arm removes BOTH half-products so no residual archive remains. Pure
- * POSIX semantics: works under any remote login shell (bash, dash, ash),
- * unlike `bash -o pipefail` wrapping.
+ * `mysqldump ... | gzip > out` reported the LAST command's exit code, so a
+ * failed producer (wrong password, missing database, full disk) left an empty
+ * or partial archive that the tools marked as a successful backup (#10);
+ * `gunzip -c X | mysql` had the mirror bug — a corrupt or truncated archive
+ * exited 0 after the client consumed the partial stream (#12). Both pipelines
+ * now stage through this temp file, gated by `&&`, with a final `||` arm that
+ * removes every half-product. Pure POSIX semantics: works under any remote
+ * login shell (bash, dash, ash), unlike `bash -o pipefail` wrapping.
  */
 export function dumpTempFile(outputFile) {
   return `${outputFile}.part`;

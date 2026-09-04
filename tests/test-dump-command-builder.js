@@ -33,6 +33,11 @@ import {
 } from '../src/dump-command-builder.ts';
 import { shSingleQuote } from '../src/shell-quote.ts';
 import {
+  buildMySQLImportCommand,
+  buildPostgreSQLImportCommand,
+  buildMongoDBRestoreCommand,
+} from '../src/database-manager.ts';
+import {
   buildSaveMetadataCommand,
   buildRestoreCommand,
   getBackupArchivePath,
@@ -321,6 +326,218 @@ if (process.platform === 'win32') {
     ok(
       'real /bin/sh: failed dump → non-zero exit, no residual archive; success → valid gzip (#10)'
     );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ── issue #12: compressed imports decompress first, never a pipe ─────────────
+// The mirror of #10 on the import side: `gunzip -c X | mysql` reported the
+// LAST command's exit code, so a corrupt/truncated archive exited 0 after the
+// client consumed the partial stream — a mangled import reported as success.
+
+{
+  const input = '/backups/shop.sql.gz';
+  const tmp = dumpTempFile(input);
+  const cmd = buildMySQLImportCommand({
+    database: 'shop',
+    user: 'root',
+    password: 'p',
+    inputFile: input,
+  });
+  assert.ok(
+    cmd.startsWith(`gunzip -c ${shSingleQuote(input)} > ${shSingleQuote(tmp)}`),
+    'decompress to the temp file first (exit code checked by &&)'
+  );
+  assert.ok(cmd.includes('&& mysql'), 'import gated behind gunzip by &&');
+  assert.ok(cmd.includes(`< ${shSingleQuote(tmp)}`), 'mysql reads the temp file via redirection');
+  assert.ok(cmd.includes(`&& rm -f ${shSingleQuote(tmp)}`), 'temp removed on success');
+  assert.ok(
+    cmd.includes(`|| { rm -f ${shSingleQuote(tmp)}; exit 1; }`),
+    'failure cleans the temp file and exits non-zero'
+  );
+  assert.ok(!cmd.includes(' | '), `no exit-code-swallowing pipe: ${cmd}`);
+  ok('compressed MySQL import is two-step (gunzip → mysql) with failure cleanup (#12)');
+}
+
+{
+  // Non-gz input: direct < redirection. The old `cat X | mysql` reported 0
+  // for a MISSING file (cat errors, mysql succeeds on empty stdin).
+  const cmd = buildMySQLImportCommand({ database: 'shop', inputFile: '/backups/shop.sql' });
+  assert.ok(!cmd.includes('gunzip'), 'no gunzip stage');
+  assert.ok(!cmd.includes('cat '), 'no cat stage');
+  assert.ok(!cmd.includes(' | '), 'no pipe');
+  assert.ok(cmd.endsWith(`< ${shSingleQuote('/backups/shop.sql')}`), `direct redirection: ${cmd}`);
+  ok('plain MySQL import uses direct < redirection (missing file fails the shell)');
+}
+
+{
+  const input = '/backups/shop.dump.gz';
+  const tmp = dumpTempFile(input);
+  const cmd = buildPostgreSQLImportCommand({
+    database: 'shop',
+    password: 'pw',
+    inputFile: input,
+  });
+  assert.ok(
+    cmd.startsWith(`gunzip -c ${shSingleQuote(input)} > ${shSingleQuote(tmp)}`),
+    'decompress to the temp file first'
+  );
+  assert.ok(
+    cmd.includes(`&& PGPASSWORD=${shSingleQuote('pw')} pg_restore`),
+    'PGPASSWORD prefix binds to pg_restore only (gunzip runs without it)'
+  );
+  assert.ok(
+    cmd.includes(`-d ${shSingleQuote('shop')} ${shSingleQuote(tmp)} `),
+    'temp file is the pg_restore positional argument'
+  );
+  assert.ok(cmd.includes(`&& rm -f ${shSingleQuote(tmp)}`), 'temp removed on success');
+  assert.ok(
+    cmd.includes(`|| { rm -f ${shSingleQuote(tmp)}; exit 1; }`),
+    'failure cleans the temp file and exits non-zero'
+  );
+  assert.ok(!cmd.includes(' | '), `no exit-code-swallowing pipe: ${cmd}`);
+  ok('compressed PostgreSQL import is two-step (gunzip → pg_restore) with cleanup (#12)');
+}
+
+{
+  // Non-gz pg input keeps its shape: PGPASSWORD prefix + direct file argument.
+  const cmd = buildPostgreSQLImportCommand({
+    database: 'shop',
+    password: 'pw',
+    inputFile: '/backups/shop.dump',
+  });
+  assert.ok(cmd.startsWith(`PGPASSWORD=${shSingleQuote('pw')} pg_restore`), 'env prefix kept');
+  assert.ok(cmd.endsWith(shSingleQuote('/backups/shop.dump')), 'direct file argument');
+  assert.ok(!cmd.includes(' | '), 'no pipe');
+  ok('plain PostgreSQL import keeps the direct file argument');
+}
+
+// ── issue #12 semantics under a real /bin/sh ─────────────────────────────────
+// Corrupt/truncated archives must fail the import BEFORE the database client
+// consumes the partial stream, and leave no .part residue. gunzip and tar are
+// the REAL ones; mysql / pg_restore / mongorestore are fakes that record they
+// ran — proving the real clients never see corrupt input. The mongo check also
+// verifies the tar branch's && chain propagates a corrupt-archive failure.
+// Skipped on Windows (no /bin/sh); the Linux CI runs it.
+
+if (process.platform === 'win32') {
+  console.log('⏭ skip: import exit-code semantics need a real /bin/sh (Linux CI runs it)');
+} else {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-exit-'));
+  const fakebin = path.join(tmp, 'bin');
+  const marker = path.join(tmp, 'CLIENT-RAN');
+  fs.mkdirSync(fakebin);
+  const writeFake = (name) => {
+    const p = path.join(fakebin, name);
+    fs.writeFileSync(p, `#!/bin/sh\necho ran > ${shSingleQuote(marker)}\nexit 0\n`);
+    fs.chmodSync(p, 0o755);
+  };
+  for (const bin of ['mysql', 'pg_restore', 'mongorestore']) writeFake(bin);
+  const env = { ...process.env, PATH: `${fakebin}:${process.env.PATH}` };
+
+  const run = (cmd) => {
+    try {
+      execSync(cmd, { shell: '/bin/sh', env, cwd: tmp, stdio: 'ignore' });
+      return 0;
+    } catch (error) {
+      return error.status ?? 1;
+    }
+  };
+
+  // A real gzip archive plus two corruption modes: mid-stream truncation and
+  // plain garbage (not a gzip stream at all).
+  const validGz = path.join(tmp, 'valid.sql.gz');
+  execSync(`printf 'INSERT 1;' | gzip > ${shSingleQuote(validGz)}`, { shell: '/bin/sh' });
+  const bytes = fs.readFileSync(validGz);
+  const truncated = path.join(tmp, 'trunc.sql.gz');
+  fs.writeFileSync(truncated, bytes.subarray(0, Math.floor(bytes.length / 2)));
+  const garbage = path.join(tmp, 'garbage.sql.gz');
+  fs.writeFileSync(garbage, 'definitely not a gzip stream');
+
+  try {
+    // MySQL: corrupt/truncated archives fail without invoking the client.
+    for (const [label, file] of [
+      ['garbage', garbage],
+      ['truncated', truncated],
+    ]) {
+      fs.rmSync(marker, { force: true });
+      const status = run(
+        buildMySQLImportCommand({ database: 'shop', user: 'root', password: 'p', inputFile: file })
+      );
+      assert.ok(status !== 0, `mysql import of ${label} archive must fail`);
+      assert.ok(!fs.existsSync(marker), `mysql must not consume the ${label} stream`);
+      assert.ok(!fs.existsSync(dumpTempFile(file)), `${label}: no .part residue`);
+    }
+
+    // MySQL: a valid archive imports, and the temp file is cleaned up.
+    fs.rmSync(marker, { force: true });
+    assert.strictEqual(
+      run(buildMySQLImportCommand({ database: 'shop', inputFile: validGz })),
+      0,
+      'valid gz import succeeds'
+    );
+    assert.ok(fs.existsSync(marker), 'mysql consumed the decompressed stream');
+    assert.ok(!fs.existsSync(dumpTempFile(validGz)), 'no .part residue after success');
+
+    // MySQL: a missing plain input fails the shell redirection itself.
+    fs.rmSync(marker, { force: true });
+    const missing = path.join(tmp, 'missing.sql');
+    assert.notStrictEqual(
+      run(buildMySQLImportCommand({ database: 'shop', inputFile: missing })),
+      0,
+      'missing non-gz input must fail'
+    );
+    assert.ok(!fs.existsSync(marker), 'mysql must not run for a missing input');
+
+    // PostgreSQL: a truncated archive fails before pg_restore runs.
+    fs.rmSync(marker, { force: true });
+    const pgStatus = run(
+      buildPostgreSQLImportCommand({ database: 'shop', password: 'pw', inputFile: truncated })
+    );
+    assert.ok(pgStatus !== 0, 'pg import of truncated archive must fail');
+    assert.ok(!fs.existsSync(marker), 'pg_restore must not consume the partial stream');
+    assert.ok(!fs.existsSync(dumpTempFile(truncated)), 'no .part residue');
+
+    // PostgreSQL: a valid archive restores and cleans up.
+    fs.rmSync(marker, { force: true });
+    assert.strictEqual(
+      run(buildPostgreSQLImportCommand({ database: 'shop', password: 'pw', inputFile: validGz })),
+      0,
+      'valid gz pg import succeeds'
+    );
+    assert.ok(fs.existsSync(marker), 'pg_restore consumed the decompressed stream');
+    assert.ok(!fs.existsSync(dumpTempFile(validGz)), 'no .part residue after success');
+
+    // MongoDB: the tar branch is an && chain (not a pipe) — a corrupt .tar.gz
+    // fails tar and mongorestore never runs; a valid one restores and the
+    // extracted dir is removed.
+    fs.rmSync(marker, { force: true });
+    const extractDir = path.join(tmp, 'mongo');
+    const tarGz = path.join(tmp, 'mongo.tar.gz');
+    fs.mkdirSync(extractDir);
+    fs.writeFileSync(path.join(extractDir, 'f.bson'), 'data');
+    execSync(`tar -czf ${shSingleQuote(tarGz)} -C ${shSingleQuote(tmp)} mongo`, {
+      shell: '/bin/sh',
+    });
+    const tarBytes = fs.readFileSync(tarGz);
+    const corruptTar = path.join(tmp, 'corrupt.tar.gz');
+    fs.writeFileSync(corruptTar, tarBytes.subarray(0, Math.floor(tarBytes.length / 2)));
+
+    assert.notStrictEqual(
+      run(buildMongoDBRestoreCommand({ inputPath: corruptTar })),
+      0,
+      'mongo restore of a corrupt tar must fail'
+    );
+    assert.ok(!fs.existsSync(marker), 'mongorestore must not run for a corrupt tar');
+
+    fs.rmSync(marker, { force: true });
+    fs.rmSync(extractDir, { recursive: true, force: true });
+    assert.strictEqual(run(buildMongoDBRestoreCommand({ inputPath: tarGz })), 0);
+    assert.ok(fs.existsSync(marker), 'mongorestore ran for the valid tar');
+    assert.ok(!fs.existsSync(extractDir), 'extract dir removed after restore');
+
+    ok('real /bin/sh: corrupt archives fail the import chain before any client runs (#12)');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
