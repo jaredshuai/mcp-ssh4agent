@@ -8,6 +8,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { logger } from './logger.ts';
 import { shSingleQuote } from './shell-quote.ts';
+import { mongoArchivePath } from './dump-command-builder.ts';
 import {
   buildMySQLImportCommand,
   buildPostgreSQLImportCommand,
@@ -49,6 +50,31 @@ export function getBackupMetadataPath(backupId, backupDir = DEFAULT_BACKUP_DIR) 
  */
 export function getBackupFilePath(backupId, backupDir = DEFAULT_BACKUP_DIR, extension = '.gz') {
   return path.join(backupDir, `${backupId}${extension}`);
+}
+
+/**
+ * Get the authoritative archive path for a backup id (issue #11).
+ *
+ * One source of truth shared by ssh_backup_create (dump command target, size
+ * check, reported location), ssh_backup_restore, and anything else that needs
+ * to name the artifact of a given backup id:
+ * - mysql / postgresql / files: `<backupDir>/<backupId>.gz`
+ * - mongodb (compressed):       `<backupDir>/<backupId>.tar.gz` — the dump
+ *   directory tarballed by the builder via mongoArchivePath
+ * - mongodb (uncompressed):    `<backupDir>/<backupId>` — the dump directory
+ *   itself (mongorestore accepts a directory)
+ */
+export function getBackupArchivePath(
+  backupId,
+  backupDir = DEFAULT_BACKUP_DIR,
+  type = null,
+  compress = true
+) {
+  if (type === BACKUP_TYPES.MONGODB) {
+    const dumpDir = getBackupFilePath(backupId, backupDir, '');
+    return compress ? mongoArchivePath(dumpDir) : dumpDir;
+  }
+  return getBackupFilePath(backupId, backupDir);
 }
 
 // Dump commands (MySQL / PostgreSQL / MongoDB) live in

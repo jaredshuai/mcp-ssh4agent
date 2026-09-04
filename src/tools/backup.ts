@@ -10,6 +10,7 @@ import {
   buildMySQLDumpCommand,
   buildPostgreSQLDumpCommand,
   buildMongoDBDumpCommand,
+  dumpTempFile,
 } from '../dump-command-builder.ts';
 import {
   BACKUP_TYPES,
@@ -17,6 +18,7 @@ import {
   generateBackupId,
   getBackupMetadataPath,
   getBackupFilePath,
+  getBackupArchivePath,
   buildFilesBackupCommand,
   buildRestoreCommand,
   createBackupMetadata,
@@ -84,7 +86,11 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
 
         const backupDirectory = backupDir || DEFAULT_BACKUP_DIR;
         const backupId = generateBackupId(type, name);
-        const backupFile = getBackupFilePath(backupId, backupDirectory);
+        // Single source of truth for the archive path (issue #11): what gets
+        // dumped, size-checked, reported, and later restored is ONE path.
+        // mysql/postgresql/files → <id>.gz; mongodb → <id>.tar.gz (compressed)
+        // or the dump directory itself.
+        const backupFile = getBackupArchivePath(backupId, backupDirectory, type, compress);
         const metadataPath = getBackupMetadataPath(backupId, backupDirectory);
 
         // Ensure backup directory exists with proper error handling
@@ -140,7 +146,10 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
             if (!database) {
               throw new Error('database parameter required for MongoDB backup');
             }
-            const mongoOutputDir = backupFile.replace('.gz', '');
+            // mongodump --out is a DIRECTORY; with compress the builder tars it
+            // to mongoArchivePath(outputDir) — which is exactly `backupFile`
+            // derived above, so dump target and reported archive coincide.
+            const mongoOutputDir = getBackupFilePath(backupId, backupDirectory, '');
             backupCommand = buildMongoDBDumpCommand({
               database,
               user: dbUser,
@@ -182,9 +191,10 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
           throw new Error(`Backup failed: ${result.stderr || result.stdout}`);
         }
 
-        // Get backup file size
+        // Get backup file size — stat the archive path derived above (#11),
+        // so the size matches the file the dump actually produced.
         const sizeResult = await ssh.execCommand(
-          `stat -f%z "${backupFile}" 2>/dev/null || stat -c%s "${backupFile}" 2>/dev/null`
+          `stat -f%z ${shSingleQuote(backupFile)} 2>/dev/null || stat -c%s ${shSingleQuote(backupFile)} 2>/dev/null`
         );
         const size = parseInt(sizeResult.stdout.trim()) || 0;
 
@@ -365,7 +375,24 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         }
 
         const metadata = JSON.parse(metadataResult.stdout);
-        const backupFile = getBackupFilePath(backupId, backupDirectory);
+        // Same single source of truth as ssh_backup_create (issue #11): mongodb
+        // restores read the .tar.gz (or the dump directory when uncompressed);
+        // everything else is <id>.gz. The metadata records whether the backup
+        // was compressed, so the two tools can never disagree.
+        const backupFile = getBackupArchivePath(
+          backupId,
+          backupDirectory,
+          metadata.type,
+          metadata.compressed !== false
+        );
+
+        // The archive must exist before anything touches the target (#11) —
+        // restores used to fail deep inside tar/mongorestore with a confusing
+        // error when the artifact was missing or at a drifted path.
+        const existsResult = await ssh.execCommand(`test -e ${shSingleQuote(backupFile)}`);
+        if (existsResult.code !== 0) {
+          throw new Error(`Backup archive not found on server: ${backupFile}`);
+        }
 
         // Execute pre-restore hook
         await executeHook('pre-restore', {
@@ -484,24 +511,35 @@ export function registerBackupTools(ctx: import('../tool-registry.ts').ToolConte
         // Add backup command based on type. Database dumps reuse the single
         // dump-command-builder implementation (quoted); the placeholder is
         // swapped afterwards for the runtime-expanded $BACKUP_FILE variable,
-        // which must stay unquoted inside the generated script.
+        // which must stay unquoted inside the generated script. The builders
+        // are two-step (issue #10), so BOTH the temp (`$BACKUP_FILE.part`) and
+        // the final archive placeholders have to be swapped — replace the
+        // longer .part form first.
         const RUNTIME_OUTPUT = '\x00BACKUP_FILE';
+        const swapRuntimeOutput = (cmd) =>
+          cmd
+            .replaceAll(shSingleQuote(dumpTempFile(RUNTIME_OUTPUT)), '"$BACKUP_FILE.part"')
+            .replaceAll(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"');
         switch (type) {
           case BACKUP_TYPES.MYSQL:
             scriptContent +=
-              buildMySQLDumpCommand({
-                database,
-                outputFile: RUNTIME_OUTPUT,
-                compress: true,
-              }).replace(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"') + '\n';
+              swapRuntimeOutput(
+                buildMySQLDumpCommand({
+                  database,
+                  outputFile: RUNTIME_OUTPUT,
+                  compress: true,
+                })
+              ) + '\n';
             break;
           case BACKUP_TYPES.POSTGRESQL:
             scriptContent +=
-              buildPostgreSQLDumpCommand({
-                database,
-                outputFile: RUNTIME_OUTPUT,
-                compress: true,
-              }).replace(shSingleQuote(RUNTIME_OUTPUT), '"$BACKUP_FILE"') + '\n';
+              swapRuntimeOutput(
+                buildPostgreSQLDumpCommand({
+                  database,
+                  outputFile: RUNTIME_OUTPUT,
+                  compress: true,
+                })
+              ) + '\n';
             break;
           case BACKUP_TYPES.MONGODB: {
             if (!database) {

@@ -13,6 +13,36 @@
 import { shSingleQuote } from './shell-quote.ts';
 
 /**
+ * Temp file used by the two-step dump → compress pipeline (issue #10).
+ *
+ * A `mysqldump ... | gzip > out` pipeline reports the LAST command's exit
+ * code, so a failed dump producer (wrong password, missing database, full
+ * disk) left an empty or partial archive that the tools marked as a
+ * successful backup. The builders now dump to a temp file first — its exit
+ * code is checked by `&&` before gzip ever runs — then compress, and a final
+ * `||` arm removes BOTH half-products so no residual archive remains. Pure
+ * POSIX semantics: works under any remote login shell (bash, dash, ash),
+ * unlike `bash -o pipefail` wrapping.
+ */
+export function dumpTempFile(outputFile) {
+  return `${outputFile}.part`;
+}
+
+/**
+ * Authoritative MongoDB archive path (issue #11).
+ *
+ * mongodump writes a DIRECTORY; with compression the archive is that directory
+ * tarballed to `<outputDir>.tar.gz`. The dump command, the size check, the
+ * reported location, and the restore flow must ALL derive the path through
+ * this function — historically each consumer guessed its own suffix
+ * (`<id>.gz` vs `<id>.tar.gz`), so backups "succeeded" but could not be
+ * size-checked or restored.
+ */
+export function mongoArchivePath(outputDir) {
+  return `${outputDir}.tar.gz`;
+}
+
+/**
  * Build MySQL dump command.
  *
  * `tables` (optional) restricts the dump to specific tables.
@@ -46,7 +76,13 @@ export function buildMySQLDumpCommand(options) {
   }
 
   if (compress) {
-    command += ` | gzip > ${shSingleQuote(outputFile)}`;
+    // Two-step (issue #10): the producer's failure must fail the whole
+    // command and leave no half-written archive behind (see dumpTempFile).
+    const tempFile = dumpTempFile(outputFile);
+    command += ` > ${shSingleQuote(tempFile)}`;
+    command += ` && gzip -c ${shSingleQuote(tempFile)} > ${shSingleQuote(outputFile)}`;
+    command += ` && rm -f ${shSingleQuote(tempFile)}`;
+    command += ` || { rm -f ${shSingleQuote(tempFile)} ${shSingleQuote(outputFile)}; exit 1; }`;
   } else {
     command += ` > ${shSingleQuote(outputFile)}`;
   }
@@ -89,7 +125,13 @@ export function buildPostgreSQLDumpCommand(options) {
   command += ` ${shSingleQuote(database)}`;
 
   if (compress) {
-    command += ` | gzip > ${shSingleQuote(outputFile)}`;
+    // Two-step (issue #10): see buildMySQLDumpCommand. The PGPASSWORD= prefix
+    // above binds to pg_dump only, so gzip in the second step runs without it.
+    const tempFile = dumpTempFile(outputFile);
+    command += ` > ${shSingleQuote(tempFile)}`;
+    command += ` && gzip -c ${shSingleQuote(tempFile)} > ${shSingleQuote(outputFile)}`;
+    command += ` && rm -f ${shSingleQuote(tempFile)}`;
+    command += ` || { rm -f ${shSingleQuote(tempFile)} ${shSingleQuote(outputFile)}; exit 1; }`;
   } else {
     command += ` > ${shSingleQuote(outputFile)}`;
   }
@@ -128,7 +170,9 @@ export function buildMongoDBDumpCommand(options) {
   command += ` --out ${shSingleQuote(outputDir)}`;
 
   if (compress) {
-    command += ` && tar -czf ${shSingleQuote(outputDir + '.tar.gz')} -C "$(dirname ${shSingleQuote(outputDir)})" "$(basename ${shSingleQuote(outputDir)})"`;
+    // The tarball target is the authoritative archive path (issue #11):
+    // mongoArchivePath(outputDir) — every consumer derives it from there.
+    command += ` && tar -czf ${shSingleQuote(mongoArchivePath(outputDir))} -C "$(dirname ${shSingleQuote(outputDir)})" "$(basename ${shSingleQuote(outputDir)})"`;
     command += ` && rm -rf ${shSingleQuote(outputDir)}`;
   }
 

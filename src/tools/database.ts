@@ -7,6 +7,7 @@ import {
   buildMySQLDumpCommand,
   buildPostgreSQLDumpCommand,
   buildMongoDBDumpCommand,
+  mongoArchivePath,
 } from '../dump-command-builder.ts';
 import {
   DB_TYPES,
@@ -37,7 +38,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
     'ssh_db_dump',
     {
       description:
-        'Dumps a database to a file on the remote server over SSH; it reads data only and does not modify the database. Supports mysql (using --single-transaction --routines --triggers), postgresql (custom format with --clean --if-exists, restorable via pg_restore), and mongodb. compress defaults to true and gzips the output. The optional tables list applies to MySQL and PostgreSQL only and is ignored for MongoDB.',
+        'Dumps a database to a file on the remote server over SSH; it reads data only and does not modify the database. Supports mysql (using --single-transaction --routines --triggers), postgresql (custom format with --clean --if-exists, restorable via pg_restore), and mongodb. compress defaults to true and gzips the output. For mongodb, outputFile is treated as the dump directory and the tool reports the actual archive path (a .tar.gz when compressed, the dump directory otherwise). The optional tables list applies to MySQL and PostgreSQL only and is ignored for MongoDB.',
       inputSchema: {
         server: z.string().describe('Server name'),
         type: z.enum(['mysql', 'postgresql', 'mongodb']).describe('Database type'),
@@ -76,6 +77,11 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
 
         // Build dump command based on type
         let dumpCommand;
+        // The path the archive really lands on — for MongoDB this is NOT the
+        // user's outputFile verbatim (issue #11): mongodump writes a directory
+        // and the builder tars it to mongoArchivePath(dir), so we must report
+        // and size-check THAT path, not whatever suffix outputFile carried.
+        let actualOutputFile = outputFile;
         // any: the MongoDB branch adds outputDir below (expando in the .js original)
         const options: any = {
           database,
@@ -95,10 +101,13 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
           case DB_TYPES.POSTGRESQL:
             dumpCommand = buildPostgreSQLDumpCommand(options);
             break;
-          case DB_TYPES.MONGODB:
-            options.outputDir = outputFile.replace(/\.(tar\.gz|gz)$/, '');
+          case DB_TYPES.MONGODB: {
+            const mongoDumpDir = outputFile.replace(/\.(tar\.gz|gz)$/, '');
+            options.outputDir = mongoDumpDir;
             dumpCommand = buildMongoDBDumpCommand(options);
+            actualOutputFile = compress ? mongoArchivePath(mongoDumpDir) : mongoDumpDir;
             break;
+          }
           default:
             throw new Error(`Unsupported database type: ${type}`);
         }
@@ -111,7 +120,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
         }
 
         // Get file size
-        const sizeCommand = `stat -f%z "${outputFile}" 2>/dev/null || stat -c%s "${outputFile}" 2>/dev/null`;
+        const sizeCommand = `stat -f%z "${actualOutputFile}" 2>/dev/null || stat -c%s "${actualOutputFile}" 2>/dev/null`;
         const sizeResult = await ssh.execCommand(sizeCommand);
         const size = parseSize(sizeResult.stdout);
 
@@ -127,7 +136,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
             server: serverName,
             type,
             database,
-            output_file: outputFile,
+            output_file: actualOutputFile,
             size_bytes: size,
             size_human: formatBytes(size),
             compressed: compress,
