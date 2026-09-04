@@ -76,7 +76,7 @@ jobs:
       - name: Lint
         run: npx @biomejs/biome lint .
 
-      - name: Build (prepack: TS → dist/ JS)
+      - name: "Build (prepack: TS to dist/ JS)"
         run: npm run build
 
       - name: Inspect the package before publishing
