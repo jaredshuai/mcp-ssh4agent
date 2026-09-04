@@ -1,11 +1,12 @@
 // Configuration management library for ssh4agent CLI.
 //
 // Cross-platform TypeScript port of cli/lib/config.sh. Parses the .env file
-// itself (does not import src/ runtime modules — the CLI stays independent of
-// the MCP server code). The ONE shared thing is src/server-fields.ts: the
-// single source of truth for field names / quoting, so what the CLI writes is
-// exactly what src/config-loader.ts reads (and vice versa). Replaces bash
-// `grep`/`sed`/`mktemp`/`jq` with node: built-ins.
+// itself. The CLI shares src/ PURE modules only (server-fields, env-path —
+// and, since ADR-0004, tool-config-manager/tool-registry for tool
+// enablement): what the CLI writes is exactly what the MCP loader reads.
+// Stateful src/ runtime modules (logger, pool, managers with side effects)
+// stay off-limits. Replaces bash `grep`/`sed`/`mktemp`/`jq` with node:
+// built-ins.
 
 import * as os from 'node:os';
 import * as path from 'node:path';

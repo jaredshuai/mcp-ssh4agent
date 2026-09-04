@@ -1,11 +1,12 @@
 // Tool management commands for ssh4agent CLI.
 //
-// Cross-platform TypeScript port of cli/commands/tools.sh. Replaces all `jq`
-// invocations with native JSON.parse / JSON.stringify — no external JSON tool
-// is needed.
+// Storage, paths, legacy fallback, counts and descriptions all live in ONE
+// place — src/tool-config-manager.ts + src/tool-registry.ts (issue: the CLI
+// used to re-implement them and had already drifted: different core-group
+// description, a hardcoded 37-tool list in export-claude, and a reset that
+// deleted the file and could resurrect a legacy config). This file is
+// presentation + prompts only.
 
-import * as os from 'node:os';
-import * as path from 'node:path';
 import * as fs from 'node:fs';
 
 import {
@@ -28,91 +29,25 @@ import {
   question,
 } from '../lib/colors.ts';
 
-// Tool configuration file location — matches bash ($HOME/.ssh4agent/...).
-// Read fallback: a pre-rebrand ~/.ssh-manager config keeps loading until the
-// new file exists (writes via `tools configure` always target the new path).
-const TOOLS_CONFIG_NEW = path.join(os.homedir(), '.ssh4agent', 'tools-config.json');
-const TOOLS_CONFIG_LEGACY = path.join(os.homedir(), '.ssh-manager', 'tools-config.json');
-const TOOLS_CONFIG =
-  !fs.existsSync(TOOLS_CONFIG_NEW) && fs.existsSync(TOOLS_CONFIG_LEGACY)
-    ? TOOLS_CONFIG_LEGACY
-    : TOOLS_CONFIG_NEW;
+import { TOOL_GROUPS, TOOL_GROUP_DESCRIPTIONS, getAllTools } from '../../src/tool-registry.ts';
+import { loadFreshToolConfig, TOOLS_CONFIG_FILE } from '../../src/tool-config-manager.ts';
 
-const GROUPS = ['core', 'sessions', 'monitoring', 'backup', 'database', 'advanced'] as const;
-type Group = (typeof GROUPS)[number];
-
-function get_tool_count(group: string): number {
-  switch (group) {
-    case 'core':
-      return 5;
-    case 'sessions':
-      return 4;
-    case 'monitoring':
-      return 6;
-    case 'backup':
-      return 4;
-    case 'database':
-      return 4;
-    case 'advanced':
-      return 14;
-    default:
-      return 0;
-  }
-}
-
-function get_tool_description(group: string): string {
-  switch (group) {
-    case 'core':
-      return 'Essential SSH operations (list, execute, upload, download, sync)';
-    case 'sessions':
-      return 'Persistent SSH sessions with state management';
-    case 'monitoring':
-      return 'System health checks, service monitoring, process management, and alerts';
-    case 'backup':
-      return 'Automated backup and restore for databases and files';
-    case 'database':
-      return 'Database operations (MySQL, PostgreSQL, MongoDB)';
-    case 'advanced':
-      return 'Advanced features (deployment, sudo, tunnels, groups, aliases, hooks, profiles)';
-    default:
-      return '';
-  }
-}
-
-// Read the tools config JSON; returns null if missing or unparseable.
-function readToolsConfig(): any | null {
-  if (!fs.existsSync(TOOLS_CONFIG)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(TOOLS_CONFIG, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function writeToolsConfig(obj: any): void {
-  fs.mkdirSync(path.dirname(TOOLS_CONFIG), { recursive: true });
-  fs.writeFileSync(TOOLS_CONFIG, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-}
-
-function groupEnabled(config: any, group: string): boolean {
-  const g = config?.groups?.[group];
-  return g?.enabled !== false; // default true when missing
-}
+const GROUPS = Object.keys(TOOL_GROUPS);
 
 // ── cmd_tools dispatcher ─────────────────────────────────────────────────────
 export async function cmd_tools(action?: string, ...rest: string[]): Promise<void> {
   switch (action) {
     case 'list':
     case 'ls':
-      cmd_tools_list();
+      await cmd_tools_list();
       break;
     case 'enable':
     case 'on':
-      cmd_tools_enable(rest[0]);
+      await cmd_tools_enable(rest[0]);
       break;
     case 'disable':
     case 'off':
-      cmd_tools_disable(rest[0]);
+      await cmd_tools_disable(rest[0]);
       break;
     case 'reset':
       await cmd_tools_reset();
@@ -128,7 +63,7 @@ export async function cmd_tools(action?: string, ...rest: string[]): Promise<voi
       break;
     case 'export-claude':
     case 'export':
-      cmd_tools_export_claude();
+      await cmd_tools_export_claude();
       break;
     case undefined:
     case '':
@@ -156,43 +91,27 @@ export async function cmd_tools(action?: string, ...rest: string[]): Promise<voi
 }
 
 // ── cmd_tools_list ───────────────────────────────────────────────────────────
-export function cmd_tools_list(): void {
+export async function cmd_tools_list(): Promise<void> {
   print_header('MCP Tools Configuration');
 
-  if (!fs.existsSync(TOOLS_CONFIG)) {
+  if (!fs.existsSync(TOOLS_CONFIG_FILE)) {
     print_info('No tool configuration found');
     process.stdout.write('\n');
-    process.stdout.write(`${GRAY}Default: All 37 tools enabled${NC}\n`);
+    process.stdout.write(`${GRAY}Default: All ${getAllTools().length} tools enabled${NC}\n`);
     process.stdout.write('\n');
     print_info(`Run ${CYAN}ssh4agent tools configure${NC} to customize and reduce context usage`);
     return;
   }
 
-  const config = readToolsConfig();
-  const mode = config?.mode ?? 'all';
-  const totalCount = 37;
-  let enabledCount = 0;
-
-  switch (mode) {
-    case 'all':
-      enabledCount = 37;
-      break;
-    case 'minimal':
-      enabledCount = 5;
-      break;
-    case 'custom':
-      for (const g of GROUPS) {
-        if (groupEnabled(config, g)) {
-          enabledCount += get_tool_count(g);
-        }
-      }
-      break;
-  }
+  const manager = await loadFreshToolConfig();
+  const summary = manager.getSummary();
 
   process.stdout.write('\n');
-  process.stdout.write(`  ${BOLD}Mode:${NC} ${CYAN}${mode}${NC}\n`);
-  process.stdout.write(`  ${BOLD}Enabled:${NC} ${enabledCount}/${totalCount} tools\n`);
-  process.stdout.write(`  ${BOLD}Config:${NC} ${GRAY}${TOOLS_CONFIG}${NC}\n`);
+  process.stdout.write(`  ${BOLD}Mode:${NC} ${CYAN}${summary.mode}${NC}\n`);
+  process.stdout.write(
+    `  ${BOLD}Enabled:${NC} ${summary.enabledCount}/${summary.totalTools} tools\n`
+  );
+  process.stdout.write(`  ${BOLD}Config:${NC} ${GRAY}${TOOLS_CONFIG_FILE}${NC}\n`);
   process.stdout.write('\n');
 
   print_subheader('Tool Groups');
@@ -206,49 +125,24 @@ export function cmd_tools_list(): void {
     `${GRAY}${'────────────'.padEnd(12)} ${'──────────'.padEnd(10)} ${'────────'.padEnd(8)} ${'─'.repeat(41)}${NC}\n`
   );
 
-  for (const group of GROUPS) {
-    let enabled = true;
-    let statusIcon = `${GREEN}●${NC}`;
-    let statusText = `${GREEN}enabled${NC}`;
-
-    if (config) {
-      switch (mode) {
-        case 'all':
-          enabled = true;
-          break;
-        case 'minimal':
-          if (group !== 'core') {
-            enabled = false;
-            statusIcon = `${GRAY}○${NC}`;
-            statusText = `${GRAY}disabled${NC}`;
-          }
-          break;
-        case 'custom':
-          if (!groupEnabled(config, group)) {
-            enabled = false;
-            statusIcon = `${GRAY}○${NC}`;
-            statusText = `${GRAY}disabled${NC}`;
-          }
-          break;
-      }
-    }
-
-    const count = get_tool_count(group);
-    const desc = get_tool_description(group);
+  for (const group of summary.groups) {
+    const statusIcon = group.enabled ? `${GREEN}●${NC}` : `${GRAY}○${NC}`;
+    const statusText = group.enabled ? `${GREEN}enabled${NC}` : `${GRAY}disabled${NC}`;
+    const desc = TOOL_GROUP_DESCRIPTIONS[group.name];
     // bash: printf "%-12s %s %-8s %-8s %s\n"  (status icon+text inline)
     process.stdout.write(
-      `${group.padEnd(12)} ${statusIcon} ${statusText} ${String(count).padEnd(8)} ${desc}\n`
+      `${group.name.padEnd(12)} ${statusIcon} ${statusText} ${String(group.toolCount).padEnd(8)} ${desc}\n`
     );
   }
 
   process.stdout.write('\n');
 
-  if (mode === 'all') {
+  if (summary.mode === 'all') {
     print_info(
       `${LIGHTBULB} Tip: Switch to ${CYAN}minimal${NC} mode to reduce context usage by 92%`
     );
     process.stdout.write(`        Run: ${CYAN}ssh4agent tools configure${NC}\n`);
-  } else if (mode === 'minimal') {
+  } else if (summary.mode === 'minimal') {
     print_success(`${CHECK} Optimized! Using only 5 core tools (saves ~40k tokens in Claude Code)`);
     process.stdout.write('\n');
     process.stdout.write(
@@ -261,7 +155,7 @@ export function cmd_tools_list(): void {
 
 // ── cmd_tools_show ────────────────────────────────────────────────────────────
 export function cmd_tools_show(): void {
-  if (!fs.existsSync(TOOLS_CONFIG)) {
+  if (!fs.existsSync(TOOLS_CONFIG_FILE)) {
     print_error('No configuration file found');
     process.stdout.write('\n');
     process.stdout.write(`Run ${CYAN}ssh4agent tools configure${NC} to create one\n`);
@@ -271,7 +165,7 @@ export function cmd_tools_show(): void {
   print_header('Tool Configuration Details');
   process.stdout.write('\n');
   try {
-    const config = JSON.parse(fs.readFileSync(TOOLS_CONFIG, 'utf8'));
+    const config = JSON.parse(fs.readFileSync(TOOLS_CONFIG_FILE, 'utf8'));
     process.stdout.write(JSON.stringify(config, null, 2) + '\n');
   } catch {
     print_error('Failed to parse configuration file');
@@ -281,60 +175,32 @@ export function cmd_tools_show(): void {
 }
 
 // ── cmd_tools_enable ──────────────────────────────────────────────────────────
-export function cmd_tools_enable(group?: string): void {
+export async function cmd_tools_enable(group?: string): Promise<void> {
   if (!group) {
     print_error('Usage: ssh4agent tools enable <group>');
     process.stdout.write('\n');
-    process.stdout.write(
-      'Available groups: core, sessions, monitoring, backup, database, advanced\n'
-    );
+    process.stdout.write(`Available groups: ${GROUPS.join(', ')}\n`);
     process.exitCode = 1;
     return;
   }
-  if (!GROUPS.includes(group as Group)) {
+  if (!(group in TOOL_GROUPS)) {
     print_error(`Unknown group: ${group}`);
     process.stdout.write('\n');
-    process.stdout.write(
-      'Available groups: core, sessions, monitoring, backup, database, advanced\n'
-    );
+    process.stdout.write(`Available groups: ${GROUPS.join(', ')}\n`);
     process.exitCode = 1;
     return;
   }
 
-  let config: any;
-  if (!fs.existsSync(TOOLS_CONFIG)) {
-    config = {
-      version: '1.0',
-      mode: 'custom',
-      groups: {
-        core: { enabled: true },
-        sessions: { enabled: false },
-        monitoring: { enabled: false },
-        backup: { enabled: false },
-        database: { enabled: false },
-        advanced: { enabled: false },
-      },
-      tools: {},
-      _comment: 'Tool configuration created by ssh4agent tools enable',
-    };
-  } else {
-    config = readToolsConfig() ?? { mode: 'all', groups: {} };
-    const currentMode = config.mode ?? 'all';
-    if (currentMode === 'all') {
-      config.mode = 'custom';
-      for (const g of GROUPS) config.groups[g] = { enabled: true };
-    } else if (currentMode === 'minimal') {
-      config.mode = 'custom';
-      config.groups.core = { enabled: true };
-      for (const g of GROUPS) if (g !== 'core') config.groups[g] = { enabled: false };
-    }
+  // The manager owns the mode-transition semantics (materializing the
+  // current state before flipping one group), the paths and the write.
+  const manager = await loadFreshToolConfig();
+  if (!(await manager.enableGroup(group))) {
+    print_error(`Failed to enable group: ${group}`);
+    process.exitCode = 1;
+    return;
   }
 
-  if (!config.groups) config.groups = {};
-  config.groups[group] = { enabled: true };
-  writeToolsConfig(config);
-
-  const count = get_tool_count(group);
+  const count = TOOL_GROUPS[group].length;
   print_success(`Enabled ${CYAN}${group}${NC} group (${count} tools)`);
   process.stdout.write('\n');
   print_warning('Restart MCP server for changes to take effect:');
@@ -343,7 +209,7 @@ export function cmd_tools_enable(group?: string): void {
 }
 
 // ── cmd_tools_disable ─────────────────────────────────────────────────────────
-export function cmd_tools_disable(group?: string): void {
+export async function cmd_tools_disable(group?: string): Promise<void> {
   if (!group) {
     print_error('Usage: ssh4agent tools disable <group>');
     process.stdout.write('\n');
@@ -357,7 +223,7 @@ export function cmd_tools_disable(group?: string): void {
     process.exitCode = 1;
     return;
   }
-  if (!GROUPS.includes(group as Group)) {
+  if (!(group in TOOL_GROUPS)) {
     print_error(`Unknown group: ${group}`);
     process.stdout.write('\n');
     process.stdout.write('Available groups: sessions, monitoring, backup, database, advanced\n');
@@ -365,36 +231,14 @@ export function cmd_tools_disable(group?: string): void {
     return;
   }
 
-  let config: any;
-  if (!fs.existsSync(TOOLS_CONFIG)) {
-    config = {
-      version: '1.0',
-      mode: 'custom',
-      groups: {
-        core: { enabled: true },
-        sessions: { enabled: true },
-        monitoring: { enabled: true },
-        backup: { enabled: true },
-        database: { enabled: true },
-        advanced: { enabled: true },
-      },
-      tools: {},
-      _comment: 'Tool configuration created by ssh4agent tools disable',
-    };
-  } else {
-    config = readToolsConfig() ?? { mode: 'all', groups: {} };
-    const currentMode = config.mode ?? 'all';
-    if (currentMode === 'all') {
-      config.mode = 'custom';
-      for (const g of GROUPS) config.groups[g] = { enabled: true };
-    }
+  const manager = await loadFreshToolConfig();
+  if (!(await manager.disableGroup(group))) {
+    print_error(`Failed to disable group: ${group}`);
+    process.exitCode = 1;
+    return;
   }
 
-  if (!config.groups) config.groups = {};
-  config.groups[group] = { enabled: false };
-  writeToolsConfig(config);
-
-  const count = get_tool_count(group);
+  const count = TOOL_GROUPS[group].length;
   print_success(`Disabled ${CYAN}${group}${NC} group (${count} tools)`);
   process.stdout.write('\n');
   print_warning('Restart MCP server for changes to take effect:');
@@ -404,11 +248,21 @@ export function cmd_tools_disable(group?: string): void {
 
 // ── cmd_tools_reset ───────────────────────────────────────────────────────────
 export async function cmd_tools_reset(): Promise<void> {
-  if (fs.existsSync(TOOLS_CONFIG)) {
-    print_warning('This will delete your tool configuration and enable all 37 tools');
+  if (fs.existsSync(TOOLS_CONFIG_FILE)) {
+    print_warning(
+      `This will reset your tool configuration and enable all ${getAllTools().length} tools`
+    );
     process.stdout.write('\n');
     if (await prompt_yes_no('Continue?', 'n')) {
-      fs.unlinkSync(TOOLS_CONFIG);
+      // Writes the default (mode: all), never deletes the file: deleting it
+      // would let a legacy ~/.ssh-manager/tools-config.json resurrect on the
+      // next load.
+      const manager = await loadFreshToolConfig();
+      if (!(await manager.reset())) {
+        print_error('Failed to write default configuration');
+        process.exitCode = 1;
+        return;
+      }
       print_success('Tool configuration reset to defaults (all tools enabled)');
       process.stdout.write('\n');
       print_info('Restart Claude Code for changes to take effect');
@@ -424,15 +278,16 @@ export async function cmd_tools_reset(): Promise<void> {
 export async function cmd_tools_configure(): Promise<void> {
   print_header('Tool Configuration Wizard');
 
+  const total = getAllTools().length;
   process.stdout.write('\n');
   process.stdout.write(
-    `MCP SSH4Agent has ${BOLD}37 tools${NC} organized into ${BOLD}6 groups${NC}:\n`
+    `MCP SSH4Agent has ${BOLD}${total} tools${NC} organized into ${BOLD}6 groups${NC}:\n`
   );
   process.stdout.write('\n');
 
   for (const group of GROUPS) {
-    const count = get_tool_count(group);
-    const desc = get_tool_description(group);
+    const count = TOOL_GROUPS[group].length;
+    const desc = TOOL_GROUP_DESCRIPTIONS[group];
     process.stdout.write(
       `  ${CYAN}${group.padEnd(12)}${NC} (${String(count).padStart(2)} tools) - ${desc}\n`
     );
@@ -442,7 +297,7 @@ export async function cmd_tools_configure(): Promise<void> {
   process.stdout.write('Choose configuration mode:\n');
   process.stdout.write('\n');
   process.stdout.write(`  ${GREEN}1) All tools${NC} (recommended for most users)\n`);
-  process.stdout.write('     ├─ All 37 tools enabled\n');
+  process.stdout.write(`     ├─ All ${total} tools enabled\n`);
   process.stdout.write('     ├─ Full feature set available\n');
   process.stdout.write('     └─ Uses ~43k tokens in Claude Code\n');
   process.stdout.write('\n');
@@ -459,31 +314,29 @@ export async function cmd_tools_configure(): Promise<void> {
 
   const modeChoice = await question('Choose [1-3]: ');
 
-  fs.mkdirSync(path.dirname(TOOLS_CONFIG), { recursive: true });
+  const groupsAll = (enabled: boolean) => Object.fromEntries(GROUPS.map((g) => [g, { enabled }]));
+  const coreOnly = Object.fromEntries(GROUPS.map((g) => [g, { enabled: g === 'core' }]));
+
+  const manager = await loadFreshToolConfig();
 
   if (modeChoice === '2') {
     const config = {
       version: '1.0',
       mode: 'minimal',
-      groups: {
-        core: { enabled: true },
-        sessions: { enabled: false },
-        monitoring: { enabled: false },
-        backup: { enabled: false },
-        database: { enabled: false },
-        advanced: { enabled: false },
-      },
+      groups: coreOnly,
       tools: {},
       _comment: 'Minimal mode - only 5 core tools enabled',
     };
-    writeToolsConfig(config);
+    if (!(await manager.replaceConfig(config))) {
+      print_error('Failed to save configuration');
+      process.exitCode = 1;
+      return;
+    }
     process.stdout.write('\n');
     print_success(`Configuration saved: ${YELLOW}Minimal mode${NC} (5 tools)`);
     process.stdout.write('\n');
     process.stdout.write(`  ${GREEN}Context savings:${NC} ~40k tokens (92% reduction)\n`);
-    process.stdout.write(
-      `  ${GREEN}Enabled tools:${NC} ssh_list_servers, ssh_execute, ssh_upload, ssh_download, ssh_sync\n`
-    );
+    process.stdout.write(`  ${GREEN}Enabled tools:${NC} ${TOOL_GROUPS.core.join(', ')}\n`);
   } else if (modeChoice === '3') {
     process.stdout.write('\n');
     print_subheader('Group Selection');
@@ -491,56 +344,34 @@ export async function cmd_tools_configure(): Promise<void> {
     process.stdout.write(`${BOLD}Core${NC} group is always enabled. Choose additional groups:\n`);
     process.stdout.write('\n');
 
-    let sessions = false,
-      monitoring = false,
-      backup = false,
-      database = false,
-      advanced = false;
-    if (await prompt_yes_no(`${CYAN}sessions${NC} group? (4 tools - persistent SSH sessions)`, 'n'))
-      sessions = true;
-    if (
-      await prompt_yes_no(
-        `${CYAN}monitoring${NC} group? (6 tools - health checks, service monitoring)`,
+    const chosen: Record<string, boolean> = { core: true };
+    for (const group of GROUPS) {
+      if (group === 'core') continue;
+      const count = TOOL_GROUPS[group].length;
+      const desc = TOOL_GROUP_DESCRIPTIONS[group];
+      chosen[group] = await prompt_yes_no(
+        `${CYAN}${group}${NC} group? (${count} tools - ${desc})`,
         'n'
-      )
-    )
-      monitoring = true;
-    if (await prompt_yes_no(`${CYAN}backup${NC} group? (4 tools - database and file backups)`, 'n'))
-      backup = true;
-    if (
-      await prompt_yes_no(`${CYAN}database${NC} group? (4 tools - MySQL, PostgreSQL, MongoDB)`, 'n')
-    )
-      database = true;
-    if (
-      await prompt_yes_no(
-        `${CYAN}advanced${NC} group? (14 tools - deployment, sudo, tunnels, etc)`,
-        'n'
-      )
-    )
-      advanced = true;
+      );
+    }
 
     const config = {
       version: '1.0',
       mode: 'custom',
-      groups: {
-        core: { enabled: true },
-        sessions: { enabled: sessions },
-        monitoring: { enabled: monitoring },
-        backup: { enabled: backup },
-        database: { enabled: database },
-        advanced: { enabled: advanced },
-      },
+      groups: Object.fromEntries(GROUPS.map((g) => [g, { enabled: chosen[g] }])),
       tools: {},
       _comment: 'Custom configuration created by wizard',
     };
-    writeToolsConfig(config);
+    if (!(await manager.replaceConfig(config))) {
+      print_error('Failed to save configuration');
+      process.exitCode = 1;
+      return;
+    }
 
-    let enabledCount = 5;
-    if (sessions) enabledCount += 4;
-    if (monitoring) enabledCount += 6;
-    if (backup) enabledCount += 4;
-    if (database) enabledCount += 4;
-    if (advanced) enabledCount += 14;
+    const enabledCount = GROUPS.reduce(
+      (sum, g) => sum + (chosen[g] ? TOOL_GROUPS[g].length : 0),
+      0
+    );
 
     process.stdout.write('\n');
     print_success(`Configuration saved: ${CYAN}Custom mode${NC} (${enabledCount} tools enabled)`);
@@ -548,24 +379,21 @@ export async function cmd_tools_configure(): Promise<void> {
     const config = {
       version: '1.0',
       mode: 'all',
-      groups: {
-        core: { enabled: true },
-        sessions: { enabled: true },
-        monitoring: { enabled: true },
-        backup: { enabled: true },
-        database: { enabled: true },
-        advanced: { enabled: true },
-      },
+      groups: groupsAll(true),
       tools: {},
       _comment: 'All tools enabled (default configuration)',
     };
-    writeToolsConfig(config);
+    if (!(await manager.replaceConfig(config))) {
+      print_error('Failed to save configuration');
+      process.exitCode = 1;
+      return;
+    }
     process.stdout.write('\n');
-    print_success(`Configuration saved: ${GREEN}All tools mode${NC} (37 tools)`);
+    print_success(`Configuration saved: ${GREEN}All tools mode${NC} (${total} tools)`);
   }
 
   process.stdout.write('\n');
-  process.stdout.write(`  ${BOLD}Config file:${NC} ${GRAY}${TOOLS_CONFIG}${NC}\n`);
+  process.stdout.write(`  ${BOLD}Config file:${NC} ${GRAY}${TOOLS_CONFIG_FILE}${NC}\n`);
   process.stdout.write('\n');
   print_warning('Restart MCP server for changes to take effect:');
   process.stdout.write(`  ${ARROW} Option 1: Restart Claude Code application\n`);
@@ -573,13 +401,13 @@ export async function cmd_tools_configure(): Promise<void> {
   process.stdout.write('\n');
 
   if (await prompt_yes_no('Generate Claude Code auto-approval configuration?', 'y')) {
-    cmd_tools_export_claude();
+    await cmd_tools_export_claude();
   }
 }
 
 // ── cmd_tools_export_claude ───────────────────────────────────────────────────
-export function cmd_tools_export_claude(): void {
-  if (!fs.existsSync(TOOLS_CONFIG)) {
+export async function cmd_tools_export_claude(): Promise<void> {
+  if (!fs.existsSync(TOOLS_CONFIG_FILE)) {
     print_error('No tool configuration found');
     process.stdout.write('\n');
     process.stdout.write(`Run ${CYAN}ssh4agent tools configure${NC} first\n`);
@@ -590,98 +418,11 @@ export function cmd_tools_export_claude(): void {
   print_header('Claude Code Auto-Approval Configuration');
   process.stdout.write('\n');
 
-  const config = readToolsConfig();
-  const mode = config?.mode ?? 'all';
-
-  let tools: string[] = [];
-  if (mode === 'all') {
-    tools = [
-      'ssh_list_servers',
-      'ssh_execute',
-      'ssh_upload',
-      'ssh_download',
-      'ssh_sync',
-      'ssh_session_start',
-      'ssh_session_send',
-      'ssh_session_list',
-      'ssh_session_close',
-      'ssh_health_check',
-      'ssh_service_status',
-      'ssh_process_manager',
-      'ssh_monitor',
-      'ssh_tail',
-      'ssh_alert_setup',
-      'ssh_backup_create',
-      'ssh_backup_list',
-      'ssh_backup_restore',
-      'ssh_backup_schedule',
-      'ssh_db_dump',
-      'ssh_db_import',
-      'ssh_db_list',
-      'ssh_db_query',
-      'ssh_deploy',
-      'ssh_execute_sudo',
-      'ssh_alias',
-      'ssh_command_alias',
-      'ssh_hooks',
-      'ssh_profile',
-      'ssh_connection_status',
-      'ssh_tunnel_create',
-      'ssh_tunnel_list',
-      'ssh_tunnel_close',
-      'ssh_key_manage',
-      'ssh_execute_group',
-      'ssh_group_manage',
-      'ssh_history',
-    ];
-  } else if (mode === 'minimal') {
-    tools = ['ssh_list_servers', 'ssh_execute', 'ssh_upload', 'ssh_download', 'ssh_sync'];
-  } else {
-    // custom — core always on
-    tools = ['ssh_list_servers', 'ssh_execute', 'ssh_upload', 'ssh_download', 'ssh_sync'];
-    if (groupEnabled(config, 'sessions')) {
-      tools.push('ssh_session_start', 'ssh_session_send', 'ssh_session_list', 'ssh_session_close');
-    }
-    if (groupEnabled(config, 'monitoring')) {
-      tools.push(
-        'ssh_health_check',
-        'ssh_service_status',
-        'ssh_process_manager',
-        'ssh_monitor',
-        'ssh_tail',
-        'ssh_alert_setup'
-      );
-    }
-    if (groupEnabled(config, 'backup')) {
-      tools.push(
-        'ssh_backup_create',
-        'ssh_backup_list',
-        'ssh_backup_restore',
-        'ssh_backup_schedule'
-      );
-    }
-    if (groupEnabled(config, 'database')) {
-      tools.push('ssh_db_dump', 'ssh_db_import', 'ssh_db_list', 'ssh_db_query');
-    }
-    if (groupEnabled(config, 'advanced')) {
-      tools.push(
-        'ssh_deploy',
-        'ssh_execute_sudo',
-        'ssh_alias',
-        'ssh_command_alias',
-        'ssh_hooks',
-        'ssh_profile',
-        'ssh_connection_status',
-        'ssh_tunnel_create',
-        'ssh_tunnel_list',
-        'ssh_tunnel_close',
-        'ssh_key_manage',
-        'ssh_execute_group',
-        'ssh_group_manage',
-        'ssh_history'
-      );
-    }
-  }
+  // The enabled-tool list is derived from the manager (which respects
+  // per-tool overrides too) — previously this command hardcoded all 37 tool
+  // names, a third copy of the registry that drifted on every tool change.
+  const manager = await loadFreshToolConfig();
+  const tools = manager.getEnabledTools();
 
   process.stdout.write(
     `Add this to your ${CYAN}~/.config/claude-code/claude_code_config.json${NC}:\n`

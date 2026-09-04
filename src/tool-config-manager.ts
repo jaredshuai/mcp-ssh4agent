@@ -3,12 +3,17 @@
  *
  * Manages tool enablement configuration stored in JSON format.
  * Handles loading, saving, and querying tool configuration.
+ *
+ * Shared by BOTH the MCP entry point and the ssh4agent CLI: this module is
+ * deliberately free of logger (or any stateful) imports — a config store
+ * deciding the logging mechanism was over-reach, and the CLI must import it
+ * without side effects (no dirs created, no log files opened). Diagnostics
+ * belong to the callers.
  */
 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { logger } from './logger.ts';
 import { TOOL_GROUPS, findToolGroup, getAllTools } from './tool-registry.ts';
 
 /**
@@ -21,13 +26,9 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'tools-config.json');
 const LEGACY_CONFIG_FILE = path.join(os.homedir(), '.ssh-manager', 'tools-config.json');
 
 function resolveReadPath(): string {
-  if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(LEGACY_CONFIG_FILE)) {
-    logger.info(
-      `Using legacy tool config ${LEGACY_CONFIG_FILE} — move it to ${CONFIG_FILE} to migrate`
-    );
-    return LEGACY_CONFIG_FILE;
-  }
-  return CONFIG_FILE;
+  return !fs.existsSync(CONFIG_FILE) && fs.existsSync(LEGACY_CONFIG_FILE)
+    ? LEGACY_CONFIG_FILE
+    : CONFIG_FILE;
 }
 
 /**
@@ -56,23 +57,13 @@ class ToolConfigManager {
 
         // Validate config structure
         if (!this.validateConfig(this.config)) {
-          logger.warn('Invalid tool configuration, using defaults');
           this.config = this.getDefaultConfig();
-        } else {
-          logger.info(`Tool configuration loaded from ${readPath}`);
-          logger.info(
-            `Mode: ${this.config.mode}, Enabled tools: ${this.getEnabledTools().length}/37`
-          );
         }
       } else {
         // No config file - default to all tools enabled
-        logger.info('No tool configuration found, enabling all tools (default)');
-        logger.info('Run "ssh4agent tools configure" to optimize and reduce context usage');
         this.config = this.getDefaultConfig();
       }
-    } catch (error) {
-      logger.error(`Failed to load tool configuration: ${error.message}`);
-      logger.info('Using default configuration (all tools enabled)');
+    } catch {
       this.config = this.getDefaultConfig();
     }
 
@@ -139,14 +130,16 @@ class ToolConfigManager {
       return true; // Default to enabled if no config loaded
     }
 
+    // Per-tool override wins in EVERY mode — it is the fine-grained
+    // correction, checked before the coarse mode/group rules. (Checking it
+    // after the mode switch made overrides dead config in 'all' mode.)
+    if (this.config.tools && toolName in this.config.tools) {
+      return this.config.tools[toolName];
+    }
+
     // Mode: all - everything enabled
     if (this.config.mode === 'all') {
       return true;
-    }
-
-    // Check individual tool override first
-    if (this.config.tools && toolName in this.config.tools) {
-      return this.config.tools[toolName];
     }
 
     // Mode: minimal - only core tools
@@ -225,12 +218,24 @@ class ToolConfigManager {
       const content = JSON.stringify(this.config, null, 2);
       fs.writeFileSync(this.configPath, content, 'utf8');
 
-      logger.info(`Tool configuration saved to ${this.configPath}`);
       return true;
-    } catch (error) {
-      logger.error(`Failed to save tool configuration: ${error.message}`);
+    } catch {
       return false;
     }
+  }
+
+  /**
+   * Materialize the CURRENT effective group state into `groups` and switch to
+   * custom mode. This is what mode transitions run through: from 'all' every
+   * group is on; from 'minimal' only core is. Without materializing first, a
+   * single enable from minimal mode left the unmentioned groups at their
+   * DEFAULT-ON value — enabling one group silently enabled all 37 tools.
+   */
+  #materializeCustom() {
+    for (const groupName of Object.keys(TOOL_GROUPS)) {
+      this.config.groups[groupName] = { enabled: this.isGroupEnabled(groupName) };
+    }
+    this.config.mode = 'custom';
   }
 
   /**
@@ -240,13 +245,11 @@ class ToolConfigManager {
    */
   async enableGroup(groupName) {
     if (!TOOL_GROUPS[groupName]) {
-      logger.error(`Unknown tool group: ${groupName}`);
       return false;
     }
 
-    // Ensure we're in custom mode
     if (this.config.mode !== 'custom') {
-      this.config.mode = 'custom';
+      this.#materializeCustom();
     }
 
     // Initialize groups if needed
@@ -257,7 +260,6 @@ class ToolConfigManager {
     // Enable the group
     this.config.groups[groupName] = { enabled: true };
 
-    logger.info(`Enabled tool group: ${groupName}`);
     return await this.save();
   }
 
@@ -268,18 +270,15 @@ class ToolConfigManager {
    */
   async disableGroup(groupName) {
     if (!TOOL_GROUPS[groupName]) {
-      logger.error(`Unknown tool group: ${groupName}`);
       return false;
     }
 
     if (groupName === 'core') {
-      logger.error('Cannot disable core group (required for basic functionality)');
       return false;
     }
 
-    // Ensure we're in custom mode
     if (this.config.mode !== 'custom') {
-      this.config.mode = 'custom';
+      this.#materializeCustom();
     }
 
     // Initialize groups if needed
@@ -290,7 +289,6 @@ class ToolConfigManager {
     // Disable the group
     this.config.groups[groupName] = { enabled: false };
 
-    logger.info(`Disabled tool group: ${groupName}`);
     return await this.save();
   }
 
@@ -302,7 +300,6 @@ class ToolConfigManager {
   async enableTool(toolName) {
     const allTools = getAllTools();
     if (!allTools.includes(toolName)) {
-      logger.error(`Unknown tool: ${toolName}`);
       return false;
     }
 
@@ -314,7 +311,6 @@ class ToolConfigManager {
     // Enable the tool
     this.config.tools[toolName] = true;
 
-    logger.info(`Enabled tool: ${toolName}`);
     return await this.save();
   }
 
@@ -326,13 +322,7 @@ class ToolConfigManager {
   async disableTool(toolName) {
     const allTools = getAllTools();
     if (!allTools.includes(toolName)) {
-      logger.error(`Unknown tool: ${toolName}`);
       return false;
-    }
-
-    // Check if it's a core tool
-    if (TOOL_GROUPS.core.includes(toolName)) {
-      logger.warn(`Disabling core tool: ${toolName} (may limit functionality)`);
     }
 
     // Initialize tools object if needed
@@ -343,7 +333,6 @@ class ToolConfigManager {
     // Disable the tool
     this.config.tools[toolName] = false;
 
-    logger.info(`Disabled tool: ${toolName}`);
     return await this.save();
   }
 
@@ -354,22 +343,36 @@ class ToolConfigManager {
    */
   async setMode(mode) {
     if (!['all', 'minimal', 'custom'].includes(mode)) {
-      logger.error(`Invalid mode: ${mode}`);
       return false;
     }
 
     this.config.mode = mode;
-    logger.info(`Set tool configuration mode to: ${mode}`);
     return await this.save();
   }
 
   /**
-   * Reset configuration to defaults
+   * Replace the whole configuration in one shot (the CLI wizard's write path):
+   * validates, assigns and persists. Returns false without writing when the
+   * shape is invalid.
+   * @param {Object} config - Full configuration object (mode/groups/tools)
+   * @returns {Promise<boolean>} True if saved successfully
+   */
+  async replaceConfig(config) {
+    if (!this.validateConfig(config)) {
+      return false;
+    }
+    this.config = config;
+    return await this.save();
+  }
+
+  /**
+   * Reset configuration to defaults. Writes the default (mode: all) to
+   * CONFIG_FILE — writing, not deleting: deleting the new file would let a
+   * legacy ~/.ssh-manager/tools-config.json resurrect on the next load.
    * @returns {Promise<boolean>} True if successful
    */
   async reset() {
     this.config = this.getDefaultConfig();
-    logger.info('Reset tool configuration to defaults (all tools enabled)');
     return await this.save();
   }
 
@@ -380,11 +383,12 @@ class ToolConfigManager {
   getSummary() {
     const enabledTools = this.getEnabledTools();
     const disabledTools = this.getDisabledTools();
+    const totalTools = getAllTools().length;
 
     return {
       mode: this.config.mode,
       configPath: this.configPath,
-      totalTools: 37,
+      totalTools,
       enabledCount: enabledTools.length,
       disabledCount: disabledTools.length,
       groups: Object.keys(TOOL_GROUPS).map((groupName) => ({
@@ -444,3 +448,22 @@ export function isToolEnabled(toolName) {
   }
   return toolConfigInstance.isToolEnabled(toolName);
 }
+
+/**
+ * Fresh (non-singleton) manager for CLI one-shot commands: loads the current
+ * config from disk, unaffected by — and unable to mutate — the MCP server's
+ * singleton. The CLI's process is short-lived, so it never needs the cache.
+ * @returns {Promise<ToolConfigManager>} Loaded manager instance
+ */
+export async function loadFreshToolConfig() {
+  const manager = new ToolConfigManager();
+  await manager.load();
+  return manager;
+}
+
+/**
+ * Where the config lives (display + existence checks in the CLI).
+ * Not part of ToolConfigManager: the path is a module-level constant, and
+ * the CLI shouldn't need an instance to know it.
+ */
+export const TOOLS_CONFIG_FILE = CONFIG_FILE;

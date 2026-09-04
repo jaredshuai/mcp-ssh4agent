@@ -42,6 +42,7 @@
     "test:dumpcmd": "node tests/test-dump-command-builder.js",
     "test:funnel": "node tests/test-policy-funnel.js",
     "test:configuni": "node tests/test-config-unification.js",
+    "test:toolcfguni": "node tests/test-tool-config-unification.js",
     "test:state": "node tests/test-state-files.js",
     "test:managers": "node tests/test-managers-interface.js",
     "test:all": "npm test && npm run typecheck && npm run validate",
