@@ -91,7 +91,7 @@ default_dir = "/path"                      # Optional default working directory
 sudo_password = "pass"                     # Optional for automated sudo
 group = "production"                       # Optional, free-form label for grouping/import-export
 platform = "windows"                       # Optional: "linux" (default) or "windows"
-proxy_jump = "bastion"                     # Optional: name of another server to use as jump host
+proxy_jump = "bastion"                     # Optional: another server as jump host (tunnels: one hop only)
 proxy_command = "command"                   # Optional: custom proxy command (ncat, ssh -W, etc.)
 forward_agent = true                       # Optional: forward local ssh-agent to remote (needs SSH_AUTH_SOCK; security risk)
 ```

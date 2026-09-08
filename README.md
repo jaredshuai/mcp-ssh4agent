@@ -591,6 +591,7 @@ Close a session.
 #### `ssh_tunnel_create`
 Create an SSH tunnel.
 - Parameters: `server`, `type` (`local` / `remote` / `dynamic` SOCKS), `localPort`, `remoteHost`, `remotePort`
+- A single `proxy_jump` / `proxy_command` hop is supported (the tunnel owns that hop). Nested jumps are refused.
 
 #### `ssh_tunnel_list`
 List active tunnels.

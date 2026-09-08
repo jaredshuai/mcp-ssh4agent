@@ -37,7 +37,11 @@ class SSHManager implements TunnelableConnection {
   cachedHomeDir: string | null;
   autoAcceptHostKey: boolean;
   hostKeyVerification: boolean;
+  /** Pool-owned jump SSHManager. Must NOT be disposed here — other pooled
+   * targets may still share that bastion (see ConnectionPool.#jumpDeps). */
   jumpConnection: any;
+  /** Tunnel-owned jump SSHManager. Disposed after this client ends. */
+  ownedJumpConnection: any;
 
   constructor(config) {
     this.config = config;
@@ -48,6 +52,7 @@ class SSHManager implements TunnelableConnection {
     this.autoAcceptHostKey = config.autoAcceptHostKey || false;
     this.hostKeyVerification = config.hostKeyVerification !== false; // Default true
     this.jumpConnection = null;
+    this.ownedJumpConnection = null;
   }
 
   /** @returns {Promise<void>} */
@@ -537,6 +542,10 @@ class SSHManager implements TunnelableConnection {
     return this.connected && this.client && !this.client.destroyed;
   }
 
+  /**
+   * 结束本连接；若这是隧道专属目标，再拆掉它自握的门卫 Connection。
+   * 不释放 jumpConnection（那是池里可能被共享的 bastion）。
+   */
   dispose() {
     if (this.sftp) {
       this.sftp.end();
@@ -545,6 +554,15 @@ class SSHManager implements TunnelableConnection {
     if (this.client) {
       this.client.end();
       this.connected = false;
+    }
+    const owned = this.ownedJumpConnection;
+    this.ownedJumpConnection = null;
+    if (owned && owned !== this && typeof owned.dispose === 'function') {
+      try {
+        owned.dispose();
+      } catch {
+        /* 门卫拆除失败不挡住目标已经结束 */
+      }
     }
   }
 

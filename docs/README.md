@@ -75,4 +75,4 @@
 ## 6. ❓ 待核实议题与已知事实边界 (Issues & Boundary Limitations)
 
 当前登记的已知能力边界与待核实事项：
-- **SSH 隧道代理跳转限制**：根据 [ADR-0003](adr/0003-tunnels-own-their-connection.md)，SSH 隧道在配置了 proxyJump 或 proxyCommand 的服务器上被明确拒绝执行并返回明确错误（直接拨号会导致挂起；完整的跳板穿越机制尚未实现）。此为已知架构边界而非单纯待测缺陷。
+- **SSH 隧道嵌套跳板**：根据 [ADR-0003](adr/0003-tunnels-own-their-connection.md)，`ssh_tunnel_create` 支持**单跳** `proxyJump` / `proxyCommand`（隧道自握门卫 Connection，不借用连接池）。门卫自身仍配置跳字段时继续拒绝；完整多跳链与真实多跳拓扑验证仍待后续。

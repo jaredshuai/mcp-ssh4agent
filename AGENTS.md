@@ -17,7 +17,7 @@ MCP SSH4Agent is a Model Context Protocol server enabling any MCP-compatible AI 
 
 ```bash
 npm start                             # Start MCP server (requires stdin)
-npm test                              # Run full test suite (30 suites in series)
+npm test                              # Run full test suite (31 suites in series)
 npm run typecheck                     # Type-check with tsc (noEmit, baseline 0 errors)
 npm run validate                      # Code validation checks (node scripts/validate.ts)
 npm run lint                          # Biome linting

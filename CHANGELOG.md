@@ -5,6 +5,12 @@ All notable changes to MCP SSH4Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Tunnels can cross one jump hop.** `ssh_tunnel_create` on a server with `proxyJump` or `proxyCommand` no longer fails closed: it dials a dedicated jump connection (or a ProxyCommand sock), then the target, and disposes the hop when the tunnel closes. Nested jumps stay refused. The connection pool is not used for this path (ADR-0003). Guarded by `tests/test-tunnel-proxy.js`.
+
 ## [4.0.0] - 2026-09-04
 
 ### Changed
