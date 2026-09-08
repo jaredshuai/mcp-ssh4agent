@@ -76,4 +76,3 @@
 
 当前登记的已知能力边界与待核实事项：
 - **SSH 隧道代理跳转限制**：根据 [ADR-0003](adr/0003-tunnels-own-their-connection.md)，SSH 隧道在配置了 proxyJump 或 proxyCommand 的服务器上被明确拒绝执行并返回明确错误（直接拨号会导致挂起；完整的跳板穿越机制尚未实现）。此为已知架构边界而非单纯待测缺陷。
-- **本仓未串联测试脚本**：`tests/test-tunnel-guard.js`（`test:tunnelguard`）与 `tests/test-tool-config-unification.js`（`test:toolcfguni`）未纳入 `npm test` 的 28 项串联。本次门禁通过结论不包含这两项；`test:ping` 已在串联中。

@@ -51,7 +51,7 @@ See [docs/TOOL_MANAGEMENT.md](../TOOL_MANAGEMENT.md) for complete guide.
 
 ```bash
 npm start                                     # Start MCP server (requires stdin)
-npm test                                      # Run the full test suite (28 suites)
+npm test                                      # Run the full test suite (30 suites)
 npm run typecheck                             # Type-check with tsc (no build, nothing emitted)
 npm run test:all                              # Tests + typecheck + validation
 npm run validate                              # Run all validation checks (node scripts/validate.ts)

@@ -91,4 +91,3 @@
 | 议题编号 | 议题主题 | 现状事实与行为 | 证据缺口 / 后续验证条件 |
 |---|---|---|---|
 | ISSUE-01 | SSH 隧道跨跳板穿越 (ProxyJump) | ADR-0003 记录当前在带有 proxyJump/proxyCommand 的服务器上创建隧道会直接抛出明确错误拦截 | 完整的 jump host 隧道穿越逻辑尚未实现；需待具备真实多跳 SSH 测试拓扑时验证实现方案 |
-| ISSUE-02 | 未串联补充测试脚本 | `tests/test-tunnel-guard.js`（`test:tunnelguard`）与 `tests/test-tool-config-unification.js`（`test:toolcfguni`）未串联进 `npm test`；`test:ping` 已在串联中 | 当前门禁覆盖既有 28 项串联套件，未证明这两项补充测试通过；后续按实际覆盖需要评估 |
