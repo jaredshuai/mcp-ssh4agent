@@ -72,19 +72,18 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ## Style Guidelines
 
-### Code Style
+### Code Style and Quality Gates
 
-- The codebase is TypeScript run natively by Node's type stripping (no build step) — use erasable syntax only (no enums, namespaces, or parameter properties), and give relative imports explicit `.ts` extensions
-- Use ES modules and async/await for asynchronous code
-- Linting and formatting are handled by [Biome](https://biomejs.dev/) — run `npm run lint` and `npm run format` before submitting
-- Type-check with `npm run typecheck` (baseline is 0 errors)
-- Use meaningful variable names
+- Follow the project's quality gates in [CODING_STANDARDS.md](CODING_STANDARDS.md) (Format, Lint, Typecheck, Test, Validate).
+- The codebase is TypeScript run natively by Node's type stripping (no build step) — use erasable syntax only (no enums, namespaces, or parameter properties), and give relative imports explicit `.ts` extensions.
+- Use ES modules and async/await for asynchronous code.
+- Linting and formatting are handled by [Biome](https://biomejs.dev/) — run `npm run lint` and `npm run format` before submitting.
+- Type-check with `npm run typecheck` (baseline is 0 errors).
 
-### Commit Messages
-- Use the present tense ("Add feature" not "Added feature")
-- Use the imperative mood ("Move cursor to..." not "Moves cursor to...")
-- Limit the first line to 72 characters or less
-- Reference issues and pull requests liberally after the first line
+### Commit Messages and Release Rules
+
+- Strictly follow [RELEASE.md](RELEASE.md): use Conventional Commits 1.0.0 (`type(scope)!: description`) and Google CL format (what changed, why, context).
+- See [docs/agents/doc-governance.md](docs/agents/doc-governance.md) for document synchronization rules.
 
 ## Testing
 

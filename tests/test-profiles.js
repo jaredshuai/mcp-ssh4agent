@@ -14,6 +14,7 @@ import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { stateFilePath } from '../src/state-files.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,7 +82,7 @@ try {
 
 // Test 5: Switch profiles
 console.log('Test 5: Switch profiles');
-const testProfileFile = path.join(__dirname, '..', '.ssh4agent-profile');
+const testProfileFile = stateFilePath('.ssh4agent-profile');
 const originalProfile = fs.existsSync(testProfileFile)
   ? fs.readFileSync(testProfileFile, 'utf8').trim()
   : null;

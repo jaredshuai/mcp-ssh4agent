@@ -31,7 +31,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 - **🔤 Env vars**: `SSH_MANAGER_*` are now `SSH4AGENT_*`; the log file is `.ssh4agent.log`.
 - **⚠️ Remote-side paths changed with no migration**: alert configs live at `/etc/ssh4agent-alerts.json`, backups under `/var/backups/ssh4agent`, scheduled scripts at `/usr/local/bin/ssh4agent-backup-*` — re-run `ssh_alert_setup` and `ssh_backup_schedule` on hosts configured with earlier code.
 
-[Read full changelog →](CHANGELOG.md#400---unreleased)
+[Read full changelog →](CHANGELOG.md#400---2026-09-04)
 
 ---
 
@@ -314,10 +314,12 @@ ssh4agent tools disable backup
   - macOS: `brew install hudochenkov/sshpass/sshpass`
   - Linux: `apt-get install sshpass`
 
+<a id="quick-start"></a>
 ## 🚀 Quick Start - Claude Code
 
 > **Requires Node.js ≥ 20** for the npm package (`npx -y mcp-ssh4agent` — it ships as compiled JS). Working from the sources instead requires Node ≥ 23.6 (native TypeScript type stripping, no build step).
 
+<a id="installation"></a>
 ### 1. Install MCP SSH4Agent
 
 **Option A: Run from npm with npx (recommended — nothing to install)**
@@ -1045,9 +1047,13 @@ List my server groups                    → ssh_group_manage (action: list)
 A group that exists only through the `group` field is read-only for `ssh_group_manage`: to change who belongs to it, edit the servers' `group` in your `.env`/TOML. Creating a group of the same name with `ssh_group_manage` is still allowed and simply adds stored members and settings on top.
 
 ### Documentation
+- 📖 [**Documentation Center (docs/README.md)**](docs/README.md) - Complete documentation index and task guides
+- [TOOL_MANAGEMENT.md](docs/TOOL_MANAGEMENT.md) - Tool management and token optimization
+- [BACKUP_GUIDE.md](docs/BACKUP_GUIDE.md) - Automated database and file backups
 - [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) - Deployment strategies and permission handling
+- [SECURITY_MODES.md](docs/SECURITY_MODES.md) - Per-server security policy and modes
 - [ALIASES_AND_HOOKS.md](docs/ALIASES_AND_HOOKS.md) - Command aliases and automation hooks
-- Real-world examples and best practices
+- [cli/README.md](cli/README.md) - Interactive TypeScript CLI guide
 
 ## 🐛 Troubleshooting
 

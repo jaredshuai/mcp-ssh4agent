@@ -360,153 +360,175 @@ async function roundTrip(): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'server-fields-rt-'));
   const envPath = path.join(dir, '.env');
 
-  // Point the CLI's module-level SSH4AGENT_ENV at the temp file BEFORE
-  // importing cli/lib/config.ts (it resolves the path at import time).
+  // Point the CLI's module-level SSH_ENV_PATH (canonical) and SSH4AGENT_ENV
+  // at the temp file BEFORE importing cli/lib/config.ts (it resolves at import time).
+  const prevSshEnvPath = process.env.SSH_ENV_PATH;
+  const prevSsh4agentEnv = process.env.SSH4AGENT_ENV;
+  process.env.SSH_ENV_PATH = envPath;
   process.env.SSH4AGENT_ENV = envPath;
-  const cli = await import('../cli/lib/config.ts');
 
-  for (const pw of NASTY_PASSWORDS) {
-    const name = 'rt_' + Buffer.from(pw).toString('hex').slice(0, 10);
-    const added = cli.add_server_to_env(
-      name,
-      '203.0.113.10',
+  try {
+    const cli = await import('../cli/lib/config.ts');
+
+    for (const pw of NASTY_PASSWORDS) {
+      const name = 'rt_' + Buffer.from(pw).toString('hex').slice(0, 10);
+      const added = cli.add_server_to_env(
+        name,
+        '203.0.113.10',
+        'demo',
+        'password',
+        pw,
+        '2222',
+        'desc with spaces',
+        'readonly',
+        '^ls;^df',
+        ''
+      );
+      assert.ok(added, `add_server_to_env(${name}) must succeed`);
+
+      const loader = new ConfigLoader();
+      loader.loadEnvConfig(envPath);
+      const server = loader.getServer(name);
+      assert.ok(server, `server ${name} must load back`);
+      assert.equal(server.host, '203.0.113.10');
+      assert.equal(server.user, 'demo');
+      assert.equal(server.port, 2222);
+      assert.equal(server.password, pw, `password round-trip failed for ${JSON.stringify(pw)}`);
+      assert.equal(server.description, 'desc with spaces');
+      assert.equal(server.mode, 'readonly');
+      assert.deepEqual(server.allowPatterns, ['^ls', '^df']);
+    }
+
+    // update path: add a plain server, then rewrite it with a defaultDir
+    assert.ok(cli.add_server_to_env('rt_plain', '198.51.100.1', 'op', 'password', 'first-pw'));
+    const cli2 = cli as unknown as {
+      update_server_in_env: (
+        n: string,
+        h: string,
+        u: string,
+        a: string,
+        v: string,
+        p?: string,
+        d?: string,
+        dd?: string
+      ) => boolean;
+    };
+    assert.ok(
+      cli2.update_server_in_env(
+        'rt_plain',
+        '198.51.100.1',
+        'op',
+        'password',
+        'up-pw',
+        '22',
+        '',
+        '/opt/app'
+      )
+    );
+    const loader2 = new ConfigLoader();
+    loader2.loadEnvConfig(envPath);
+    const updated = loader2.getServer('rt_plain');
+    assert.ok(updated);
+    assert.equal(updated.defaultDir, '/opt/app');
+    assert.equal(updated.password, 'up-pw');
+
+    // ── unrepresentable values are rejected BEFORE any file mutation (r5-r9) ──
+    // r9 narrowed the unrepresentable set to all-three-delimiter values;
+    // both-quote credentials are now accepted via backticks.
+    const linesBefore = fs.readFileSync(envPath, 'utf8');
+    const rejected = cli.add_server_to_env('mq', '198.51.100.7', 'op', 'password', `p'"` + 'q`');
+    assert.equal(rejected, false, 'add must refuse an all-three-delimiter credential');
+    assert.equal(
+      fs.readFileSync(envPath, 'utf8'),
+      linesBefore,
+      'a rejected add must not touch the .env file'
+    );
+    const bothQuotes = cli.add_server_to_env('mq2', '198.51.100.9', 'op', 'password', `p'"q`);
+    assert.equal(bothQuotes, true, 'both-quote credential is accepted (backtick delimiter)');
+    const loaderMQ = new ConfigLoader();
+    loaderMQ.loadEnvConfig(envPath);
+    assert.equal(loaderMQ.getServer('mq2')?.password, `p'"q`, 'both-quote credential round-trips');
+
+    // ── but only when quoting is required (r6): a key path with interior
+    // quotes and no #/whitespace is representable unquoted and must add.
+    const keyOk = cli.add_server_to_env('mqkey', '198.51.100.8', 'op', 'key', `/k'a"b`);
+    assert.equal(keyOk, true, 'mixed-quote key path without #/space must be accepted');
+    const loaderK = new ConfigLoader();
+    loaderK.loadEnvConfig(envPath);
+    assert.equal(loaderK.getServer('mqkey')?.keyPath, `/k'a"b`, 'key path round-trips unquoted');
+
+    // ── case-insensitive markers (r3) ─────────────────────────────────────
+    // Hand-authored mixed-case entry: listed as `cased` by load_servers().
+    // add must detect the duplicate despite the casing mismatch, and update
+    // must find and rewrite it (previously both were case-sensitive misses
+    // while remove worked — the flows disagreed).
+    fs.appendFileSync(
+      envPath,
+      [
+        'SSH_SERVER_Cased_HOST=203.0.113.99',
+        'SSH_SERVER_Cased_USER=demo',
+        'SSH_SERVER_Cased_PASSWORD="pw"',
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+    const dup = cli.add_server_to_env('cased', '198.51.100.9', 'op', 'password', 'x');
+    assert.equal(dup, false, 'add must refuse a mixed-case existing entry');
+    const updatedCased = cli2.update_server_in_env(
+      'cased',
+      '203.0.113.99',
       'demo',
       'password',
-      pw,
-      '2222',
-      'desc with spaces',
-      'readonly',
-      '^ls;^df',
-      ''
+      'new-pw',
+      '22'
     );
-    assert.ok(added, `add_server_to_env(${name}) must succeed`);
+    assert.equal(updatedCased, true, 'update must find a mixed-case entry');
+    const loader3 = new ConfigLoader();
+    loader3.loadEnvConfig(envPath);
+    const cased = loader3.getServer('cased');
+    assert.ok(cased, 'rewritten entry still loads');
+    assert.equal(cased.password, 'new-pw', 'update rewrote the cased entry');
 
-    const loader = new ConfigLoader();
-    loader.loadEnvConfig(envPath);
-    const server = loader.getServer(name);
-    assert.ok(server, `server ${name} must load back`);
-    assert.equal(server.host, '203.0.113.10');
-    assert.equal(server.user, 'demo');
-    assert.equal(server.port, 2222);
-    assert.equal(server.password, pw, `password round-trip failed for ${JSON.stringify(pw)}`);
-    assert.equal(server.description, 'desc with spaces');
-    assert.equal(server.mode, 'readonly');
-    assert.deepEqual(server.allowPatterns, ['^ls', '^df']);
+    // ── field-anchored removal (r4) ──────────────────────────────────────
+    // `server remove foo` used to match `^SSH_SERVER_FOO_` as a bare prefix
+    // and took `foo_bar`'s lines with it.
+    assert.ok(cli.add_server_to_env('pfx', '198.51.100.3', 'op', 'password', 'p1'));
+    assert.ok(cli.add_server_to_env('pfx_web', '198.51.100.4', 'op', 'password', 'p2'));
+    assert.ok(cli.remove_server_from_env('pfx'), 'remove pfx must succeed');
+    const loader4 = new ConfigLoader();
+    loader4.loadEnvConfig(envPath);
+    assert.equal(loader4.getServer('pfx'), undefined, 'pfx removed');
+    assert.ok(loader4.getServer('pfx_web'), 'pfx_web must survive removing pfx');
+    assert.equal(loader4.getServer('pfx_web')?.password, 'p2', 'pfx_web data intact');
+
+    // Same for update: rewriting pfx2 must not touch pfx2_web.
+    assert.ok(cli.add_server_to_env('pfx2', '198.51.100.5', 'op', 'password', 'q1'));
+    assert.ok(cli.add_server_to_env('pfx2_web', '198.51.100.6', 'op', 'password', 'q2'));
+    assert.ok(
+      cli2.update_server_in_env('pfx2', '198.51.100.5', 'op', 'password', 'q3'),
+      'update pfx2 must succeed'
+    );
+    const loader5 = new ConfigLoader();
+    loader5.loadEnvConfig(envPath);
+    assert.equal(loader5.getServer('pfx2')?.password, 'q3', 'pfx2 rewritten');
+    assert.equal(
+      loader5.getServer('pfx2_web')?.password,
+      'q2',
+      'pfx2_web untouched by pfx2 update'
+    );
+  } finally {
+    if (prevSshEnvPath !== undefined) {
+      process.env.SSH_ENV_PATH = prevSshEnvPath;
+    } else {
+      delete process.env.SSH_ENV_PATH;
+    }
+    if (prevSsh4agentEnv !== undefined) {
+      process.env.SSH4AGENT_ENV = prevSsh4agentEnv;
+    } else {
+      delete process.env.SSH4AGENT_ENV;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
   }
-
-  // update path: add a plain server, then rewrite it with a defaultDir
-  assert.ok(cli.add_server_to_env('rt_plain', '198.51.100.1', 'op', 'password', 'first-pw'));
-  const cli2 = cli as unknown as {
-    update_server_in_env: (
-      n: string,
-      h: string,
-      u: string,
-      a: string,
-      v: string,
-      p?: string,
-      d?: string,
-      dd?: string
-    ) => boolean;
-  };
-  assert.ok(
-    cli2.update_server_in_env(
-      'rt_plain',
-      '198.51.100.1',
-      'op',
-      'password',
-      'up-pw',
-      '22',
-      '',
-      '/opt/app'
-    )
-  );
-  const loader2 = new ConfigLoader();
-  loader2.loadEnvConfig(envPath);
-  const updated = loader2.getServer('rt_plain');
-  assert.ok(updated);
-  assert.equal(updated.defaultDir, '/opt/app');
-  assert.equal(updated.password, 'up-pw');
-
-  // ── unrepresentable values are rejected BEFORE any file mutation (r5-r9) ──
-  // r9 narrowed the unrepresentable set to all-three-delimiter values;
-  // both-quote credentials are now accepted via backticks.
-  const linesBefore = fs.readFileSync(envPath, 'utf8');
-  const rejected = cli.add_server_to_env('mq', '198.51.100.7', 'op', 'password', `p'"` + 'q`');
-  assert.equal(rejected, false, 'add must refuse an all-three-delimiter credential');
-  assert.equal(
-    fs.readFileSync(envPath, 'utf8'),
-    linesBefore,
-    'a rejected add must not touch the .env file'
-  );
-  const bothQuotes = cli.add_server_to_env('mq2', '198.51.100.9', 'op', 'password', `p'"q`);
-  assert.equal(bothQuotes, true, 'both-quote credential is accepted (backtick delimiter)');
-  const loaderMQ = new ConfigLoader();
-  loaderMQ.loadEnvConfig(envPath);
-  assert.equal(loaderMQ.getServer('mq2')?.password, `p'"q`, 'both-quote credential round-trips');
-
-  // ── but only when quoting is required (r6): a key path with interior
-  // quotes and no #/whitespace is representable unquoted and must add.
-  const keyOk = cli.add_server_to_env('mqkey', '198.51.100.8', 'op', 'key', `/k'a"b`);
-  assert.equal(keyOk, true, 'mixed-quote key path without #/space must be accepted');
-  const loaderK = new ConfigLoader();
-  loaderK.loadEnvConfig(envPath);
-  assert.equal(loaderK.getServer('mqkey')?.keyPath, `/k'a"b`, 'key path round-trips unquoted');
-
-  // ── case-insensitive markers (r3) ─────────────────────────────────────
-  // Hand-authored mixed-case entry: listed as `cased` by load_servers().
-  // add must detect the duplicate despite the casing mismatch, and update
-  // must find and rewrite it (previously both were case-sensitive misses
-  // while remove worked — the flows disagreed).
-  fs.appendFileSync(
-    envPath,
-    [
-      'SSH_SERVER_Cased_HOST=203.0.113.99',
-      'SSH_SERVER_Cased_USER=demo',
-      'SSH_SERVER_Cased_PASSWORD="pw"',
-      '',
-    ].join('\n'),
-    'utf8'
-  );
-  const dup = cli.add_server_to_env('cased', '198.51.100.9', 'op', 'password', 'x');
-  assert.equal(dup, false, 'add must refuse a mixed-case existing entry');
-  const updatedCased = cli2.update_server_in_env(
-    'cased',
-    '203.0.113.99',
-    'demo',
-    'password',
-    'new-pw',
-    '22'
-  );
-  assert.equal(updatedCased, true, 'update must find a mixed-case entry');
-  const loader3 = new ConfigLoader();
-  loader3.loadEnvConfig(envPath);
-  const cased = loader3.getServer('cased');
-  assert.ok(cased, 'rewritten entry still loads');
-  assert.equal(cased.password, 'new-pw', 'update rewrote the cased entry');
-
-  // ── field-anchored removal (r4) ──────────────────────────────────────
-  // `server remove foo` used to match `^SSH_SERVER_FOO_` as a bare prefix
-  // and took `foo_bar`'s lines with it.
-  assert.ok(cli.add_server_to_env('pfx', '198.51.100.3', 'op', 'password', 'p1'));
-  assert.ok(cli.add_server_to_env('pfx_web', '198.51.100.4', 'op', 'password', 'p2'));
-  assert.ok(cli.remove_server_from_env('pfx'), 'remove pfx must succeed');
-  const loader4 = new ConfigLoader();
-  loader4.loadEnvConfig(envPath);
-  assert.equal(loader4.getServer('pfx'), undefined, 'pfx removed');
-  assert.ok(loader4.getServer('pfx_web'), 'pfx_web must survive removing pfx');
-  assert.equal(loader4.getServer('pfx_web')?.password, 'p2', 'pfx_web data intact');
-
-  // Same for update: rewriting pfx2 must not touch pfx2_web.
-  assert.ok(cli.add_server_to_env('pfx2', '198.51.100.5', 'op', 'password', 'q1'));
-  assert.ok(cli.add_server_to_env('pfx2_web', '198.51.100.6', 'op', 'password', 'q2'));
-  assert.ok(
-    cli2.update_server_in_env('pfx2', '198.51.100.5', 'op', 'password', 'q3'),
-    'update pfx2 must succeed'
-  );
-  const loader5 = new ConfigLoader();
-  loader5.loadEnvConfig(envPath);
-  assert.equal(loader5.getServer('pfx2')?.password, 'q3', 'pfx2 rewritten');
-  assert.equal(loader5.getServer('pfx2_web')?.password, 'q2', 'pfx2_web untouched by pfx2 update');
 }
 
 await asyncTest(

@@ -16,13 +16,14 @@ import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { stateFilePath } from '../src/state-files.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 console.log('🧪 Testing Command Aliases...\n');
 
-const CUSTOM_ALIASES_FILE = path.join(__dirname, '..', '.command-aliases.json');
+const CUSTOM_ALIASES_FILE = stateFilePath('.command-aliases.json');
 const backupFile = CUSTOM_ALIASES_FILE + '.backup';
 
 // Backup existing custom aliases if they exist

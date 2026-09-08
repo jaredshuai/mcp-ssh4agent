@@ -1,0 +1,168 @@
+#!/bin/sh
+# lazypack:start block=pre-commit-hook src=DECISIONS.md@0.2.0 gen=aeb0254139bb9c52 input=daef251ae90ea5c1 fp=386d56b383501ce1
+# -----------------------------------------------------------------------------
+# lazypack-discipline 提交前质量门禁 (DECISIONS §6)
+# -----------------------------------------------------------------------------
+
+EXIT_CODE=0
+
+# -----------------------------------------------------------------------------
+# Dependency preflight: verify required local tools exist before gate execution
+# -----------------------------------------------------------------------------
+if [ ! -d "node_modules" ]; then
+  echo "❌ [lazypack] node_modules directory not found. Please run npm install first." >&2
+  exit 1
+fi
+
+if [ ! -e "node_modules/.bin/biome" ]; then
+  echo "❌ [lazypack] Local Biome binary not found in node_modules/.bin. Run npm install before committing." >&2
+  exit 1
+fi
+
+if [ ! -e "node_modules/.bin/tsc" ]; then
+  echo "❌ [lazypack] Local TypeScript compiler not found in node_modules/.bin. Run npm install before committing." >&2
+  exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Environment isolation: protect developer's ~/.ssh4agent, ~/.env & cwd state
+# -----------------------------------------------------------------------------
+HOOK_TMP_BASE="${TMPDIR:-${TEMP:-${TMP:-/tmp}}}"
+HOOK_TMP_DIR="$(mktemp -d "${HOOK_TMP_BASE%/}/ssh4agent-hook.XXXXXXXXXX" 2>/dev/null)" || {
+  echo "❌ [lazypack] Failed to create secure temporary directory in $HOOK_TMP_BASE" >&2
+  exit 1
+}
+
+mkdir -p "$HOOK_TMP_DIR/.ssh4agent" "$HOOK_TMP_DIR/.ssh4agent-legacy" || {
+  echo "❌ [lazypack] Failed to create temporary state directories in $HOOK_TMP_DIR" >&2
+  exit 1
+}
+
+touch "$HOOK_TMP_DIR/.env" "$HOOK_TMP_DIR/empty.toml" || {
+  echo "❌ [lazypack] Failed to create temporary config files in $HOOK_TMP_DIR" >&2
+  exit 1
+}
+
+export HOME="$HOOK_TMP_DIR"
+export USERPROFILE="$HOOK_TMP_DIR"
+export SSH4AGENT_HOME="$HOOK_TMP_DIR/.ssh4agent"
+export SSH4AGENT_LEGACY_STATE_DIR="$HOOK_TMP_DIR/.ssh4agent-legacy"
+export SSH_ENV_PATH="$HOOK_TMP_DIR/.env"
+export SSH4AGENT_ENV="$HOOK_TMP_DIR/.env"
+export SSH_CONFIG_PATH="$HOOK_TMP_DIR/empty.toml"
+unset SSH_LOG_FILE 2>/dev/null || true
+unset SSH_AUTH_SOCK 2>/dev/null || true
+unset SSH4AGENT_PROFILE 2>/dev/null || true
+
+for _ssh_key in $(env 2>/dev/null | sed -n 's/^\(SSH_SERVER_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  unset "$_ssh_key" 2>/dev/null || true
+done
+
+CLEANED=0
+cleanup_hook_env() {
+  if [ "$CLEANED" -eq 1 ]; then
+    return
+  fi
+  CLEANED=1
+  if [ -n "$HOOK_TMP_DIR" ] && [ -d "$HOOK_TMP_DIR" ]; then
+    HOOK_CANONICAL_DIR="$(cd "$HOOK_TMP_DIR" 2>/dev/null && pwd -P)"
+    HOOK_TMP_BASE_CANONICAL="$(cd "$HOOK_TMP_BASE" 2>/dev/null && pwd -P)"
+    case "$HOOK_CANONICAL_DIR" in
+      "$HOOK_TMP_BASE_CANONICAL"/ssh4agent-hook.*)
+        rm -rf "$HOOK_CANONICAL_DIR" 2>/dev/null || true
+        ;;
+      *)
+        echo "⚠️ [lazypack] Temporary directory outside expected base, skipping deletion: $HOOK_TMP_DIR" >&2
+        ;;
+    esac
+  fi
+}
+
+on_exit() {
+  exit_status=$?
+  cleanup_hook_env
+  exit $exit_status
+}
+
+on_signal() {
+  trap - EXIT INT TERM HUP
+  cleanup_hook_env
+  exit 130
+}
+
+trap on_exit EXIT
+trap on_signal INT TERM HUP
+
+run_gate() {
+  GATE_NAME="$1"
+  GATE_STATUS="$2"
+  GATE_CMD="$3"
+
+  case "$GATE_STATUS" in
+    wired)
+      case "$GATE_CMD" in
+        *[![:space:]]*)
+          ;;
+        *)
+          echo "❌ [lazypack] $GATE_NAME: wired status but command is empty or whitespace only!" >&2
+          EXIT_CODE=1
+          return
+          ;;
+      esac
+      echo "[lazypack] Running $GATE_NAME: $GATE_CMD"
+      if ! ( eval "$GATE_CMD" ); then
+        echo "❌ [lazypack] $GATE_NAME check failed!" >&2
+        EXIT_CODE=1
+      else
+        echo "✅ [lazypack] $GATE_NAME check passed."
+      fi
+      ;;
+    missing)
+      echo "⚠️ [lazypack] $GATE_NAME: skipped (unwired / tool missing)"
+      ;;
+    n/a)
+      echo "ℹ️ [lazypack] $GATE_NAME: skipped (not applicable for project)"
+      ;;
+    install-failed)
+      echo "❌ [lazypack] $GATE_NAME: blocked (dependency installation failed)" >&2
+      EXIT_CODE=1
+      ;;
+    *)
+      echo "❌ [lazypack] $GATE_NAME: invalid status ($GATE_STATUS), failing closed." >&2
+      EXIT_CODE=1
+      ;;
+  esac
+}
+
+# Gate 1: Format (Read-only check mode: prevents mutating unstaged files)
+FORMAT_STATUS='wired'
+FORMAT_CMD='npx --no-install @biomejs/biome check .'
+run_gate "format" "$FORMAT_STATUS" "$FORMAT_CMD"
+
+# Gate 2: Lint
+LINT_STATUS='wired'
+LINT_CMD='npm run lint'
+run_gate "lint" "$LINT_STATUS" "$LINT_CMD"
+
+# Gate 3: Type
+TYPE_STATUS='wired'
+TYPE_CMD='npm run typecheck'
+run_gate "type" "$TYPE_STATUS" "$TYPE_CMD"
+
+# Gate 4: Test (Executes full suite with isolated environment)
+TEST_STATUS='wired'
+TEST_CMD='npm test'
+run_gate "test" "$TEST_STATUS" "$TEST_CMD"
+
+# Gate 5: Validate (Preserved project-specific validation)
+VALIDATE_STATUS='wired'
+VALIDATE_CMD='npm run validate'
+run_gate "validate" "$VALIDATE_STATUS" "$VALIDATE_CMD"
+
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "🚫 [lazypack] Pre-commit quality gates failed. Commit aborted." >&2
+  exit $EXIT_CODE
+fi
+
+exit 0
+# lazypack:end block=pre-commit-hook
