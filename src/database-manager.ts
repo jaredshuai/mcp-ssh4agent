@@ -371,45 +371,170 @@ export function buildMongoDBQueryCommand(options) {
   if (user) command += ` --username ${shellQuote(user)}`;
   if (password) command += ` --password ${shellQuote(password)}`;
   command += ` ${shellQuote(database)}`;
-  // Feed the JS script via stdin (quoted heredoc) instead of `--eval "..."` so the
-  // remote shell never expands backticks/`$` in the query. mongo still evaluates the
-  // script as JavaScript (expected). See buildHeredoc and issue #44.
-  const script = `db.${collection}.find(${query || '{}'}).forEach(printjson)`;
+  // Feed the script via stdin (quoted heredoc) instead of `--eval "..."` so the
+  // remote shell never parses it (issue #44). The filter is JSON, never the
+  // caller's text spliced into JavaScript: the legacy `mongo` shell can run
+  // shell commands, so `find(<query>)` with a caller-supplied expression was a
+  // command-execution path on the database host (GHSA-qmf5 class). JSON can
+  // only express data — functions, operators-as-code and quotes-in-code are
+  // rejected by normalizeMongoQuery before this point.
+  const filter = normalizeMongoQuery(query);
+  const collectionName = collection === null || collection === undefined ? '' : String(collection);
+  const script = `db.getCollection(${JSON.stringify(collectionName)}).find(${filter}).forEach(printjson)`;
   command += ` --quiet${buildHeredoc(script)}`;
 
   return command;
 }
 
 /**
- * Validate query is safe (SELECT only)
+ * Normalize an `ssh_db_query` MongoDB filter to a JSON object literal.
+ *
+ * Only JSON is accepted: the previous implementation interpolated the raw
+ * string into `db.<collection>.find(...)`, i.e. as JavaScript evaluated by the
+ * mongo shell, which can spawn processes on the database host. Parsing here and
+ * re-serializing means whatever reaches the shell is data — `{ status: "x" }`
+ * is refused with a message telling the caller to use double quotes.
+ *
+ * @throws {Error} When the query is not a JSON object or uses an operator that
+ *   evaluates JavaScript on the server (`$where`, `$function`, `$accumulator`).
+ */
+export function normalizeMongoQuery(query) {
+  const raw = query === null || query === undefined ? '' : String(query).trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(raw === '' ? '{}' : raw);
+  } catch {
+    throw new Error(
+      'MongoDB query must be a JSON object with double-quoted keys and strings (e.g. {"status":"active"}); JavaScript expressions, functions and shell syntax are refused'
+    );
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('MongoDB query must be a JSON object, e.g. {"status":"active"}');
+  }
+  assertDataOnlyJson(parsed);
+  return JSON.stringify(parsed);
+}
+
+// Operators whose value is executed as JavaScript inside mongod. Positive
+// filtering would be a losing game; these three are the documented code paths.
+const MONGO_JS_OPERATORS = new Set(['$where', '$function', '$accumulator']);
+
+function assertDataOnlyJson(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) assertDataOnlyJson(item);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      if (MONGO_JS_OPERATORS.has(key)) {
+        throw new Error(
+          `MongoDB query uses ${key}, which runs server-side JavaScript; pass plain data instead`
+        );
+      }
+      assertDataOnlyJson(item);
+    }
+  }
+}
+
+/**
+ * Return only the text a database client treats as SQL syntax: quoted strings
+ * and comments are blanked, so a `;` or `\!` inside a literal is data while the
+ * same character outside one is a statement/command boundary.
+ *
+ * @returns The skeleton, or null when the query carries an executable
+ *   `/*!` comment (MySQL runs its body as SQL, bypassing this check).
+ */
+function sqlSkeleton(query) {
+  let out = '';
+  let i = 0;
+  while (i < query.length) {
+    const ch = query[i];
+
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const quote = ch;
+      i++;
+      while (i < query.length) {
+        // Backslash escapes apply inside strings, never inside backticks.
+        if (query[i] === '\\' && quote !== '`') {
+          i += 2;
+          continue;
+        }
+        if (query[i] === quote) {
+          if (query[i + 1] === quote) {
+            i += 2; // doubled quote is a literal quote
+            continue;
+          }
+          i++;
+          break;
+        }
+        i++;
+      }
+      out += ' ';
+      continue;
+    }
+
+    if ((ch === '-' && query[i + 1] === '-') || ch === '#') {
+      while (i < query.length && query[i] !== '\n') i++;
+      out += ' ';
+      continue;
+    }
+
+    if (ch === '/' && query[i + 1] === '*') {
+      if (query[i + 2] === '!') return null;
+      i += 2;
+      while (i < query.length && !(query[i] === '*' && query[i + 1] === '/')) i++;
+      i += 2;
+      out += ' ';
+      continue;
+    }
+
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+// Mutating SQL keywords refused in addition to the SELECT-only prefix.
+const MUTATING_KEYWORDS = [
+  'insert',
+  'update',
+  'delete',
+  'drop',
+  'create',
+  'alter',
+  'truncate',
+  'grant',
+  'revoke',
+  'exec',
+  'execute',
+];
+
+/**
+ * Validate a query for `ssh_db_query` (SELECT only, one statement, no client
+ * meta-commands).
+ *
+ * The mysql and psql clients execute backslash commands read from stdin —
+ * `\!` runs a shell command on the server, `\.`/`\copy`/`system` do the rest —
+ * and a second `;`-separated statement reaches them just as well. Both are
+ * refused here; `SELECT ... INTO OUTFILE` (a server-side file write) and
+ * MySQL's executable `/*!` comments are refused too.
  */
 export function isSafeQuery(query) {
-  const trimmedQuery = query.trim().toLowerCase();
+  if (typeof query !== 'string') return false;
 
-  // Must start with SELECT
-  if (!trimmedQuery.startsWith('select')) {
-    return false;
-  }
+  const trimmed = query.trim();
+  if (!/^select\b/i.test(trimmed)) return false;
 
-  // Block dangerous keywords
-  const dangerousKeywords = [
-    'insert',
-    'update',
-    'delete',
-    'drop',
-    'create',
-    'alter',
-    'truncate',
-    'grant',
-    'revoke',
-    'exec',
-    'execute',
-  ];
+  // One statement only; a single trailing semicolon is cosmetic.
+  const skeleton = sqlSkeleton(trimmed.replace(/;\s*$/, ''));
+  if (skeleton === null) return false;
+  if (skeleton.includes(';')) return false;
+  if (skeleton.includes('\\')) return false;
+  if (/\binto\s+(out|dump)file\b/i.test(skeleton)) return false;
 
-  for (const keyword of dangerousKeywords) {
-    if (trimmedQuery.includes(keyword)) {
-      return false;
-    }
+  const lowered = skeleton.toLowerCase();
+  for (const keyword of MUTATING_KEYWORDS) {
+    if (lowered.includes(keyword)) return false;
   }
 
   return true;

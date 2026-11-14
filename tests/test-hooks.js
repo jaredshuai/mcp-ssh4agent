@@ -16,6 +16,7 @@ import {
 } from '../src/hooks-system.ts';
 import assert from 'assert';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -260,6 +261,63 @@ try {
   if (fs.existsSync(testFile)) {
     fs.unlinkSync(testFile);
   }
+  process.exit(1);
+}
+
+// Test 9: context values are data, never shell syntax
+//
+// `{error}` carries text an SSH server chose. It used to be pasted into the
+// local command string, so a crafted error ran commands on this machine — the
+// default on-error hook is enabled out of the box (GHSA-759m class). Values now
+// travel through the environment and must stay inert shell data.
+console.log('Test 9: context values cannot inject shell commands');
+try {
+  const outFile = path.join(os.tmpdir(), `ssh4agent-hook-out-${process.pid}`);
+  const canary = path.join(os.tmpdir(), `ssh4agent-hook-canary-${process.pid}`);
+
+  addHook('injection-test', {
+    enabled: true,
+    description: 'Placeholder injection resistance',
+    actions: [
+      {
+        type: 'notification',
+        name: 'echo-context',
+        command: `printf '%s' "Server: {server} Error: {error}" > ${outFile}`,
+      },
+    ],
+  });
+
+  const payloads = [
+    `x"; touch ${canary}; echo "`,
+    `$(touch ${canary})`,
+    '`touch ' + canary + '`',
+    `a && touch ${canary}`,
+    `a | tee ${canary}`,
+    `line1\ntouch ${canary}\nline2`,
+    `$& $' $1 {server}`,
+  ];
+
+  for (const payload of payloads) {
+    const result = await executeHook('injection-test', { server: 'prod', error: payload });
+    assert(result.success === true, `hook should run for payload ${JSON.stringify(payload)}`);
+    assert(
+      !fs.existsSync(canary),
+      `payload escaped into the local shell: ${JSON.stringify(payload)}`
+    );
+    const content = fs.readFileSync(outFile, 'utf8');
+    assert(
+      content.includes(payload),
+      `payload must reach the command verbatim, got: ${JSON.stringify(content)}`
+    );
+  }
+
+  console.log('✅ Hook context values stay data (credentials/error text cannot run commands)');
+  fs.rmSync(outFile, { force: true });
+  fs.rmSync(canary, { force: true });
+  removeHook('injection-test');
+  console.log();
+} catch (error) {
+  console.error(`❌ Failed hook injection test: ${error.message}\n`);
   process.exit(1);
 }
 

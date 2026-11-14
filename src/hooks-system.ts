@@ -9,6 +9,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { stateDir, stateFilePath, readStateFileText, writeStateFileText } from './state-files.ts';
 import { loadProfile } from './profile-loader.ts';
+import { shSingleQuote } from './shell-quote.ts';
 
 const execAsync = promisify(exec);
 
@@ -132,6 +133,84 @@ function saveHooksConfig(config) {
   return writeStateFileText(HOOKS_CONFIG_NAME, JSON.stringify(config, null, 2));
 }
 
+// ── Placeholder rendering ─────────────────────────────────────────────────────
+//
+// Hook context values are not always ours: `{error}` carries whatever an SSH
+// server sent back, and a host name comes from the remote side too. Substituting
+// them into the command text made that text shell syntax on the machine running
+// this server — `echo "Error on {server}: {error}"` with an error of
+// `x"; touch /tmp/pwned; echo "` executed `touch` locally, and the default
+// `on-error` hook is enabled out of the box (same class as GHSA-759m upstream).
+//
+// Local actions therefore never inline the value: the template references an
+// environment variable and the value is handed to the child process through its
+// environment, where no shell parses it. Remote hooks run on the target host and
+// cannot receive an environment, so values are quoted for that host's shell.
+
+/** Environment variable name carrying one context value to a local hook. */
+function hookEnvName(key: string): string {
+  return `SSH4AGENT_HOOK_${String(key)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_')}`;
+}
+
+/** PowerShell single-quoted string: no expansion inside; `''` is a literal quote. */
+function psSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, "''").replace(/\r?\n/g, ' ')}'`;
+}
+
+type HookTarget = 'local' | 'remote-posix' | 'remote-windows';
+
+interface RenderedHookCommand {
+  command: string;
+  env: Record<string, string>;
+}
+
+/**
+ * Replace `{key}` placeholders with a safe reference to the context value.
+ *
+ * `String.replace` is called with a function on purpose: a replacement string
+ * would expand `$&`, `$'` and friends found in the value.
+ */
+function renderHookCommand(
+  template: string,
+  context: Record<string, any>,
+  target: HookTarget = 'local'
+): RenderedHookCommand {
+  let command = String(template ?? '');
+  const env: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(context)) {
+    // Only scalars are representable; `sshConnection` and other objects are
+    // runtime plumbing, never template data.
+    if (typeof value === 'object' && value !== null) continue;
+    const text = String(value).replace(/\0/g, '');
+    const placeholder = new RegExp(
+      `\\{${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`,
+      'g'
+    );
+
+    let reference: string;
+    if (target === 'local') {
+      const name = hookEnvName(key);
+      env[name] = text;
+      // A bare reference, not a quoted word. Quotes cannot be nested in shell
+      // text — inserting `"value"` into a template's own `"…{key}…"` would close
+      // that quoting and leave the expansion unquoted. Expansion results are
+      // never re-parsed as syntax anyway, so a template that quotes the
+      // placeholder (`"Error: {error}"`) gets one literal argument, and an
+      // unquoted placeholder only risks word splitting — never command execution.
+      reference = process.platform === 'win32' ? `%${name}%` : `$${name}`;
+    } else {
+      reference = target === 'remote-windows' ? psSingleQuote(text) : shSingleQuote(text);
+    }
+
+    command = command.replace(placeholder, () => reference);
+  }
+
+  return { command, env };
+}
+
 /**
  * Execute a hook
  */
@@ -160,14 +239,16 @@ export async function executeHook(hookName, context: Record<string, any> = {}) {
         }
       }
 
-      // Replace placeholders in command
-      let command = action.command || action.remoteCommand || '';
-      for (const [key, value] of Object.entries(context)) {
-        command = command.replace(new RegExp(`{${key}}`, 'g'), value);
-      }
+      // Render placeholders without letting their values become shell syntax.
+      const runsRemote = Boolean(action.remoteCommand && context.sshConnection);
+      const { command, env } = renderHookCommand(
+        action.command || action.remoteCommand || '',
+        context,
+        runsRemote ? (context.platform === 'windows' ? 'remote-windows' : 'remote-posix') : 'local'
+      );
 
       // Execute action based on type
-      const result = await executeAction(action, command, context);
+      const result = await executeAction(action, command, context, env);
       results.push(result);
 
       // Check validation results
@@ -216,7 +297,12 @@ interface ActionResult {
 /**
  * Execute a single action
  */
-async function executeAction(action, command, context: Record<string, any>): Promise<ActionResult> {
+async function executeAction(
+  action,
+  command,
+  context: Record<string, any>,
+  hookEnv: Record<string, string> = {}
+): Promise<ActionResult> {
   const result: ActionResult = {
     action: action.name,
     type: action.type,
@@ -238,8 +324,10 @@ async function executeAction(action, command, context: Record<string, any>): Pro
         result.success = false;
       }
     } else if (action.command) {
-      // Execute locally
-      const { stdout, stderr } = await execAsync(command);
+      // Execute locally; context values arrive only through the environment.
+      const { stdout, stderr } = await execAsync(command, {
+        env: { ...process.env, ...hookEnv },
+      });
 
       result.output = stdout;
       result.error = stderr;

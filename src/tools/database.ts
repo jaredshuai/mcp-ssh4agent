@@ -387,7 +387,7 @@ export function registerDatabaseTools(ctx: import('../tool-registry.ts').ToolCon
     'ssh_db_query',
     {
       description:
-        'Runs a read-only query against a remote database. For mysql and postgresql it is strictly limited to SELECT: the query must begin with SELECT and any insert, update, delete, drop, create, alter, truncate, grant, revoke, or exec keyword is rejected before execution. For mongodb it runs a find() and requires the collection parameter. Returns the raw command output as text.',
+        'Runs a read-only query against a remote database. For mysql and postgresql it is strictly limited to a single SELECT: the query must begin with SELECT, and mutating keywords, extra statements, client backslash commands and SELECT ... INTO OUTFILE are rejected before execution. For mongodb it runs a find() and requires the collection parameter; the query must be a JSON object with double-quoted keys and strings, so JavaScript expressions are refused. Returns the raw command output as text.',
       inputSchema: {
         server: z.string().describe('Server name'),
         type: z.enum(['mysql', 'postgresql', 'mongodb']).describe('Database type'),

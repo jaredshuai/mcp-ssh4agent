@@ -31,6 +31,8 @@ import {
   buildMySQLQueryCommand,
   buildPostgreSQLQueryCommand,
   buildMongoDBQueryCommand,
+  isSafeQuery,
+  normalizeMongoQuery,
 } from '../src/database-manager.ts';
 import {
   buildMySQLDumpCommand,
@@ -194,7 +196,7 @@ const BUILDERS = [
   {
     name: 'MongoDBQuery',
     fn: buildMongoDBQueryCommand,
-    params: ['database', 'collection', 'user', 'password', 'host', 'port'],
+    params: ['database', 'collection', 'query', 'user', 'password', 'host', 'port'],
   },
 ];
 
@@ -271,7 +273,7 @@ function testBenignStillQuoted() {
     buildPostgreSQLListTablesCommand(benignOptions()),
     buildMongoDBListCollectionsCommand(benignOptions()),
     buildMySQLDumpCommand(benignOptions()),
-    buildMongoDBQueryCommand(benignOptions()),
+    buildMongoDBQueryCommand({ ...benignOptions(), query: '{"status":"active"}' }),
   ];
   for (const cmd of spot) {
     assert.ok(typeof cmd === 'string' && cmd.length > 0);
@@ -285,11 +287,80 @@ function testBenignStillQuoted() {
   ok('benign values remain correctly shell-quoted and functional');
 }
 
+// The database *client* is the second interpreter on the server: mysql and psql
+// execute backslash commands (`\!` spawns a shell) and MySQL runs `/*! … */`
+// comments; the legacy mongo shell evaluates whatever reaches it as JavaScript.
+// ssh_db_query must refuse all of those before the command is built.
+function testQueryPolicy() {
+  // SQL: exactly one SELECT statement, no client meta-commands.
+  for (const query of [
+    'SELECT 1',
+    'SELECT * FROM users WHERE id = 1;',
+    "SELECT 'a;b' AS semi",
+    "SELECT 'delete update drop' AS words",
+    'SELECT `weird;name` FROM t',
+  ]) {
+    assert.ok(isSafeQuery(query), `should accept: ${JSON.stringify(query)}`);
+  }
+
+  for (const query of [
+    'SELECT 1; \\! touch /tmp/pwned',
+    'SELECT 1\n\\! touch /tmp/pwned',
+    'SELECT 1; DROP TABLE users',
+    'SELECT 1; SELECT 2',
+    "SELECT 1 INTO OUTFILE '/tmp/pwned'",
+    "SELECT 1 INTO DUMPFILE '/tmp/pwned'",
+    'SELECT /*! 1 */',
+    "SELECT 'x'; \\! id",
+    'DELETE FROM users',
+    'COPY users TO PROGRAM \'touch /tmp/pwned\'',
+    '',
+  ]) {
+    assert.ok(!isSafeQuery(query), `should refuse: ${JSON.stringify(query)}`);
+  }
+
+  ok('SQL queries: one SELECT, no client meta-command or INTO OUTFILE');
+
+  // MongoDB: JSON data only. Nothing the caller writes is evaluated as code.
+  assert.strictEqual(normalizeMongoQuery('{"status":"active"}'), '{"status":"active"}');
+  assert.strictEqual(normalizeMongoQuery(''), '{}');
+  assert.strictEqual(normalizeMongoQuery(undefined), '{}');
+  assert.strictEqual(normalizeMongoQuery('{"age":{"$gt":18}}'), '{"age":{"$gt":18}}');
+
+  for (const query of [
+    'function(){ return true }',
+    '{ status: "active" }',
+    "'; require('child_process').execSync('touch /tmp/pwned'); '",
+    '{"$where":"this.a == 1"}',
+    '{"$function":{"body":"return true","args":[],"lang":"js"}}',
+    '{"$accumulator":{"init":"function(){}"}}',
+    '[1,2,3]',
+    '"just a string"',
+  ]) {
+    assert.throws(
+      () => normalizeMongoQuery(query),
+      `should refuse MongoDB query: ${JSON.stringify(query)}`
+    );
+  }
+
+  const mongoCmd = buildMongoDBQueryCommand({
+    database: 'db',
+    collection: 'users"; require("child_process") //',
+    query: '{"status":"active"}',
+  });
+  assert.ok(
+    mongoCmd.includes('db.getCollection("users\\"; require(\\"child_process\\") //")'),
+    `collection must reach mongo as a JSON string literal, got: ${mongoCmd}`
+  );
+  ok('MongoDB queries/collections are JSON data, never JavaScript');
+}
+
 function main() {
   try {
     testShellQuote();
     testInjectionResistance();
     testBenignStillQuoted();
+    testQueryPolicy();
     console.log(`\n✅ database injection tests passed (${passed} checks)`);
   } finally {
     fs.rmSync(TMP, { recursive: true, force: true });
