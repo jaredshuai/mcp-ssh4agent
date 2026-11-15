@@ -44,6 +44,15 @@ function assertTrue(cond, message) {
   if (!cond) throw new Error(message);
 }
 
+function assertThrows(fn, message) {
+  try {
+    fn();
+  } catch {
+    return;
+  }
+  throw new Error(message);
+}
+
 const DELIM = '__MCP_SQL_EOF__';
 
 /**
@@ -111,13 +120,13 @@ test('PostgreSQL: query carried via heredoc, not -c "..."', () => {
 // --- MongoDB ---
 
 test('MongoDB: find script carried via heredoc, not --eval "..."', () => {
-  const query = '{name: "a`b`c"}';
+  const query = '{"name":"a`b`c"}';
   const cmd = buildMongoDBQueryCommand({ database: 'app', collection: 'users', query });
   const body = extractHeredocBody(cmd);
   assertEqual(
     body,
-    `db.users.find(${query}).forEach(printjson)`,
-    'mongo body must embed query verbatim'
+    `db.getCollection("users").find(${query}).forEach(printjson)`,
+    'mongo body must embed the normalized JSON filter'
   );
   assertTrue(!cmd.includes('--eval "'), 'must not interpolate query into --eval "..."');
 });
@@ -126,8 +135,33 @@ test('MongoDB: empty query defaults to find({})', () => {
   const cmd = buildMongoDBQueryCommand({ database: 'app', collection: 'users' });
   assertEqual(
     extractHeredocBody(cmd),
-    'db.users.find({}).forEach(printjson)',
+    'db.getCollection("users").find({}).forEach(printjson)',
     'default find must be {}'
+  );
+});
+
+test('MongoDB: JavaScript in the filter or collection is refused, never evaluated', () => {
+  assertThrows(
+    () => buildMongoDBQueryCommand({ database: 'app', collection: 'users', query: '{}); quit(); //' }),
+    'query must be JSON, not a JS expression'
+  );
+  assertThrows(
+    () =>
+      buildMongoDBQueryCommand({
+        database: 'app',
+        collection: 'users',
+        query: '{"$where":"sleep(1000)"}',
+      }),
+    '$where executes server-side JS'
+  );
+  const cmd = buildMongoDBQueryCommand({
+    database: 'app',
+    collection: 'users"}); quit(); //',
+    query: '{}',
+  });
+  assertTrue(
+    extractHeredocBody(cmd).startsWith('db.getCollection("users\\"}); quit(); //").find('),
+    'collection must be a quoted JS string literal'
   );
 });
 
@@ -156,8 +190,10 @@ test('buildHeredoc emits the pipeline on the opening line', () => {
 
 test('stochastic: random shell-metacharacter queries round-trip verbatim through the heredoc', () => {
   // Single-line tokens only (heredoc bodies are line-oriented); include the metacharacters
-  // that the old double-quoted construction would have evaluated.
-  const alphabet = 'abcXYZ012 .`$()\'"-_*=,;:[]{}';
+  // that the old double-quoted construction would have evaluated. `;` and `\` are absent:
+  // they are statement separators / client meta-commands, which isSafeQuery refuses by
+  // policy (see test-database-injection.js), so they never reach a builder.
+  const alphabet = 'abcXYZ012 .`$()\'"-_*=,:[]{}';
   const randToken = () => {
     const len = 1 + Math.floor(Math.random() * 12);
     let s = '';
